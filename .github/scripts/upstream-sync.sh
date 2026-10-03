@@ -10,6 +10,14 @@
 # to, with an authenticated `gh` CLI (GH_TOKEN) for that repository.
 set -euo pipefail
 
+# gh picks the repository from the git remotes and prefers one named
+# `upstream`, which this script adds: always name the fork explicitly.
+export GH_REPO="${GH_REPO:-${GITHUB_REPOSITORY:-}}"
+if [[ -z "$GH_REPO" ]]; then
+  echo "Set GH_REPO (or GITHUB_REPOSITORY) to the fork, e.g. owner/repo." >&2
+  exit 1
+fi
+
 UPSTREAM_URL="${UPSTREAM_URL:-https://github.com/guyzyl/whatsapp-contact-sync.git}"
 UPSTREAM_NAME="${UPSTREAM_NAME:-guyzyl/whatsapp-contact-sync}"
 UPSTREAM_BRANCH="${UPSTREAM_BRANCH:-main}"
