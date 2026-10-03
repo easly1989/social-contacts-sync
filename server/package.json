@@ -13,6 +13,7 @@
   "author": "guyzyl",
   "license": "ISC",
   "dependencies": {
+    "@googleapis/people": "^12.0.1",
     "body-parser": "^2.3.0",
     "cookie-parser": "^1.4.7",
     "cors": "^2.8.6",
@@ -20,7 +21,6 @@
     "express-session": "^1.19.0",
     "express-winston": "^4.2.0",
     "express-ws": "^5.0.2",
-    "googleapis": "^178.0.0",
     "ioredis": "^6.0.0",
     "libphonenumber-js": "^1.13.12",
     "limiter": "^3.0.0",
