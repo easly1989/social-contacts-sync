@@ -106,7 +106,7 @@ onUnmounted(() => window.clearInterval(poll));
       <router-link to="/setup/signin" class="btn btn-ghost"><ArrowLeft class="size-4" />{{ $t("common.back") }}</router-link>
       <span class="flex-1"></span>
       <span class="mr-2 text-sm text-base-content/60">{{ $t("setup.sources.ready", whatsappConnected ? 1 : 0) }}</span>
-      <button type="button" class="btn btn-primary" :disabled="!whatsappConnected" @click="router.push('/options')">
+      <button type="button" class="btn btn-primary" :disabled="!whatsappConnected" @click="router.push('/app')">
         {{ $t("setup.sources.finish") }}<Check class="size-4" />
       </button>
     </template>

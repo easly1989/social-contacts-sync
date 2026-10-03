@@ -95,7 +95,7 @@ test("linking WhatsApp finishes the setup", async ({ page }) => {
   await backend.send(EventType.WhatsAppConnecting);
   await expect(page.getByText("Connected", { exact: true })).toBeVisible({ timeout: 10_000 });
   await page.getByRole("button", { name: "Finish setup" }).click();
-  await expect(page).toHaveURL(/\/options$/);
+  await expect(page).toHaveURL(/\/app$/);
 });
 
 test.describe("desktop guards", () => {
@@ -112,15 +112,18 @@ test.describe("desktop guards", () => {
       await page.goto(path);
       await expect(page).toHaveURL(/\/setup\/signin$/);
     }
+    // Signed in to Google: the app opens even before WhatsApp is linked.
     backend.status.googleConnected = true;
-    await page.goto("/options");
+    await page.goto("/whatsapp");
     await expect(page).toHaveURL(/\/setup\/sources$/);
+    await page.goto("/options");
+    await expect(page).toHaveURL(/\/app\/sync$/);
   });
 
-  test("a finished setup goes straight to the options", async ({ page }) => {
+  test("a finished setup opens the app", async ({ page }) => {
     Object.assign(backend.status, { googleConfigured: true, googleConnected: true, whatsappConnected: true });
     await page.goto("/options");
-    await expect(page.getByRole("heading", { name: "What should change?" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Sync photos" })).toBeVisible();
   });
 });
 
@@ -138,11 +141,11 @@ test.describe("returning users", () => {
     await expect(page.getByText("Connected", { exact: true })).toBeVisible({ timeout: 10_000 });
   });
 
-  test("with everything connected, Continue goes straight to the options", async ({ page }) => {
+  test("with everything connected, Continue opens the dashboard", async ({ page }) => {
     backend.status.whatsappConnected = true;
     await page.goto("/");
     await page.getByRole("link", { name: "Continue" }).click();
-    await expect(page).toHaveURL(/\/options$/);
+    await expect(page).toHaveURL(/\/app$/);
   });
 
   test("WhatsApp can be unlinked, which shows a new QR code", async ({ page }) => {

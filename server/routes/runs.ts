@@ -1,13 +1,45 @@
 import express, { Request, Response } from "express";
 
-import { getFromCache } from "../src/cache";
-import { deleteContactPhoto, OAuth2Client, updateContactPhoto } from "../src/gapi";
+import { getFromCache, setInCache } from "../src/cache";
+import { deleteContactPhoto, listContacts, OAuth2Client, updateContactPhoto } from "../src/gapi";
+import { GoogleStats } from "../../interfaces/api";
 import { getRun, getRunPhoto, listRuns, updateRun } from "../src/runs";
 import { googleRateLimiter } from "../src/sync";
 import { undoRun } from "../src/undo";
 
 // Reports, history and undo of sync runs (issue #20).
 const router = express.Router();
+
+const statsMaxAge = 5 * 60 * 1000;
+
+// Photo coverage of the address book, for the dashboard. Listing every
+// contact is slow for big address books, so it's cached for a few minutes.
+router.get("/google_stats", async (req: Request, res: Response) => {
+  const gAuth: OAuth2Client | undefined = getFromCache(req.sessionID, "gauth");
+  if (!gAuth) return res.status(401).send({ error: "not_signed_in" });
+  const cached: GoogleStats | undefined = getFromCache(req.sessionID, "google_stats");
+  if (cached && req.query.refresh === undefined && Date.now() - Date.parse(cached.updatedAt) < statsMaxAge) return res.send(cached);
+  try {
+    const contacts = await listContacts(gAuth);
+    const stats: GoogleStats = {
+      totalContacts: contacts.length,
+      withPhoto: contacts.filter((c) => c.hasPhoto).length,
+      updatedAt: new Date().toISOString(),
+    };
+    setInCache(req.sessionID, "google_stats", stats);
+    res.send(stats);
+  } catch (e) {
+    console.error("Reading contact statistics failed:", e);
+    res.status(502).send({ error: "google_unavailable" });
+  }
+});
+
+// Asks the running sync to stop before its next contact.
+router.post("/sync/stop", (req: Request, res: Response) => {
+  if (!req.is("application/json")) return res.status(415).send({ error: "json_required" });
+  setInCache(req.sessionID, "sync_stop", true);
+  res.send({ ok: true });
+});
 
 router.get("/runs", (req: Request, res: Response) => {
   res.send(listRuns(req.sessionID));

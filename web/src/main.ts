@@ -3,6 +3,7 @@ import {
   createRouter,
   createWebHistory,
   RouteLocationNormalized,
+  RouteRecordRaw,
 } from "vue-router";
 import App from "./App.vue";
 
@@ -17,14 +18,29 @@ import { isbot } from "isbot";
 import { applyStatus } from "./settings";
 import { desktopRedirect } from "./desktopFlow";
 
-const routes = [
+const routes: RouteRecordRaw[] = [
   { path: "/", component: () => import("./pages/Home.vue") },
   { path: "/privacy", component: () => import("./pages/Privacy.vue") },
   { path: "/contribute", component: () => import("./pages/Contribute.vue") },
   { path: "/whatsapp", component: () => import("./pages/WhatsApp.vue") },
   { path: "/gauth", component: () => import("./pages/GoogleAuth.vue") },
-  { path: "/options", component: () => import("./pages/Options.vue") },
-  { path: "/sync", component: () => import("./pages/Sync.vue") },
+  // The app (issue #21); the old flow's last steps now live there.
+  { path: "/app", component: () => import("./pages/app/Dashboard.vue") },
+  { path: "/app/sync", component: () => import("./pages/app/SyncSetup.vue") },
+  { path: "/app/sync/run", component: () => import("./pages/app/SyncRun.vue") },
+  { path: "/app/history", component: () => import("./pages/app/History.vue") },
+  { path: "/app/history/:id", component: () => import("./pages/app/RunReport.vue") },
+  { path: "/options", redirect: "/app/sync" },
+  {
+    path: "/sync",
+    redirect: (to) => ({
+      path: "/app/sync/run",
+      query: {
+        mode: to.query.manual_sync === "true" ? "review" : to.query.overwrite_photos === "true" ? "replace" : "fill",
+        sources: "whatsapp",
+      },
+    }),
+  },
   // Desktop first-run wizard.
   { path: "/setup/google", component: () => import("./pages/SetupGoogle.vue") },
   { path: "/setup/signin", component: () => import("./pages/SetupSignIn.vue") },
@@ -54,24 +70,21 @@ router.beforeEach(
     if (status.desktop) return desktopRedirect(to.path, status);
 
     if (
-      ["/whatsapp", "/sync", "/gauth", "/options"].includes(to.path) &&
+      (["/whatsapp", "/gauth"].includes(to.path) || to.path.startsWith("/app")) &&
       status.enforcePayments &&
       !status.purchased
     )
       return "/contribute";
+    else if (to.path.startsWith("/app") && !status.googleConnected)
+      return status.whatsappConnected ? "/gauth" : "/";
     else if (to.path === "/contribute" && status.purchased)
       return "/whatsapp";
-    else if (
-      ["/sync", "/gauth", "/options"].includes(to.path) &&
-      !status.whatsappConnected
-    )
+    else if (to.path === "/gauth" && !status.whatsappConnected)
       return "/";
-    else if (to.path === "/sync" && !status.googleConnected)
-      return "/gauth";
     else if (to.path === "/whatsapp" && status.whatsappConnected)
       return "/gauth";
     else if (to.path === "/gauth" && status.googleConnected)
-      return "/options";
+      return "/app";
   }
 );
 

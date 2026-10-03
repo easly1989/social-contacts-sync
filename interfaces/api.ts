@@ -42,6 +42,8 @@ export interface SyncProgress {
   latest?: { name?: string; source: SourceId };
   /** Set on the final event of a run. */
   runId?: string;
+  /** Final event: the run was stopped before the last contact. */
+  cancelled?: boolean;
 }
 
 /** A photo a source offers for the contact under review. */
@@ -102,6 +104,12 @@ export interface SessionStatus {
   whatsappStarting?: boolean;
   /** The desktop app has a saved WhatsApp link to reconnect with. */
   whatsappSaved?: boolean;
+}
+
+export interface GoogleStats {
+  totalContacts: number;
+  withPhoto: number;
+  updatedAt: string;
 }
 
 export interface GoogleAccount {
