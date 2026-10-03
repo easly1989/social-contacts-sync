@@ -1,9 +1,11 @@
-<script lang="ts">
-import { defineComponent } from "vue";
-import { event } from "vue-gtag";
+<script setup lang="ts">
+import { computed, onMounted, onUnmounted, ref } from "vue";
+import { ArrowRight, CircleAlert, CircleCheck, Coffee, ImagePlus, Keyboard, Users } from "lucide-vue-next";
+
+import FlowFrame from "../components/FlowFrame.vue";
 import { EventType, SyncProgress } from "../../../interfaces/api";
 import { addHandler, sendEvent } from "../services/ws";
-import { enforcePayments } from "../settings";
+import { track } from "../analytics";
 
 interface ManualSyncData {
   existingPhoto: string | null;
@@ -11,202 +13,165 @@ interface ManualSyncData {
   contactName: string | null;
 }
 
-export default defineComponent({
-  data: () => ({
-    imageDisplayedCount: 9,
-    syncProgress: 0,
-    syncCount: 0,
-    images: [] as string[],
-    totalContactsPushed: false,
-    errorMessage: undefined as string | undefined,
-    lastSyncReceived: null as number | null,
-    showCoffeeButton: true,
-    isManualSync: false as boolean | undefined,
-    isManualSyncLoading: false as boolean | undefined,
-    manualSyncData: null as ManualSyncData | null,
-  }),
+const shownImages = 9;
 
-  mounted() {
-    addHandler(EventType.SyncProgress, this.onSyncProgress);
-    addHandler(EventType.SyncConfirm, this.onSyncConfirm);
-    this.initSync();
-    setInterval(this.checkServerDisconnected, 5 * 1000);
-    enforcePayments.then((val) => {
-      this.showCoffeeButton = val;
-    });
-  },
+const progress = ref(0);
+const syncCount = ref(0);
+const totalContacts = ref<number>();
+const images = ref<string[]>([]);
+const errorMessage = ref<string>();
+const disconnected = ref(false);
+const lastSyncReceived = ref<number | null>(null);
+const isManualSync = ref<boolean | undefined>(false);
+const isManualSyncLoading = ref<boolean | undefined>(false);
+const manualSyncData = ref<ManualSyncData | null>(null);
+let totalContactsTracked = false;
+let disconnectTimer: number | undefined;
 
-  methods: {
-    initSync() {
-      fetch(`/api/init_sync${window.location.search}`, {
-        credentials: "include",
-      });
-    },
+const done = computed(() => progress.value === 100);
+const reviewing = computed(() => isManualSync.value && !isManualSyncLoading.value && !done.value);
+const hiddenCount = computed(() => Math.max(0, syncCount.value - shownImages));
 
-    checkServerDisconnected() {
-      // Display an error message if the server has disconnected.
-      this.errorMessage =
-        this.lastSyncReceived &&
-        this.syncProgress !== 100 &&
-        Date.now() - this.lastSyncReceived > 30 * 1000
-          ? "Server has disconnected. Please refresh the page and restart the process."
-          : undefined;
-    },
+function photo(base64: string): string {
+  return "data:image/jpeg;base64, " + base64;
+}
 
-    onSyncProgress(progress: SyncProgress): void {
-      if (!this.totalContactsPushed) {
-        event("num_contacts_synced", {
-          method: "Google",
-          value: progress.totalContacts,
-        });
-        this.totalContactsPushed = true;
-      }
+function onSyncProgress(update: SyncProgress): void {
+  if (!totalContactsTracked) {
+    track("num_contacts_synced", { value: update.totalContacts });
+    totalContactsTracked = true;
+  }
+  lastSyncReceived.value = Date.now();
+  progress.value = update.progress;
+  syncCount.value = update.syncCount;
+  if (update.totalContacts !== undefined) totalContacts.value = update.totalContacts;
+  errorMessage.value = update.error;
+  isManualSync.value = update.isManualSync;
+  if (update.image) {
+    images.value.push(update.image);
+    if (images.value.length > shownImages) images.value.shift();
+  }
+}
 
-      this.lastSyncReceived = Date.now();
-      this.syncProgress = progress.progress;
-      this.syncCount = progress.syncCount;
-      this.errorMessage = progress.error;
-      this.isManualSync = progress.isManualSync;
-      if (progress.image) {
-        this.images.push(progress.image);
-        if (this.images.length > this.imageDisplayedCount) this.images.shift();
-      }
-    },
+function onSyncConfirm(data: ManualSyncData): void {
+  manualSyncData.value = data;
+  isManualSyncLoading.value = false;
+}
 
-    onSyncConfirm(data: any): void {
-      this.manualSyncData = data;
-      this.isManualSyncLoading = false;
-    },
+function answer(accept: boolean): void {
+  isManualSyncLoading.value = true;
+  manualSyncData.value = null;
+  sendEvent(EventType.SyncPhotoConfirm, { accept });
+}
 
-    onPhotoConfirm(accept: boolean): void {
-      this.isManualSyncLoading = true;
-      this.manualSyncData = null;
-      sendEvent(EventType.SyncPhotoConfirm, { accept });
-    },
-  },
+function onKey(event: KeyboardEvent): void {
+  if (!reviewing.value || !manualSyncData.value) return;
+  if (event.key === "ArrowLeft") answer(false);
+  else if (event.key === "Enter") answer(true);
+}
+
+function checkServerDisconnected(): void {
+  disconnected.value =
+    !!lastSyncReceived.value && !done.value && Date.now() - lastSyncReceived.value > 30 * 1000;
+}
+
+onMounted(() => {
+  addHandler(EventType.SyncProgress, onSyncProgress);
+  addHandler(EventType.SyncConfirm, onSyncConfirm);
+  fetch(`/api/init_sync${window.location.search}`, { credentials: "include" });
+  disconnectTimer = window.setInterval(checkServerDisconnected, 5 * 1000);
+  window.addEventListener("keydown", onKey);
+});
+
+onUnmounted(() => {
+  window.clearInterval(disconnectTimer);
+  window.removeEventListener("keydown", onKey);
 });
 </script>
 
 <template>
-  <div id="home" class="hero h-full bg-base-200">
-    <div class="hero-content text-center">
-      <div class="max-w-md">
-        <h1 class="text-5xl font-bold">Sync In Progress</h1>
-        
-        <p class="py-6" v-if="!isManualSync">
-          Your contacts are syncing, you can sit back and relax.
-          <br /><br />
-          (Syncing will stop if the tab is closed)
-        </p>
+  <FlowFrame step="sync" wide>
+    <div class="flex flex-wrap items-start gap-4">
+      <div class="flex-1">
+        <h1 class="text-2xl font-bold tracking-tight">
+          {{ done ? $t("sync.titleDone") : isManualSync ? $t("sync.review.title") : $t("sync.titleRunning") }}
+        </h1>
+        <p class="mt-1 text-sm text-base-content/60">{{ done ? $t("sync.leadDone") : $t("sync.leadRunning") }}</p>
+      </div>
+      <span v-if="done" class="badge badge-success gap-1.5 py-3"><CircleCheck class="size-4" />{{ $t("sync.titleDone") }}</span>
+    </div>
 
-        <div
-          role="alert"
-          v-if="errorMessage"
-          class="inline-flex mb-2 alert alert-error max-w-64"
-        >
-          <svg
-            xmlns="http://www.w3.org/2000/svg"
-            class="stroke-current shrink-0 h-6 w-6"
-            fill="none"
-            viewBox="0 0 24 24"
-          >
-            <path
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              stroke-width="2"
-              d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z"
-            />
-          </svg>
-          <span>{{ errorMessage }}</span>
-        </div>
+    <div v-if="errorMessage || disconnected" role="alert" class="alert alert-error alert-soft mt-5">
+      <CircleAlert class="size-5" />
+      <span>{{ errorMessage ?? $t("sync.disconnected") }}</span>
+    </div>
 
-        <div class="flex flex-col items-center my-8" v-if="isManualSync && !isManualSyncLoading">
-          <div class="text-2xl font-bold mb-4">
-            {{ manualSyncData?.contactName ?? "Unknown person" }}'s Photo
+    <div v-if="!done" class="mt-6">
+      <div class="flex justify-end text-sm tabular-nums text-base-content/60">{{ $t("sync.progress", { percent: Math.floor(progress) }) }}</div>
+      <progress class="progress progress-primary mt-2 h-2.5 w-full" :value="progress" max="100"></progress>
+    </div>
+
+    <!-- Review mode: one contact at a time. -->
+    <section v-if="reviewing" class="mt-6 rounded-box border border-base-300 p-6">
+      <div class="text-xl font-bold">{{ manualSyncData?.contactName ?? $t("sync.review.unknown") }}</div>
+      <div class="mt-6 grid items-center gap-6 sm:grid-cols-[1fr_auto_1fr]">
+        <div class="text-center">
+          <div class="mb-3 text-xs font-semibold uppercase tracking-wide text-base-content/50">{{ $t("sync.review.current") }}</div>
+          <div class="inline-block rounded-full border-2 border-base-300 p-1.5">
+            <img v-if="manualSyncData?.existingPhoto" class="size-36 rounded-full object-cover" :src="photo(manualSyncData.existingPhoto)" :alt="$t('sync.review.current')" />
+            <div v-else class="grid size-36 place-items-center rounded-full bg-base-200 text-sm text-base-content/50">{{ $t("sync.review.noPhoto") }}</div>
           </div>
-          <div class="flex flex-row gap-6">
-            <div class="flex flex-col items-center">
-              <span class="mb-2 font-semibold">Existing Photo</span>
-              <div class="avatar avatar-placeholder mb-4">
-                <div class="w-48 rounded-full ring-2 ring-white">
-                  <img v-if="manualSyncData?.existingPhoto" :src="'data:image/jpeg;base64, ' + manualSyncData?.existingPhoto" alt="Existing Google Photo" />
-                  <div v-if="!manualSyncData?.existingPhoto" class="text-xl">No photo</div>
-                </div>
-              </div>
-              <button class="btn btn-success" @click="onPhotoConfirm(false)">
-                Use Existing Photo
-              </button>
-            </div>
-            <div class="flex flex-col items-center">
-              <span class="mb-2 font-semibold">New Photo</span>
-              <div class="avatar avatar-placeholder mb-4">
-                <div class="w-48 rounded-full ring-2 ring-white">
-                  <img v-if="manualSyncData?.newPhoto" :src="'data:image/jpeg;base64, ' + manualSyncData?.newPhoto" alt="New Photo" />
-                  <div v-if="!manualSyncData?.newPhoto" class="text-xl">No photo</div>
-                </div>
-              </div>
-              <button class="btn btn-info" @click="onPhotoConfirm(true)">
-                Use New Photo
-              </button>
-            </div>
+          <div class="mt-4">
+            <button type="button" class="btn btn-sm" @click="answer(false)">{{ $t("sync.review.keep") }} <kbd class="kbd kbd-xs">←</kbd></button>
           </div>
         </div>
-
-        <div class="flex flex-col items-center mt-4 mb-4" v-if="isManualSync && isManualSyncLoading">
-          <span class="text-xl">Loading next contact...</span>
-          <span class="loading loading-spinner loading-lg"></span>
-        </div>
-
-        <div>
-          <progress
-            class="progress progress-primary w-5/6"
-            :value="syncProgress"
-            max="100"
-            :hidden="syncProgress === 100"
-          ></progress>
-        </div>
-        <div :hidden="syncProgress !== 100">
-          <div class="badge badge-primary w-5/6">Sync complete!</div>
-        </div>
-
-        <div class="avatar-group -space-x-6 inline-flex pt-4">
-          <div
-            class="avatar"
-            v-for="(image, index) in images.slice(-imageDisplayedCount)"
-            :key="index"
-          >
-            <div class="w-12">
-              <img :src="'data:image/jpeg;base64, ' + image" />
-            </div>
+        <ArrowRight class="mx-auto hidden size-8 text-base-content/30 sm:block" />
+        <div class="text-center">
+          <div class="mb-3 text-xs font-semibold uppercase tracking-wide text-base-content/50">{{ $t("sync.review.new") }}</div>
+          <div class="inline-block rounded-full border-[3px] border-primary p-1.5">
+            <img v-if="manualSyncData?.newPhoto" class="size-36 rounded-full object-cover" :src="photo(manualSyncData.newPhoto)" :alt="$t('sync.review.new')" />
+            <div v-else class="grid size-36 place-items-center rounded-full bg-base-200 text-sm text-base-content/50">{{ $t("sync.review.noPhoto") }}</div>
           </div>
-          <div
-            class="avatar avatar-placeholder"
-            v-if="syncCount >= imageDisplayedCount"
-          >
-            <div class="w-12 bg-neutral text-neutral-content">
-              <span
-                >+{{
-                  syncCount > imageDisplayedCount
-                    ? syncCount - imageDisplayedCount
-                    : 0
-                }}</span
-              >
-            </div>
+          <div class="mt-4">
+            <button type="button" class="btn btn-sm btn-primary" @click="answer(true)">{{ $t("sync.review.use") }} <kbd class="kbd kbd-xs">Enter</kbd></button>
           </div>
-        </div>
-
-        <div class="pt-8">
-          <a href="https://www.buymeacoffee.com/guyzyl" target="_blank"
-            ><img
-              class="inline-flex"
-              src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png"
-              alt="Buy Me A Coffee"
-              style="height: 60px !important; width: 217px !important"
-          /></a>
         </div>
       </div>
+      <div class="mt-6 flex items-center justify-center gap-4 text-xs text-base-content/50">
+        <span class="flex items-center gap-1.5"><Keyboard class="size-4" />{{ $t("sync.review.shortcuts") }}:</span>
+        <span><kbd class="kbd kbd-xs">←</kbd> {{ $t("sync.review.keep") }}</span>
+        <span><kbd class="kbd kbd-xs">Enter</kbd> {{ $t("sync.review.use") }}</span>
+      </div>
+    </section>
+    <div v-else-if="isManualSync && isManualSyncLoading && !done" class="mt-6 flex items-center justify-center gap-3 py-10 text-base-content/70">
+      <span class="loading loading-spinner"></span>{{ $t("sync.review.loading") }}
     </div>
-  </div>
-</template>
 
-<style scoped></style>
+    <div class="mt-6 grid gap-4 sm:grid-cols-2">
+      <div class="rounded-box border border-base-300 px-5 py-4">
+        <div class="flex items-center gap-1.5 text-xs font-medium text-base-content/60"><ImagePlus class="size-3.5 text-success" />{{ $t("sync.photosAdded") }}</div>
+        <div class="mt-1 text-2xl font-bold tabular-nums" data-testid="photos-added">{{ syncCount }}</div>
+      </div>
+      <div class="rounded-box border border-base-300 px-5 py-4">
+        <div class="flex items-center gap-1.5 text-xs font-medium text-base-content/60"><Users class="size-3.5" />{{ $t("sync.contacts") }}</div>
+        <div class="mt-1 text-2xl font-bold tabular-nums">{{ totalContacts ?? "—" }}</div>
+      </div>
+    </div>
+
+    <section v-if="images.length" class="mt-6">
+      <div class="text-sm font-semibold">{{ $t("sync.justAdded") }}</div>
+      <ul class="mt-3 flex flex-wrap items-center gap-2" :aria-label="$t('sync.justAdded')">
+        <li v-for="(image, index) in [...images].reverse()" :key="images.length - index">
+          <img class="size-12 rounded-full object-cover ring-2 ring-base-100" :src="photo(image)" alt="" />
+        </li>
+        <li v-if="hiddenCount > 0" class="grid size-12 place-items-center rounded-full bg-neutral text-sm font-semibold text-neutral-content">
+          +{{ hiddenCount }}
+        </li>
+      </ul>
+    </section>
+
+    <template #actions>
+      <a class="btn btn-ghost btn-sm" href="https://www.buymeacoffee.com/guyzyl" target="_blank"><Coffee class="size-4" />{{ $t("sync.supportOriginal") }}</a>
+    </template>
+  </FlowFrame>
+</template>

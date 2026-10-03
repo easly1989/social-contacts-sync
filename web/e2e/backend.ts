@@ -74,5 +74,6 @@ export async function screenshot(page: Page, name: string): Promise<void> {
   mkdirSync(screenshotDir, { recursive: true });
   // Let fonts and images settle so screenshots are comparable between runs.
   await page.evaluate(() => document.fonts.ready);
-  await page.screenshot({ path: path.join(screenshotDir, `${name}.png`), fullPage: true });
+  // "disabled" fast-forwards CSS transitions such as the progress bar.
+  await page.screenshot({ path: path.join(screenshotDir, `${name}.png`), fullPage: true, animations: "disabled" });
 }

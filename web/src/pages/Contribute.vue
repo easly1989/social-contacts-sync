@@ -1,31 +1,33 @@
 <script lang="ts">
 import { defineComponent } from "vue";
-import { event } from "vue-gtag";
+import { CircleAlert, Coffee, Mail } from "lucide-vue-next";
+
+import FlowFrame from "../components/FlowFrame.vue";
+import { track } from "../analytics";
+import { repoUrl } from "../brand";
 
 export default defineComponent({
+  components: { FlowFrame, CircleAlert, Coffee, Mail },
   data: () => ({
     email: "",
     checkingPurchase: false,
-    defaultError:
-      "We couldn't verify your contribution. Check that you're using the email from your Buy Me a Coffee receipt, then try again.",
-    waValidationError:
-      "This contribution is linked to another WhatsApp account. Connect that account to continue.",
+    repoUrl,
     errorMessage: null as string | null,
   }),
 
   mounted() {
     if (this.$route.query.show_error) {
       this.errorMessage = this.$route.query.show_error === "verification"
-        ? "We couldn't check your access right now. Please try again in a moment."
-        : this.waValidationError;
-      event("contribution_error_shown", { method: "Google" });
+        ? this.$t("contribute.errorVerification")
+        : this.$t("contribute.errorWhatsApp");
+      track("contribution_error_shown");
     }
   },
 
   methods: {
     coffeeClicked() {
       this.errorMessage = null;
-      event("contribution_wa_validation_failed", { method: "Google" });
+      track("contribution_wa_validation_failed");
     },
 
     checkPurchase() {
@@ -42,9 +44,9 @@ export default defineComponent({
           if (data.purchased) {
             this.$router.push("/whatsapp");
           } else {
-            this.errorMessage = this.defaultError;
+            this.errorMessage = this.$t("contribute.errorDefault");
             this.checkingPurchase = false;
-            event("contribution_validation_failed", { method: "Google" });
+            track("contribution_validation_failed");
           }
         });
     },
@@ -53,101 +55,38 @@ export default defineComponent({
 </script>
 
 <template>
-  <div id="home" class="hero h-full bg-base-200">
-    <div class="hero-content text-center">
-      <div class="max-w-md">
-        <h1 class="text-5xl font-bold">Support WhatsApp Contact Sync</h1>
-        <p class="py-6">
-          A <strong>$1 contribution</strong> gives you
-          <strong>one month of access for one WhatsApp account</strong>
-          on <a href="/">whasync.com</a> and helps cover hosting costs.
-          <br /><br />
-          Prefer to host it yourself? The project is
-          <a href="https://github.com/guyzyl/whatsapp-contact-sync"
-            >open source</a
-          > and free to run on your own computer.
-        </p>
-        <div class="mt-2">
-          <p>1. Contribute $1 on Buy Me a Coffee</p>
-          <p class="mt-2 text-sm">Already contributed? Enter your email below.</p>
-          <div @click="coffeeClicked">
-            <a href="https://www.buymeacoffee.com/guyzyl" target="_blank"
-              ><img
-                class="inline-flex"
-                src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png"
-                alt="Buy Me A Coffee"
-                style="height: 60px !important; width: 217px !important"
-            /></a>
-          </div>
-        </div>
+  <FlowFrame step="contribute">
+    <div class="mx-auto max-w-lg text-center">
+      <h1 class="text-2xl font-bold tracking-tight">{{ $t("contribute.title") }}</h1>
+      <i18n-t keypath="contribute.lead" tag="p" class="mt-3 text-sm text-base-content/70">
+        <template #amount><strong>{{ $t("contribute.amount") }}</strong></template>
+        <template #access><strong>{{ $t("contribute.access") }}</strong></template>
+      </i18n-t>
+      <i18n-t keypath="contribute.selfHost" tag="p" class="mt-2 text-sm text-base-content/70">
+        <template #link><a class="link link-primary" :href="repoUrl">{{ $t("contribute.openSource") }}</a></template>
+      </i18n-t>
 
-        <div class="inline-flex max-w-72 py-4">
-          <div class="grid grid-cols-1">
-            <div class="inline">2. Enter the email from your receipt</div>
-            <div>
-              <label class="input input-bordered flex items-center gap-2">
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  viewBox="0 0 16 16"
-                  fill="currentColor"
-                  class="w-4 h-4 opacity-70"
-                >
-                  <path
-                    d="M2.5 3A1.5 1.5 0 0 0 1 4.5v.793c.026.009.051.02.076.032L7.674 8.51c.206.1.446.1.652 0l6.598-3.185A.755.755 0 0 1 15 5.293V4.5A1.5 1.5 0 0 0 13.5 3h-11Z"
-                  />
-                  <path
-                    d="M15 6.954 8.978 9.86a2.25 2.25 0 0 1-1.956 0L1 6.954V11.5A1.5 1.5 0 0 0 2.5 13h11a1.5 1.5 0 0 0 1.5-1.5V6.954Z"
-                  />
-                </svg>
-                <input
-                  v-model="email"
-                  v-on:input="errorMessage = null"
-                  type="text"
-                  class="grow"
-                  placeholder="Email address"
-                />
-              </label>
-            </div>
-          </div>
+      <div class="mt-8 rounded-box border border-base-300 p-5 text-left">
+        <div class="text-sm font-semibold">{{ $t("contribute.stepCoffee") }}</div>
+        <a class="btn mt-3 border-0 bg-[#FFDD00] text-neutral-900 hover:bg-[#f5d400]" href="https://www.buymeacoffee.com/guyzyl" target="_blank" @click="coffeeClicked">
+          <Coffee class="size-4" />Buy Me a Coffee
+        </a>
+        <div class="mt-6 text-sm font-semibold">{{ $t("contribute.stepEmail") }}</div>
+        <div class="mt-1 text-xs text-base-content/60">{{ $t("contribute.already") }}</div>
+        <div class="mt-3 flex flex-wrap gap-2">
+          <label class="input flex-1">
+            <Mail class="size-4 opacity-60" />
+            <input v-model="email" type="email" class="grow" :placeholder="$t('contribute.email')" @input="errorMessage = null" @keydown.enter="checkPurchase()" />
+          </label>
+          <button type="button" class="btn btn-primary" :disabled="!email || checkingPurchase" @click="checkPurchase()">
+            <span v-if="checkingPurchase" class="loading loading-spinner loading-sm"></span>
+            {{ checkingPurchase ? $t("contribute.verifying") : $t("contribute.check") }}
+          </button>
         </div>
-
-        <div
-          role="alert"
-          v-if="errorMessage"
-          class="inline-flex mb-2 alert alert-error max-w-64"
-        >
-          <svg
-            xmlns="http://www.w3.org/2000/svg"
-            class="stroke-current shrink-0 h-6 w-6"
-            fill="none"
-            viewBox="0 0 24 24"
-          >
-            <path
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              stroke-width="2"
-              d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z"
-            />
-          </svg>
-          <span>{{ errorMessage }}</span>
-        </div>
-
-        <div class="mt-2">
-          <a
-            @click="checkPurchase()"
-            @keydown.enter="checkPurchase()"
-            class="btn btn-primary"
-            :class="{ 'btn-disabled': !email || checkingPurchase }"
-            ><span
-              v-if="checkingPurchase"
-              class="loading loading-spinner"
-            ></span
-            >{{ checkingPurchase ? "Verifying…" : "Verify and continue" }}</a
-          >
+        <div v-if="errorMessage" role="alert" class="alert alert-error alert-soft mt-4">
+          <CircleAlert class="size-5" /><span>{{ errorMessage }}</span>
         </div>
       </div>
     </div>
-  </div>
+  </FlowFrame>
 </template>
-
-<style scoped></style>
