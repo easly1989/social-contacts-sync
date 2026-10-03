@@ -5,7 +5,7 @@ import { Client } from "whatsapp-web.js";
 import { EventType, ReviewRequest, SourceId, SyncOptions } from "../../interfaces/api";
 import { downloadContactPhoto, listContacts, OAuth2Client, updateContactPhoto } from "./gapi";
 import { sendEvent, sendMessageAndWait } from "./ws";
-import { getFromCache } from "./cache";
+import { deleteFromCache, getFromCache, setInCache } from "./cache";
 import { runSync, SyncMode } from "./syncEngine";
 import { saveRun } from "./runs";
 import { PhotoSource } from "./sources/types";
@@ -42,6 +42,7 @@ export async function initSync(id: string, syncOptions: SyncOptions) {
   const gAuth: OAuth2Client = getFromCache(id, "gauth");
   const limiter = googleRateLimiter();
   const mode = syncMode(syncOptions);
+  setInCache(id, "sync_stop", false);
 
   try {
     const result = await runSync(
@@ -54,7 +55,8 @@ export async function initSync(id: string, syncOptions: SyncOptions) {
       mode,
       {
         progress: (update) => sendEvent(ws, EventType.SyncProgress, update),
-        cancelled: () => ws.readyState !== WebSocket.OPEN, // stop if the page went away
+        // Stop when asked to, or when the page went away.
+        cancelled: () => getFromCache(id, "sync_stop") === true || ws.readyState !== WebSocket.OPEN,
         beforeWrite: async () => void (await limiter.removeTokens(1)),
         review: async ({ contact, existingPhoto, candidates }) => {
           const request: ReviewRequest = {
@@ -77,6 +79,8 @@ export async function initSync(id: string, syncOptions: SyncOptions) {
       }
     );
     saveRun(id, result);
+    // The dashboard's photo coverage is out of date now.
+    deleteFromCache(id, "google_stats");
     sendEvent(ws, EventType.SyncProgress, {
       progress: 100,
       syncCount: result.run.counters.added + result.run.counters.replaced,
@@ -84,6 +88,7 @@ export async function initSync(id: string, syncOptions: SyncOptions) {
       checked: result.run.results.length,
       counters: result.run.counters,
       runId: result.run.id,
+      cancelled: result.run.cancelled,
     });
   } catch (e) {
     // Loading the contacts (Google or a source) failed before anything changed.
