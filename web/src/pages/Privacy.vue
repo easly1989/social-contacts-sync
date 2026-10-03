@@ -1,116 +1,132 @@
 <script setup lang="ts">
+import { useI18n } from "vue-i18n";
+
 import FlowFrame from "../components/FlowFrame.vue";
+import { maintainerName, repoUrl, upstreamAuthor, upstreamName, upstreamUrl } from "../brand";
+
+// The privacy policy (issue #32). Google requires one, with the Limited Use
+// statement, for OAuth clients that access contacts.
+const { locale } = useI18n();
+const effective = "2026-10-03";
+const issues = `${repoUrl}/issues`;
+const userDataPolicy = "https://developers.google.com/terms/api-services-user-data-policy";
 </script>
 
-<!-- This page exists since it's required by Google for publishing an OAuth app -->
-<!-- Generated using https://github.com/digitalmalayali/free-website-privacy-policy-generator -->
 <template>
   <FlowFrame step="privacy" wide>
-    <!-- Legal text of the original hosted service; rewritten for this project in a later step of #8. -->
-    <article lang="en" class="prose max-w-none prose-headings:tracking-tight">
+    <article v-if="locale === 'it'" lang="it" class="prose max-w-none prose-headings:tracking-tight" data-testid="privacy">
+      <h1>Informativa sulla privacy</h1>
+      <p class="lead">In vigore dal {{ effective }}.</p>
+      <p>
+        Social Contacts Sync è un software open source mantenuto da {{ maintainerName }} e basato su
+        <a :href="upstreamUrl" target="_blank" rel="noopener">{{ upstreamName }}</a> di {{ upstreamAuthor }}. Lo usi sul tuo computer (app desktop)
+        o su un server che gestisci tu (versione web). Chi mantiene il progetto non gestisce alcun servizio e non riceve i tuoi dati.
+      </p>
+
+      <h2>App desktop</h2>
+      <p>Tutto resta nella cartella dei dati sul tuo computer (la vedi in <em>Impostazioni → Dati e privacy</em>):</p>
+      <ul>
+        <li><code>config.env</code>: le credenziali del tuo progetto Google e le preferenze;</li>
+        <li>l'accesso a Google, cifrato con il portachiavi del sistema operativo, e la sessione di WhatsApp come dispositivo collegato;</li>
+        <li>la cronologia delle sincronizzazioni e i backup della pulizia (foto e dati dei contatti modificati), conservati per 90 giorni per poterli annullare;</li>
+        <li>le scelte della pulizia (per esempio i gruppi segnati come «non duplicati») e i log dell'app.</li>
+      </ul>
+      <p>L'app si collega solo a:</p>
+      <ul>
+        <li><strong>Google</strong>, per l'accesso e per leggere e aggiornare i tuoi contatti (People API);</li>
+        <li><strong>WhatsApp Web</strong>, per leggere le foto profilo dei tuoi contatti;</li>
+        <li><strong>Gravatar</strong>, se attivi questa sorgente: riceve l'hash SHA-256 degli indirizzi email dei contatti, non gli indirizzi;</li>
+        <li><strong>GitHub</strong>, per controllare se c'è una nuova versione;</li>
+        <li><strong>Google (Chrome for Testing)</strong>, una sola volta, per scaricare un browser se non ne trova uno installato.</li>
+      </ul>
+      <p>Non ci sono statistiche d'uso, telemetria né pubblicità.</p>
+
+      <h2>Versione web (self-hosted)</h2>
+      <p>
+        Chi gestisce il server è responsabile dei dati che vi passano. Il software tiene la sessione in memoria (accessi, cronologia delle ultime
+        sincronizzazioni) e la cancella alla scadenza; usa un solo cookie di sessione. Google Analytics è attivo solo se chi gestisce il server lo
+        configura esplicitamente.
+      </p>
+
+      <h2>Dati degli utenti Google</h2>
+      <p>
+        L'app legge e aggiorna i tuoi contatti Google solo per le azioni che avvii tu: sincronizzare le foto, la pulizia dei contatti e il loro
+        annullamento. Questi dati non vengono condivisi, venduti né usati per pubblicità.
+      </p>
+      <p>
+        L'uso e il trasferimento ad altre app delle informazioni ricevute dalle API di Google rispetteranno le
+        <a :href="userDataPolicy" target="_blank" rel="noopener">Google API Services User Data Policy</a>, inclusi i requisiti di Limited Use.
+      </p>
+
+      <h2>Cancellare i tuoi dati</h2>
+      <ul>
+        <li>Nell'app: <em>Impostazioni → Dati e privacy → Elimina tutti i dati locali</em>, oppure <em>Esci</em> da Google e <em>Scollega</em> WhatsApp.</li>
+        <li>Da Google: rimuovi l'accesso in <a href="https://myaccount.google.com/permissions" target="_blank" rel="noopener">myaccount.google.com/permissions</a>.</li>
+        <li>Da WhatsApp: <em>Impostazioni → Dispositivi collegati</em> sul telefono.</li>
+      </ul>
+
+      <h2>Modifiche e contatti</h2>
+      <p>
+        Le modifiche a questa informativa sono pubblicate qui e nella cronologia del progetto su GitHub. Per domande, apri una issue su
+        <a :href="issues" target="_blank" rel="noopener">GitHub</a>.
+      </p>
+    </article>
+
+    <article v-else lang="en" class="prose max-w-none prose-headings:tracking-tight" data-testid="privacy">
       <h1>Privacy Policy</h1>
+      <p class="lead">Effective {{ effective }}.</p>
       <p>
-        Guy Zylberberg operates the website "WhatsApp Contact Sync" at
-        https://whasync.com. I take your privacy seriously. To better protect
-        your privacy, I provide this privacy policy notice explaining the way
-        your personal information is collected and used.
+        Social Contacts Sync is open-source software maintained by {{ maintainerName }}, based on
+        <a :href="upstreamUrl" target="_blank" rel="noopener">{{ upstreamName }}</a> by {{ upstreamAuthor }}. You run it on your own computer (desktop
+        app) or on a server you operate (web version). The maintainer runs no service and receives none of your data.
       </p>
-      <h2>Collection of Routine Information</h2>
+
+      <h2>Desktop app</h2>
+      <p>Everything stays in the data folder on your computer (shown in <em>Settings → Data &amp; privacy</em>):</p>
+      <ul>
+        <li><code>config.env</code>: your own Google project's credentials and your preferences;</li>
+        <li>your Google sign-in, encrypted with the operating system's keychain, and WhatsApp's linked-device session;</li>
+        <li>sync history and clean-up backups (photos and data of the contacts that changed), kept for 90 days so they can be undone;</li>
+        <li>clean-up choices (such as groups marked "Not duplicates") and the app's logs.</li>
+      </ul>
+      <p>The app only connects to:</p>
+      <ul>
+        <li><strong>Google</strong>, to sign in and to read and update your contacts (People API);</li>
+        <li><strong>WhatsApp Web</strong>, to read your contacts' profile photos;</li>
+        <li><strong>Gravatar</strong>, when you turn that source on: it receives the SHA-256 hash of your contacts' email addresses, not the addresses;</li>
+        <li><strong>GitHub</strong>, to check for a new version;</li>
+        <li><strong>Google (Chrome for Testing)</strong>, once, to download a browser if none is installed.</li>
+      </ul>
+      <p>There is no analytics, telemetry or advertising.</p>
+
+      <h2>Web version (self-hosted)</h2>
       <p>
-        This website track basic information about its visitors. This
-        information includes, but is not limited to, IP addresses, browser
-        details, timestamps and referring pages. None of this information can
-        personally identify specific visitors to this website. The information
-        is tracked for routine administration and maintenance purposes.
+        Whoever runs the server is responsible for the data that passes through it. The software keeps each session in memory (sign-ins, the last
+        few syncs) and deletes it when the session expires; it uses one session cookie. Google Analytics only runs if the operator explicitly
+        configures it.
       </p>
-      <h2>Cookies</h2>
+
+      <h2>Google user data</h2>
       <p>
-        Where necessary, this website uses cookies to store information about a
-        visitor's preferences and history to better serve the visitor and/or
-        present the visitor with customized content.
+        The app reads and updates your Google contacts only for what you start: syncing photos, cleaning up contacts and undoing either. This data
+        is not shared, sold or used for advertising.
       </p>
-      <h2>
-        Advertisement and Other Third Parties
-      </h2>
       <p>
-        Advertising partners and other third parties may use cookies, scripts
-        and/or web beacons to track visitor activities on this website to
-        display advertisements and other useful information. Such tracking is
-        done directly by the third parties through their servers and is subject
-        to their privacy policies. This website has no access or control over
-        these cookies, scripts and/or web beacons that may be used by third
-        parties.
+        The use and transfer to any other app of information received from Google APIs will adhere to the
+        <a :href="userDataPolicy" target="_blank" rel="noopener">Google API Services User Data Policy</a>, including the Limited Use requirements.
       </p>
-      <div>
-        <p>
-          I have included links on this website for your use and reference. I am
-          not responsible for the privacy policies on these websites. You should
-          be aware that the privacy policies of these websites may differ from
-          my own.
-        </p>
-        <p>
-          Link to the privacy policy of third-party service providers used by
-          the website
-        </p>
-        <ul>
-          <li>
-            <a
-              href="https://policies.google.com/privacy"
-              target="_blank"
-              rel="noopener noreferrer"
-              >Google Analytics</a
-            >
-          </li>
-          <li>
-            <a
-              href="https://www.whatsapp.com/legal/privacy-policy/"
-              target="_blank"
-              rel="noopener noreferrer"
-              >WhatsApp</a
-            >
-          </li>
-        </ul>
-      </div>
-      <h2>Security</h2>
+
+      <h2>Removing your data</h2>
+      <ul>
+        <li>In the app: <em>Settings → Data &amp; privacy → Delete all local data</em>, or <em>Sign out</em> of Google and <em>Unlink</em> WhatsApp.</li>
+        <li>At Google: remove the app's access at <a href="https://myaccount.google.com/permissions" target="_blank" rel="noopener">myaccount.google.com/permissions</a>.</li>
+        <li>At WhatsApp: <em>Settings → Linked devices</em> on your phone.</li>
+      </ul>
+
+      <h2>Changes and contact</h2>
       <p>
-        The security of your personal information is important to me, but
-        remember that no method of transmission over the Internet, or method of
-        electronic storage, is 100% secure. While I strive to use commercially
-        acceptable means to protect your personal information, I cannot
-        guarantee its absolute security.
-      </p>
-      <h2>Changes To This Privacy Policy</h2>
-      <p>
-        This Privacy Policy is effective as of 2022-08-15 and will remain in
-        effect except concerning any changes in its provisions in the future,
-        which will be in effect immediately after being posted on this page. I
-        reserve the right to update or change my Privacy Policy at any time and
-        you should check this Privacy Policy periodically. If I make any
-        material changes to this Privacy Policy, I will notify you either
-        through the email address you have provided me or by placing a prominent
-        notice on my website.
-      </p>
-      <h2>Contact Information</h2>
-      <p>
-        For any questions or concerns regarding the privacy policy, please send
-        me an email at guyzyl@gmail.com.
-      </p>
-      <p></p>
-      <br />
-      <p>
-        This privacy policy page was created by
-        <a
-          href="https://github.com/ArthurGareginyan/privacy-policy-template/"
-          target="_blank"
-          rel="noopener noreferrer"
-          >Arthur Gareginyan </a
-        >and modified/generated by
-        <a
-          href="https://free-privacy-policy-generator.digitalmalayali.in/"
-          target="_blank"
-          rel="noopener noreferrer"
-          >Free &amp; Open Source Privacy Policy Generator</a
-        >.
+        Changes to this policy are published here and in the project's history on GitHub. For questions, open an issue on
+        <a :href="issues" target="_blank" rel="noopener">GitHub</a>.
       </p>
     </article>
   </FlowFrame>
