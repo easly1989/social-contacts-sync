@@ -118,6 +118,36 @@ The workflow needs a fine-grained personal access token stored as the
 read & write access to Contents, Pull requests, Issues and Workflows (pull
 requests opened with the default `GITHUB_TOKEN` would not run CI).
 
+## Desktop App (preview)
+
+The [`desktop/`](desktop) folder packages the server and the web app into an
+Electron app for Windows, Linux and macOS. It runs everything locally: the
+server listens on `127.0.0.1` only, and Google sign-in opens in your default
+browser.
+
+Settings live in a `config.env` file, which you can edit by hand:
+
+| Build | `config.env` and data |
+|---|---|
+| Windows portable `.exe`, Linux AppImage | next to the executable (`config.env` + `social-contacts-sync-data/`) |
+| Windows installer, `.deb`, macOS | the OS user data folder |
+| any | the folder in `SCS_DATA_DIR`, if set |
+
+Until the setup wizard lands, put the client ID and secret of a Google OAuth
+client of type **Desktop app** into `config.env` (`GOOGLE_CLIENT_ID`,
+`GOOGLE_CLIENT_SECRET`). WhatsApp Web runs in an installed Chrome, Edge,
+Chromium or Brave. If none is installed, Chrome for Testing is downloaded once
+into the data folder.
+
+```bash
+cd desktop
+npm install
+npm run dev     # builds server, web and desktop, then starts the app
+npm test        # unit tests
+npm run pack    # unpacked build for this OS in desktop/dist
+npm run test:e2e  # launches the packaged app (Linux needs a display, e.g. xvfb-run)
+```
+
 ## Build Docker Images
 
 There are 3 different `Dockerfile`s for this app:
