@@ -1,18 +1,21 @@
-<script setup lang="ts"></script>
+<script setup lang="ts">
+import FlowFrame from "../components/FlowFrame.vue";
+</script>
 
 <!-- This page exists since it's required by Google for publishing an OAuth app -->
 <!-- Generated using https://github.com/digitalmalayali/free-website-privacy-policy-generator -->
 <template>
-  <div class="h-max bg-base-200 py-6 px-12 grid place-content-center">
-    <div class="max-w-4xl bg-base-200">
-      <h1 class="text-5xl font-bold">Privacy Policy</h1>
+  <FlowFrame step="privacy" wide>
+    <!-- Legal text of the original hosted service; rewritten for this project in a later step of #8. -->
+    <article lang="en" class="prose max-w-none prose-headings:tracking-tight">
+      <h1>Privacy Policy</h1>
       <p>
         Guy Zylberberg operates the website "WhatsApp Contact Sync" at
         https://whasync.com. I take your privacy seriously. To better protect
         your privacy, I provide this privacy policy notice explaining the way
         your personal information is collected and used.
       </p>
-      <h2 class="text-2xl font-bold pt-4">Collection of Routine Information</h2>
+      <h2>Collection of Routine Information</h2>
       <p>
         This website track basic information about its visitors. This
         information includes, but is not limited to, IP addresses, browser
@@ -20,13 +23,13 @@
         personally identify specific visitors to this website. The information
         is tracked for routine administration and maintenance purposes.
       </p>
-      <h2 class="text-2xl font-bold pt-4">Cookies</h2>
+      <h2>Cookies</h2>
       <p>
         Where necessary, this website uses cookies to store information about a
         visitor's preferences and history to better serve the visitor and/or
         present the visitor with customized content.
       </p>
-      <h2 class="text-2xl font-bold pt-4">
+      <h2>
         Advertisement and Other Third Parties
       </h2>
       <p>
@@ -68,7 +71,7 @@
           </li>
         </ul>
       </div>
-      <h2 class="text-2xl font-bold pt-4">Security</h2>
+      <h2>Security</h2>
       <p>
         The security of your personal information is important to me, but
         remember that no method of transmission over the Internet, or method of
@@ -76,7 +79,7 @@
         acceptable means to protect your personal information, I cannot
         guarantee its absolute security.
       </p>
-      <h2 class="text-2xl font-bold pt-4">Changes To This Privacy Policy</h2>
+      <h2>Changes To This Privacy Policy</h2>
       <p>
         This Privacy Policy is effective as of 2022-08-15 and will remain in
         effect except concerning any changes in its provisions in the future,
@@ -87,7 +90,7 @@
         through the email address you have provided me or by placing a prominent
         notice on my website.
       </p>
-      <h2 class="text-2xl font-bold pt-4">Contact Information</h2>
+      <h2>Contact Information</h2>
       <p>
         For any questions or concerns regarding the privacy policy, please send
         me an email at guyzyl@gmail.com.
@@ -109,12 +112,6 @@
           >Free &amp; Open Source Privacy Policy Generator</a
         >.
       </p>
-    </div>
-  </div>
+    </article>
+  </FlowFrame>
 </template>
-
-<style scoped>
-p {
-  padding-top: 6px;
-}
-</style>

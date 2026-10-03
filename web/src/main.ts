@@ -4,11 +4,13 @@ import {
   createWebHistory,
   RouteLocationNormalized,
 } from "vue-router";
-import { createGtag } from "vue-gtag";
-import "./style.css";
 import App from "./App.vue";
 
+import "@fontsource-variable/inter";
 import "./index.css";
+import { i18n } from "./i18n";
+import { applyTheme } from "./preferences";
+import { installAnalytics } from "./analytics";
 import { initWs } from "./services/ws";
 import { SessionStatus } from "../../interfaces/api";
 import { isbot } from "isbot";
@@ -74,9 +76,8 @@ router.afterEach((to: RouteLocationNormalized) => {
   currentRoute = to;
 });
 
-const gtag = createGtag({
-  tagId: "G-4PJJZRPWG4",
-  pageTracker: { router },
-});
+applyTheme();
 
-createApp(App).use(router).use(gtag).mount("#app");
+const app = createApp(App).use(router).use(i18n);
+installAnalytics(app, router);
+app.mount("#app");

@@ -1,37 +1,25 @@
-<script lang="ts">
-import { defineComponent } from "vue";
+<script setup lang="ts">
+import FlowFrame from "../components/FlowFrame.vue";
 
-export default defineComponent({
-  methods: {
-    handleAuthClick() {
-      window.location.href = "/api/google_auth_start";
-    },
-  },
-});
+function signIn(): void {
+  window.location.href = "/api/google_auth_start";
+}
 </script>
 
 <template>
-  <div id="home" class="hero h-full bg-base-200">
-    <div class="hero-content text-center">
-      <div class="max-w-md">
-        <h1 class="text-5xl font-bold">Authorize Google</h1>
-        <p class="py-6">
-          Connect your Google account and authorize contact permissions.
-          <br />
-        </p>
-        <div>
-          <button
-            @click="handleAuthClick"
-            id="signin-button"
-            class="btn btn-outline btn-primary gap-4"
-          >
-            <img class="w-8" alt="Google login" src="/google_logo.svg" />
-            Sign in with Google
-          </button>
-        </div>
+  <FlowFrame step="google">
+    <div class="mx-auto max-w-lg py-4 text-center">
+      <div class="mx-auto grid size-16 place-items-center rounded-2xl border border-base-300 bg-base-100">
+        <img class="size-8" alt="" src="/google_logo.svg" />
       </div>
+      <h1 class="mt-6 text-2xl font-bold tracking-tight">{{ $t("google.title") }}</h1>
+      <p class="mt-2 text-sm text-base-content/70">{{ $t("google.lead") }}</p>
+      <button id="signin-button" type="button" class="btn btn-primary mt-8 gap-3" @click="signIn">
+        <span class="grid size-6 place-items-center rounded-full bg-white"><img class="size-4" alt="" src="/google_logo.svg" /></span>
+        {{ $t("google.button") }}
+      </button>
+      <p class="mt-4 text-xs text-base-content/50">{{ $t("google.note") }}</p>
     </div>
-  </div>
+  </FlowFrame>
 </template>
 
-<style scoped></style>

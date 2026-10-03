@@ -1,85 +1,69 @@
-<script lang="ts">
-import { defineComponent } from "vue";
+<script setup lang="ts">
+import { onMounted, ref } from "vue";
 import QrcodeVue from "qrcode.vue";
-import { event } from "vue-gtag";
 import { isbot } from "isbot";
+import { CircleHelp, Phone } from "lucide-vue-next";
 
+import FlowFrame from "../components/FlowFrame.vue";
 import { EventType } from "../../../interfaces/api";
 import { addHandler } from "../services/ws";
+import { track } from "../analytics";
 
-export default defineComponent({
-  data: () => ({
-    qrData: "",
-    qrColorBlack: "#000000",
-    qrColorGray: "oklch(0.961151 0 0)",
-    waCon: false,
-  }),
-  mounted() {
-    addHandler(EventType.WhatsAppQR, this.onQR);
-    addHandler(EventType.WhatsAppConnecting, this.onConnecting);
-    // Make sure we don't load the QR code for bots (this uses resources on the server)
-    if (!isbot(navigator.userAgent)) this.initWhatsApp();
-  },
-  methods: {
-    async initWhatsApp() {
-      fetch("/api/init_whatsapp", { credentials: "include" });
-    },
-    onQR(data: string): void {
-      if (!this.qrData) event("qr_loaded", { method: "Google" });
-      this.qrData = data;
-    },
-    onConnecting(): void {
-      // Just in case the event is triggered multiple times
-      if (!this.waCon) event("whatsapp_connecting", { method: "Google" });
-      this.waCon = true;
-    },
-  },
-  components: {
-    QrcodeVue,
-  },
+const qrData = ref("");
+const connecting = ref(false);
+
+function onQR(data: string): void {
+  if (!qrData.value) track("qr_loaded");
+  qrData.value = data;
+}
+
+function onConnecting(): void {
+  // The event can arrive more than once.
+  if (!connecting.value) track("whatsapp_connecting");
+  connecting.value = true;
+}
+
+onMounted(() => {
+  addHandler(EventType.WhatsAppQR, onQR);
+  addHandler(EventType.WhatsAppConnecting, onConnecting);
+  // Don't start a WhatsApp session for bots: it costs server resources.
+  if (!isbot(navigator.userAgent)) fetch("/api/init_whatsapp", { credentials: "include" });
 });
 </script>
 
 <template>
-  <div id="home" class="hero h-full bg-base-200">
-    <div class="hero-content text-center">
-      <div class="max-w-md">
-        <h1 class="text-5xl font-bold">Authorize WhatsApp</h1>
-        <p class="py-6">
-          Scan the QR code below to authorize access to your WhatsApp account.
-          <a href="https://faq.whatsapp.com/539218963354346/?locale=en_US"
-            >Click here</a
-          >
-          for help.
-          <br />
-          <b>Authorization will take a few seconds after QR code is scanned.</b>
-        </p>
-        <div class="qr-placeholder inline-flex w-72 h-72" v-if="!qrData">
-          <button class="center-spinner loading loading-spinner"></button>
+  <FlowFrame step="whatsapp">
+    <div class="grid items-center gap-10 md:grid-cols-[1fr_auto]">
+      <div>
+        <div class="flex items-center gap-3">
+          <div class="grid size-10 place-items-center rounded-xl bg-[#25D366] text-white"><Phone class="size-5" /></div>
+          <h1 class="text-2xl font-bold tracking-tight">{{ $t("whatsapp.title") }}</h1>
         </div>
-        <div class="relative z-0">
-          <qrcode-vue
-            class="inline-flex qr-code"
-            v-if="qrData"
-            :value="qrData"
-            :size="288"
-            :foreground="waCon ? qrColorGray : qrColorBlack"
-          ></qrcode-vue>
-          <div
-            class="absolute inset-0 flex justify-center items-center z-10"
-            v-if="waCon"
-          >
-            <div class="grid">
-              <div
-                class="center-spinner loading loading-spinner inline-flex"
-              ></div>
-              <p>WhatsApp Authorizing</p>
-            </div>
+        <p class="mt-3 text-sm leading-relaxed text-base-content/70">{{ $t("whatsapp.lead") }}</p>
+        <ol class="mt-6 space-y-3 text-sm">
+          <li v-for="n in 3" :key="n" class="flex items-center gap-3">
+            <span class="grid size-6 shrink-0 place-items-center rounded-full bg-primary/10 text-xs font-semibold text-primary">{{ n }}</span>
+            {{ $t(`whatsapp.step${n}`) }}
+          </li>
+        </ol>
+        <a class="link link-hover mt-6 inline-flex items-center gap-1.5 text-sm text-base-content/60" href="https://faq.whatsapp.com/539218963354346/?locale=en_US" target="_blank">
+          <CircleHelp class="size-4" />{{ $t("whatsapp.help") }}
+        </a>
+      </div>
+
+      <div class="relative mx-auto grid size-[296px] place-items-center rounded-2xl border border-base-300 bg-white p-3">
+        <div v-if="!qrData" class="grid place-items-center gap-3 text-sm text-neutral-500">
+          <span class="loading loading-spinner loading-md"></span>{{ $t("whatsapp.loading") }}
+        </div>
+        <qrcode-vue v-else :value="qrData" :size="268" foreground="#111111" :class="{ 'opacity-15': connecting }" />
+        <div v-if="connecting" class="absolute inset-0 grid place-items-center text-center">
+          <div class="px-6">
+            <span class="loading loading-spinner loading-md text-primary"></span>
+            <p class="mt-2 font-semibold text-neutral-900">{{ $t("whatsapp.authorizing") }}</p>
+            <p class="text-xs text-neutral-500">{{ $t("whatsapp.authorizingHint") }}</p>
           </div>
         </div>
       </div>
     </div>
-  </div>
+  </FlowFrame>
 </template>
-
-<style scoped></style>
