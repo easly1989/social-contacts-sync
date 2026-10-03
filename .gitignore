@@ -135,3 +135,8 @@ credentials.json
 build
 .wwebjs_cache
 .DS_Store
+
+# Playwright
+e2e/.results/
+e2e/screenshots/
+playwright-report/

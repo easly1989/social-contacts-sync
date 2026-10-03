@@ -80,6 +80,21 @@ The server build uses TypeScript 7. Both packages also install Microsoft's
 because `ts-node` and `vue-tsc` still require the JavaScript compiler API.
 The `@typescript/native` alias provides TypeScript 7's `tsc` executable.
 
+## Tests
+
+Every pull request runs the [CI workflow](.github/workflows/ci.yml): server
+build and unit tests, web type-check and build, a smoke test of the built
+server, a Docker build and browser end-to-end tests. The end-to-end tests mock
+the backend inside the browser, so they need no WhatsApp or Google account; the
+screenshots they take are posted on the pull request.
+
+```bash
+cd server && npm test             # unit tests
+cd web && npm run build && npm run test:e2e   # end-to-end (Playwright)
+```
+
+Run `npx playwright install chromium` once before the first end-to-end run.
+
 ## Keeping the Fork in Sync
 
 This repository is a fork of [guyzyl/whatsapp-contact-sync](https://github.com/guyzyl/whatsapp-contact-sync).
