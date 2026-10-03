@@ -1,8 +1,8 @@
 import { mkdirSync } from "fs";
 import path from "path";
-import { Page, Request, WebSocketRoute, expect } from "@playwright/test";
+import { Page, Request, Route, WebSocketRoute, expect } from "@playwright/test";
 
-import { DesktopInfo, EventType, GoogleAccount, GoogleStats, RunRecord, SessionStatus, UpdateCheck } from "../../interfaces/api";
+import { CleanupActionSummary, CleanupScan, DesktopInfo, EventType, MergeRequest, GoogleAccount, GoogleStats, RunRecord, SessionStatus, UpdateCheck } from "../../interfaces/api";
 import { avatars } from "./avatars";
 
 /**
@@ -35,6 +35,13 @@ export class FakeBackend {
     rememberSignIns: true,
     history: { runs: 4, bytes: 3_355_443 },
   };
+  /** The last clean-up scan, and the one "Scan" returns. */
+  cleanupScan: CleanupScan | null = null;
+  nextScan?: CleanupScan;
+  cleanupActions: CleanupActionSummary[] = [];
+  mergeRequests: MergeRequest[] = [];
+  /** Error code the next merge fails with. */
+  mergeError?: string;
   /** Answer of "Check for updates". */
   updateCheck: Omit<UpdateCheck, "checkedAt"> = { status: "current" };
   /** Bodies posted to /api/desktop/* Settings actions, by route. */
@@ -112,6 +119,11 @@ export class FakeBackend {
         if (action[1] === "remember_sign_ins") this.desktopInfo.rememberSignIns = body.enabled;
         return route.fulfill({ json: { ok: true } });
       }
+      if (pathname.startsWith("/api/e2e-photos/")) {
+        const avatar = avatars[Number(pathname.split("/").pop()) % avatars.length];
+        return route.fulfill({ contentType: "image/jpeg", body: Buffer.from(avatar, "base64") });
+      }
+      if (pathname.startsWith("/api/cleanup")) return this.cleanup(route, pathname, request);
       if (pathname === "/api/check_purchase")
         return route.fulfill({ json: { purchased: this.status.purchased } });
       return route.fulfill({ json: {} });
@@ -123,6 +135,48 @@ export class FakeBackend {
         this.received.push(JSON.parse(message.toString()));
       });
     });
+  }
+
+  private cleanupSummary() {
+    const s = this.cleanupScan;
+    return {
+      scannedAt: s?.scannedAt,
+      totalContacts: s?.totalContacts,
+      duplicates: s?.duplicates.length ?? 0,
+      sharedNumbers: s?.sharedNumbers.length ?? 0,
+      missingCountryCode: s?.missingCountryCode.length ?? 0,
+    };
+  }
+
+  private cleanup(route: Route, pathname: string, request: Request) {
+    const body = request.method() === "POST" ? request.postDataJSON() ?? {} : {};
+    if (pathname === "/api/cleanup") return route.fulfill({ json: { scan: this.cleanupScan } });
+    if (pathname === "/api/cleanup/summary") return route.fulfill({ json: this.cleanupSummary() });
+    if (pathname === "/api/cleanup/scan") {
+      this.cleanupScan = this.nextScan ?? this.cleanupScan;
+      return route.fulfill({ json: this.cleanupScan });
+    }
+    if (pathname === "/api/cleanup/ignore") {
+      this.cleanupScan!.duplicates = this.cleanupScan!.duplicates.filter((g) => g.id !== body.groupId);
+      return route.fulfill({ json: this.cleanupSummary() });
+    }
+    if (pathname === "/api/cleanup/merge") {
+      this.mergeRequests.push(body);
+      if (this.mergeError) return route.fulfill({ status: 409, json: { error: this.mergeError } });
+      const group = this.cleanupScan!.duplicates.find((g) => g.id === body.groupId)!;
+      this.cleanupScan!.duplicates = this.cleanupScan!.duplicates.filter((g) => g !== group);
+      const id = `merge-${this.cleanupActions.length + 1}`;
+      this.cleanupActions.unshift({ id, kind: "merge", at: new Date().toISOString(), title: this.cleanupScan!.contacts[body.keepId].name ?? "", contacts: group.contactIds.length });
+      return route.fulfill({ json: { actionId: id, summary: this.cleanupSummary() } });
+    }
+    if (pathname === "/api/cleanup/actions") return route.fulfill({ json: this.cleanupActions });
+    const undo = /^\/api\/cleanup\/actions\/([^/]+)\/undo$/.exec(pathname);
+    if (undo) {
+      const action = this.cleanupActions.find((a) => a.id === decodeURIComponent(undo[1]));
+      if (action) action.undone = true;
+      return route.fulfill({ json: { ok: true } });
+    }
+    return route.fulfill({ status: 404, json: { error: "not_found" } });
   }
 
   /** Sends a server event to the page once its WebSocket is connected. */

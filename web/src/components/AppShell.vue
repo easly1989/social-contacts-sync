@@ -5,6 +5,7 @@ import { ArrowUpCircle, CircleCheck, HandHeart, History, LayoutDashboard, Refres
 
 import BrandLogo from "./BrandLogo.vue";
 import PreferencesMenu from "./PreferencesMenu.vue";
+import { cleanupSummary, loadCleanupSummary } from "../cleanupState";
 import { desktopInfo, loadDesktopInfo } from "../desktopInfo";
 import { isDesktop } from "../settings";
 
@@ -17,12 +18,13 @@ const update = computed(() => desktopInfo.value?.lastUpdate);
 
 onMounted(() => {
   if (isDesktop.value) void loadDesktopInfo();
+  void loadCleanupSummary();
 });
 
 const items = [
   { to: "/app", key: "dashboard", icon: LayoutDashboard, exact: true },
   { to: "/app/sync", key: "sync", icon: RefreshCw },
-  { to: "/app/cleanup", key: "cleanup", icon: Sparkles, soon: true },
+  { to: "/app/cleanup", key: "cleanup", icon: Sparkles },
   { to: "/app/history", key: "history", icon: History },
   { to: "/app/settings", key: "settings", icon: Settings },
 ];
@@ -39,21 +41,17 @@ const active = computed(() => (item: (typeof items)[number]) =>
         <span class="text-[15px] font-bold leading-tight">Social Contacts<br />Sync</span>
       </router-link>
       <nav class="flex flex-col gap-1" :aria-label="$t('app.navigation')">
-        <template v-for="item in items" :key="item.key">
-          <span v-if="item.soon" class="flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-base-content/40" :title="$t('setup.sources.soon')">
-            <component :is="item.icon" class="size-[18px]" /><span class="flex-1">{{ $t(`app.nav.${item.key}`) }}</span>
-            <span class="badge badge-ghost badge-xs">{{ $t("setup.sources.soon") }}</span>
-          </span>
-          <router-link
-            v-else
-            :to="item.to"
-            class="flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium"
-            :class="active(item) ? 'bg-primary/10 text-primary' : 'text-base-content/70 hover:bg-base-200'"
-            :aria-current="active(item) ? 'page' : undefined"
-          >
-            <component :is="item.icon" class="size-[18px]" />{{ $t(`app.nav.${item.key}`) }}
-          </router-link>
-        </template>
+        <router-link
+          v-for="item in items"
+          :key="item.key"
+          :to="item.to"
+          class="flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium"
+          :class="active(item) ? 'bg-primary/10 text-primary' : 'text-base-content/70 hover:bg-base-200'"
+          :aria-current="active(item) ? 'page' : undefined"
+        >
+          <component :is="item.icon" class="size-[18px]" /><span class="flex-1">{{ $t(`app.nav.${item.key}`) }}</span>
+          <span v-if="item.key === 'cleanup' && cleanupSummary?.duplicates" class="badge badge-secondary badge-sm" data-testid="cleanup-badge">{{ cleanupSummary.duplicates }}</span>
+        </router-link>
       </nav>
       <span class="flex-1"></span>
       <router-link to="/app/settings/about" class="flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-base-content/70 hover:bg-base-200">
@@ -82,9 +80,9 @@ const active = computed(() => (item: (typeof items)[number]) =>
       <main class="flex-1 px-4 pb-8 sm:px-8"><slot /></main>
     </div>
 
-    <nav class="fixed inset-x-0 bottom-0 z-10 grid grid-cols-4 border-t border-base-300 bg-base-100 text-[11px] font-medium lg:hidden" :aria-label="$t('app.navigation')">
+    <nav class="fixed inset-x-0 bottom-0 z-10 grid grid-cols-5 border-t border-base-300 bg-base-100 text-[11px] font-medium lg:hidden" :aria-label="$t('app.navigation')">
       <router-link
-        v-for="item in items.filter((i) => !i.soon)"
+        v-for="item in items"
         :key="item.key"
         :to="item.to"
         class="flex flex-col items-center gap-1 py-2.5"

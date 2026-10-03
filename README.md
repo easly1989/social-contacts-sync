@@ -150,6 +150,8 @@ The app stays signed in between launches, unless you turn off
 | `secret.key` | the key for `google-token.enc`, itself protected by the OS keychain (DPAPI, Keychain, libsecret/kwallet) |
 | `whatsapp/` | WhatsApp's linked-device session |
 | `history/` | past syncs with the photos they changed, for reports and undo (kept 90 days) |
+| `history/cleanup/` | backups of merged contacts (all their fields and photos), for undo (kept 90 days) |
+| `cleanup.json` | clean-up choices, such as groups marked *Not duplicates* |
 | `logs/` | server logs |
 
 **Settings** shows these folders and lets you sign out of Google, unlink

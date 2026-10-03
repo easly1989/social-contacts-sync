@@ -1,4 +1,4 @@
-import { DesktopInfo, GoogleAccount, GoogleStats, RunRecord, RunSummary, SessionStatus, UpdateCheck } from "../../interfaces/api";
+import { CleanupActionSummary, CleanupScan, CleanupSummary, DesktopInfo, GoogleAccount, MergeRequest, GoogleStats, RunRecord, RunSummary, SessionStatus, UpdateCheck } from "../../interfaces/api";
 
 // Small typed wrappers around the server API.
 
@@ -8,6 +8,13 @@ async function get<T>(url: string): Promise<T> {
   return response.json();
 }
 
+/** A failed request, with the server's error code when it sent one. */
+export class ApiError extends Error {
+  constructor(public status: number, public code?: string) {
+    super(`HTTP ${status}${code ? ` ${code}` : ""}`);
+  }
+}
+
 export async function post<T = unknown>(url: string, body: unknown = {}): Promise<T> {
   const response = await fetch(url, {
     method: "POST",
@@ -15,7 +22,7 @@ export async function post<T = unknown>(url: string, body: unknown = {}): Promis
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
   });
-  if (!response.ok) throw new Error(`${url}: HTTP ${response.status}`);
+  if (!response.ok) throw new ApiError(response.status, await response.json().then((b) => b?.error).catch(() => undefined));
   return response.json();
 }
 
@@ -35,6 +42,14 @@ export const api = {
   deleteAllData: () => post("/api/desktop/delete_all_data", { confirm: true }),
   googleSignOut: () => post("/api/desktop/google_sign_out"),
   whatsappUnlink: () => post("/api/desktop/whatsapp_unlink"),
+  // Clean up (issue #28).
+  cleanup: () => get<{ scan: CleanupScan | null }>("/api/cleanup"),
+  cleanupSummary: () => get<CleanupSummary>("/api/cleanup/summary"),
+  scan: (region?: string) => post<CleanupScan>("/api/cleanup/scan", { region }),
+  notDuplicates: (groupId: string) => post<CleanupSummary>("/api/cleanup/ignore", { groupId }),
+  merge: (request: MergeRequest) => post<{ actionId: string; summary: CleanupSummary }>("/api/cleanup/merge", request),
+  cleanupActions: () => get<CleanupActionSummary[]>("/api/cleanup/actions"),
+  undoCleanup: (id: string) => post(`/api/cleanup/actions/${encodeURIComponent(id)}/undo`),
   photoUrl: (runId: string, index: number, kind: "photo" | "previous") =>
     `/api/runs/${encodeURIComponent(runId)}/photos/${index}/${kind}`,
 };

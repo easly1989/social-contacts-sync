@@ -15,6 +15,7 @@ import expressWinston from "express-winston";
 import router from "./routes/api";
 import desktopRouter from "./routes/desktop";
 import runsRouter from "./routes/runs";
+import cleanupRouter from "./routes/cleanup";
 import { crossSiteGuard, desktopMode } from "./src/desktop";
 import { desktopSessionId, restoreDesktopSession } from "./src/desktopSession";
 import { initWhatsApp } from "./src/whatsapp";
@@ -101,6 +102,7 @@ if (desktopMode) {
 app.use(routePrefix, router);
 app.use(routePrefix, desktopRouter);
 app.use(routePrefix, runsRouter);
+app.use(routePrefix, cleanupRouter);
 
 // The production image puts Vite's built files in `server/public`. Serving
 // them from the same Express process keeps the API, WebSocket and browser on

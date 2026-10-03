@@ -1,20 +1,33 @@
 <script setup lang="ts">
 import { onMounted, ref } from "vue";
 import { useI18n } from "vue-i18n";
-import { RefreshCw } from "lucide-vue-next";
+import { GitMerge, RefreshCw } from "lucide-vue-next";
 
 import AppShell from "../../components/AppShell.vue";
 import SourceBadge from "../../components/SourceBadge.vue";
 import { api } from "../../api";
 import { dateTime, duration } from "../../format";
-import { RunSummary } from "../../../../interfaces/api";
+import { CleanupActionSummary, RunSummary } from "../../../../interfaces/api";
 
 // Mockup 5 in issue #8.
-const { locale } = useI18n();
+const { locale, t } = useI18n();
 const runs = ref<RunSummary[]>();
+const actions = ref<CleanupActionSummary[]>([]);
+const undoing = ref<string>();
+
+async function undo(action: CleanupActionSummary): Promise<void> {
+  if (!window.confirm(t("history.undoMergeConfirm", { name: action.title }))) return;
+  undoing.value = action.id;
+  try {
+    await api.undoCleanup(action.id);
+    action.undone = true;
+  } finally {
+    undoing.value = undefined;
+  }
+}
 
 onMounted(async () => {
-  runs.value = await api.runs().catch(() => []);
+  [runs.value, actions.value] = await Promise.all([api.runs().catch(() => []), api.cleanupActions().catch(() => [])]);
 });
 </script>
 
@@ -57,6 +70,33 @@ onMounted(async () => {
       </table>
       <p v-else-if="runs" class="py-12 text-center text-sm text-base-content/50">{{ $t("history.empty") }}</p>
       <div v-else class="grid place-items-center py-12"><span class="loading loading-spinner"></span></div>
+    </section>
+
+    <section v-if="actions.length" class="mt-6 overflow-x-auto rounded-box border border-base-300 bg-base-100" data-testid="cleanup-history">
+      <h2 class="px-4 pt-4 font-semibold">{{ $t("history.cleanup") }}</h2>
+      <table class="table">
+        <tbody>
+          <tr v-for="action in actions" :key="action.id" :class="{ 'opacity-60': action.undone }">
+            <td class="w-48 whitespace-nowrap text-base-content/70">{{ dateTime(action.at, locale) }}</td>
+            <td>
+              <div class="flex items-center gap-3">
+                <span class="grid size-8 place-items-center rounded-lg bg-base-200 text-secondary"><GitMerge class="size-4" /></span>
+                <div>
+                  <div class="font-medium">{{ $t("history.merge", { name: action.title }) }}</div>
+                  <div class="text-xs text-base-content/60">{{ $t("cleanup.contacts", { count: action.contacts }) }}</div>
+                </div>
+              </div>
+            </td>
+            <td>
+              <span v-if="action.undone" class="badge badge-ghost badge-sm">{{ $t("history.undone") }}</span>
+              <span v-else-if="action.incomplete" class="badge badge-warning badge-soft badge-sm">{{ $t("history.incomplete") }}</span>
+            </td>
+            <td class="text-right">
+              <button v-if="!action.undone" type="button" class="btn btn-ghost btn-xs" :disabled="undoing === action.id" @click="undo(action)">{{ $t("report.undo") }}</button>
+            </td>
+          </tr>
+        </tbody>
+      </table>
     </section>
   </AppShell>
 </template>

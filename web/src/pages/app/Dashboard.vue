@@ -6,6 +6,7 @@ import { ArrowRight, CircleAlert, ImagePlus, RefreshCw, Sparkles } from "lucide-
 import AppShell from "../../components/AppShell.vue";
 import SourceMark from "../../components/SourceMark.vue";
 import { api } from "../../api";
+import { cleanupSummary } from "../../cleanupState";
 import { duration, number, relativeTime } from "../../format";
 import { isDesktop } from "../../settings";
 import { GoogleAccount, GoogleStats, RunRecord, RunSummary, SessionStatus } from "../../../../interfaces/api";
@@ -94,13 +95,25 @@ onMounted(() => load());
         </div>
       </section>
 
-      <!-- Clean up (coming soon) -->
-      <section class="flex flex-col rounded-box border border-base-300 bg-base-100 p-6">
+      <!-- Clean up -->
+      <section class="flex flex-col rounded-box border border-base-300 bg-base-100 p-6" data-testid="cleanup-card">
         <div class="flex items-center gap-2">
           <Sparkles class="size-5 text-secondary" /><span class="flex-1 font-semibold">{{ $t("dashboard.cleanupTitle") }}</span>
-          <span class="badge badge-ghost badge-sm">{{ $t("setup.sources.soon") }}</span>
         </div>
-        <p class="mt-2 text-sm text-base-content/60">{{ $t("dashboard.cleanupText") }}</p>
+        <template v-if="cleanupSummary?.scannedAt">
+          <ul class="mt-3 space-y-2 text-sm">
+            <li v-for="key in ['duplicates', 'sharedNumbers', 'missingCountryCode'] as const" :key="key" class="flex items-center justify-between">
+              <span class="text-base-content/70">{{ $t(`dashboard.findings.${key}`) }}</span><b class="tabular-nums">{{ cleanupSummary[key] }}</b>
+            </li>
+          </ul>
+          <span class="flex-1"></span>
+          <router-link to="/app/cleanup" class="btn btn-sm mt-4 self-start">{{ $t("dashboard.review") }}<ArrowRight class="size-4" /></router-link>
+        </template>
+        <template v-else>
+          <p class="mt-2 text-sm text-base-content/60">{{ $t("dashboard.cleanupText") }}</p>
+          <span class="flex-1"></span>
+          <router-link to="/app/cleanup" class="btn btn-sm mt-4 self-start">{{ $t("dashboard.scan") }}<ArrowRight class="size-4" /></router-link>
+        </template>
       </section>
 
       <!-- Sources -->
