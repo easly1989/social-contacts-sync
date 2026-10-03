@@ -1,4 +1,4 @@
-import { GoogleAccount, GoogleStats, RunRecord, RunSummary, SessionStatus } from "../../interfaces/api";
+import { DesktopInfo, GoogleAccount, GoogleStats, RunRecord, RunSummary, SessionStatus, UpdateCheck } from "../../interfaces/api";
 
 // Small typed wrappers around the server API.
 
@@ -27,6 +27,14 @@ export const api = {
   run: (id: string) => get<RunRecord>(`/api/runs/${encodeURIComponent(id)}`),
   undo: (id: string, indexes?: number[]) => post(`/api/runs/${encodeURIComponent(id)}/undo`, indexes ? { indexes } : {}),
   stopSync: () => post("/api/sync/stop"),
+  // Desktop app only (Settings).
+  desktopInfo: () => get<DesktopInfo>("/api/desktop/info"),
+  openFolder: (target: "data" | "config") => post("/api/desktop/open", { target }),
+  checkUpdates: () => post<UpdateCheck>("/api/desktop/check_updates"),
+  setRememberSignIns: (enabled: boolean) => post("/api/desktop/remember_sign_ins", { enabled }),
+  deleteAllData: () => post("/api/desktop/delete_all_data", { confirm: true }),
+  googleSignOut: () => post("/api/desktop/google_sign_out"),
+  whatsappUnlink: () => post("/api/desktop/whatsapp_unlink"),
   photoUrl: (runId: string, index: number, kind: "photo" | "previous") =>
     `/api/runs/${encodeURIComponent(runId)}/photos/${index}/${kind}`,
 };

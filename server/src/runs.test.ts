@@ -5,7 +5,7 @@ import os from "os";
 import path from "path";
 
 import { RunRecord } from "../../interfaces/api";
-import { getRun, getRunPhoto, listRuns, saveRun, updateRun } from "./runs";
+import { getRun, getRunPhoto, historyUsage, listRuns, saveRun, updateRun } from "./runs";
 
 function result(id: string, startedAt: string) {
   const run: RunRecord = {
@@ -63,6 +63,21 @@ test("desktop: runs and their photos are files in history/, kept for 90 days", (
   updateRun(run);
   assert.equal(getRun("desktop", "run-new")!.results[0].undone, true);
   assert.equal("results" in listRuns("desktop")[0], false);
+});
+
+test("desktop: history usage counts the runs and their files", (t) => {
+  const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), "scs-usage-"));
+  withEnv({ SCS_DESKTOP: "1", SCS_DATA_DIR: dataDir }, t);
+  assert.deepEqual(historyUsage(), { runs: 0, bytes: 0 });
+
+  saveRun("desktop", result("run-1", new Date().toISOString()));
+  saveRun("desktop", result("run-2", new Date().toISOString()));
+  fs.mkdirSync(path.join(dataDir, "history", "not-a-run"));
+  const usage = historyUsage();
+  assert.equal(usage.runs, 2);
+  const runJson = fs.statSync(path.join(dataDir, "history", "run-1", "run.json")).size;
+  // run.json plus "new1", "new2" and "old2" (4 bytes each), per run.
+  assert.equal(usage.bytes, 2 * (runJson + 12));
 });
 
 test("run IDs can't escape the history folder", (t) => {

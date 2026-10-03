@@ -25,3 +25,14 @@ export function dateTime(iso: string, locale: string): string {
 export function number(value: number, locale: string): string {
   return new Intl.NumberFormat(locale).format(value);
 }
+
+export function bytes(value: number, locale: string): string {
+  const units = [
+    ["byte", 1],
+    ["kilobyte", 1024],
+    ["megabyte", 1024 ** 2],
+    ["gigabyte", 1024 ** 3],
+  ] as const;
+  const [unit, size] = [...units].reverse().find(([, s]) => value >= s) ?? units[0];
+  return new Intl.NumberFormat(locale, { style: "unit", unit, unitDisplay: "short", maximumFractionDigits: 1 }).format(value / size);
+}

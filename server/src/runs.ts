@@ -42,6 +42,19 @@ function pruneHistory(dir: string, now = Date.now()): void {
   }
 }
 
+/** Number and total size of the runs kept on disk (desktop app). */
+export function historyUsage(): { runs: number; bytes: number } {
+  const dir = historyDir();
+  if (!dir || !fs.existsSync(dir)) return { runs: 0, bytes: 0 };
+  const size = (target: string): number => {
+    const stat = fs.statSync(target);
+    if (!stat.isDirectory()) return stat.size;
+    return fs.readdirSync(target).reduce((total, entry) => total + size(path.join(target, entry)), 0);
+  };
+  const runs = fs.readdirSync(dir, { withFileTypes: true }).filter((e) => e.isDirectory() && fs.existsSync(path.join(dir, e.name, "run.json")));
+  return { runs: runs.length, bytes: runs.reduce((total, e) => total + size(path.join(dir, e.name)), 0) };
+}
+
 export function saveRun(sessionId: string, result: SyncRunResult): void {
   const dir = historyDir();
   if (!dir) {

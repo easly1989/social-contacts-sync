@@ -134,3 +134,87 @@ test("desktop mode keeps the Google sign-in across restarts", async (t) => {
     assert.equal(fs.existsSync(path.join(dataDir, "google-token.enc")), false);
   });
 });
+
+test("desktop mode: Settings talk to the desktop app", async (t) => {
+  const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), "scs-settings-"));
+  const key = crypto.randomBytes(32);
+  const tokenFile = path.join(dataDir, "google-token.enc");
+  fs.writeFileSync(tokenFile, encrypt({ refresh_token: "1//saved", access_token: "ya29.saved", expiry_date: Date.now() + 3600_000 }, key));
+
+  const { base, child } = await startDesktopServer({
+    SCS_DESKTOP_IPC: "1",
+    SCS_DATA_DIR: dataDir,
+    SCS_DATA_KEY: key.toString("base64"),
+    GOOGLE_CLIENT_ID: "1-abc.apps.googleusercontent.com",
+    GOOGLE_CLIENT_SECRET: "s",
+  });
+  t.after(() => child.kill());
+
+  // Plays the Electron main process.
+  const requests: { request: string; payload: Record<string, unknown> }[] = [];
+  child.on("message", (message: { type: string; id: number; request: string; payload: Record<string, unknown> }) => {
+    if (message.type !== "request") return;
+    requests.push({ request: message.request, payload: message.payload });
+    const value = message.request === "info" ? { version: "1.2.3", packageKind: "appimage", dataDir } : undefined;
+    child.send({ type: "reply", id: message.id, value });
+  });
+  const last = () => requests[requests.length - 1];
+  const post = (route: string, body: unknown) =>
+    fetch(`${base}/desktop/${route}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+
+  await t.test("info merges the app's details with this server's state", async () => {
+    const info = await (await fetch(`${base}/desktop/info`)).json();
+    assert.deepEqual(info, { version: "1.2.3", packageKind: "appimage", dataDir, rememberSignIns: true, history: { runs: 0, bytes: 0 } });
+  });
+
+  await t.test("turning Remember sign-ins off saves the choice and deletes the saved sign-in", async () => {
+    assert.deepEqual(await (await post("remember_sign_ins", { enabled: false })).json(), { ok: true, rememberSignIns: false });
+    assert.deepEqual(last(), { request: "save-config", payload: { values: { REMEMBER_SIGN_INS: "false" } } });
+    assert.equal(fs.existsSync(tokenFile), false);
+    // Still signed in until the app closes.
+    assert.equal(((await (await fetch(`${base}/status`)).json()) as { googleConnected: boolean }).googleConnected, true);
+  });
+
+  await t.test("turning it back on saves the current sign-in", async () => {
+    assert.deepEqual(await (await post("remember_sign_ins", { enabled: true })).json(), { ok: true, rememberSignIns: true });
+    assert.equal(fs.existsSync(tokenFile), true);
+    assert.equal((await post("remember_sign_ins", {})).status, 400);
+  });
+
+  await t.test("open only names the data folder or the settings file", async () => {
+    await post("open", { target: "/etc" });
+    assert.deepEqual(last(), { request: "open", payload: { target: "data" } });
+    await post("open", { target: "config" });
+    assert.deepEqual(last(), { request: "open", payload: { target: "config" } });
+  });
+
+  await t.test("deleting all data needs a confirmation, then signs out and asks the app", async () => {
+    assert.equal((await post("delete_all_data", {})).status, 400);
+    assert.deepEqual(await (await post("delete_all_data", { confirm: true })).json(), { ok: true });
+    assert.equal(last().request, "delete-data");
+    assert.equal(fs.existsSync(tokenFile), false);
+    assert.equal(((await (await fetch(`${base}/status`)).json()) as { googleConnected: boolean }).googleConnected, false);
+  });
+});
+
+test("desktop mode: with Remember sign-ins off nothing is restored", async (t) => {
+  const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), "scs-forget-"));
+  const key = crypto.randomBytes(32);
+  fs.writeFileSync(path.join(dataDir, "google-token.enc"), encrypt({ refresh_token: "1//saved" }, key));
+  fs.mkdirSync(path.join(dataDir, "whatsapp", "session"), { recursive: true });
+
+  const { base, child } = await startDesktopServer({
+    SCS_DATA_DIR: dataDir,
+    SCS_DATA_KEY: key.toString("base64"),
+    REMEMBER_SIGN_INS: "false",
+    GOOGLE_CLIENT_ID: "1-abc.apps.googleusercontent.com",
+    GOOGLE_CLIENT_SECRET: "s",
+  });
+  t.after(() => child.kill());
+
+  const status = (await (await fetch(`${base}/status`)).json()) as Record<string, unknown>;
+  assert.equal(status.googleConnected, false);
+  assert.equal(status.whatsappSaved, false);
+  assert.equal(fs.existsSync(path.join(dataDir, "google-token.enc")), false);
+  assert.equal(fs.existsSync(path.join(dataDir, "whatsapp")), false);
+});

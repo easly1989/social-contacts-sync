@@ -2,7 +2,7 @@ import { mkdirSync } from "fs";
 import path from "path";
 import { Page, Request, WebSocketRoute, expect } from "@playwright/test";
 
-import { EventType, GoogleAccount, GoogleStats, RunRecord, SessionStatus } from "../../interfaces/api";
+import { DesktopInfo, EventType, GoogleAccount, GoogleStats, RunRecord, SessionStatus, UpdateCheck } from "../../interfaces/api";
 import { avatars } from "./avatars";
 
 /**
@@ -24,6 +24,21 @@ export class FakeBackend {
   stats: GoogleStats = { totalContacts: 1248, withPhoto: 774, updatedAt: "2026-10-03T12:00:00.000Z" };
   runs: RunRecord[] = [];
   undoRequests: { id: string; body: unknown }[] = [];
+  desktopInfo: DesktopInfo = {
+    version: "1.0.0",
+    packageKind: "windows-portable",
+    dataDir: "D:\\Apps\\SocialContactsSync\\social-contacts-sync-data",
+    configFile: "D:\\Apps\\SocialContactsSync\\config.env",
+    portable: true,
+    updates: "notify",
+    lastUpdate: { status: "current", checkedAt: new Date(Date.now() - 5 * 60_000).toISOString() },
+    rememberSignIns: true,
+    history: { runs: 4, bytes: 3_355_443 },
+  };
+  /** Answer of "Check for updates". */
+  updateCheck: Omit<UpdateCheck, "checkedAt"> = { status: "current" };
+  /** Bodies posted to /api/desktop/* Settings actions, by route. */
+  desktopActions: { route: string; body: unknown }[] = [];
   /** When false, Google sign-in "opens in the system browser" and nothing happens here. */
   signInCompletes = true;
   received: { type: string; data: any }[] = [];
@@ -83,6 +98,18 @@ export class FakeBackend {
       }
       if (pathname === "/api/desktop/whatsapp_unlink") {
         Object.assign(this.status, { whatsappConnected: false, whatsappSaved: false, whatsappStarting: false });
+        return route.fulfill({ json: { ok: true } });
+      }
+      if (pathname === "/api/desktop/info") return route.fulfill({ json: this.desktopInfo });
+      const action = /^\/api\/desktop\/(open|check_updates|remember_sign_ins|delete_all_data)$/.exec(pathname);
+      if (action) {
+        const body = request.postDataJSON() ?? {};
+        this.desktopActions.push({ route: action[1], body });
+        if (action[1] === "check_updates") {
+          this.desktopInfo.lastUpdate = { ...this.updateCheck, checkedAt: new Date().toISOString() };
+          return route.fulfill({ json: this.desktopInfo.lastUpdate });
+        }
+        if (action[1] === "remember_sign_ins") this.desktopInfo.rememberSignIns = body.enabled;
         return route.fulfill({ json: { ok: true } });
       }
       if (pathname === "/api/check_purchase")

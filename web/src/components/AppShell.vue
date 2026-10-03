@@ -1,24 +1,30 @@
 <script setup lang="ts">
-import { computed } from "vue";
+import { computed, onMounted } from "vue";
 import { useRoute } from "vue-router";
-import { HandHeart, History, LayoutDashboard, RefreshCw, Settings, Sparkles } from "lucide-vue-next";
+import { ArrowUpCircle, CircleCheck, HandHeart, History, LayoutDashboard, RefreshCw, Settings, Sparkles } from "lucide-vue-next";
 
 import BrandLogo from "./BrandLogo.vue";
 import PreferencesMenu from "./PreferencesMenu.vue";
-import { repoUrl } from "../brand";
+import { desktopInfo, loadDesktopInfo } from "../desktopInfo";
+import { isDesktop } from "../settings";
 
 // The app frame from the mockups in issue #8: sidebar on wide windows,
 // bottom tabs on phones.
 defineProps<{ title: string; subtitle?: string }>();
 const route = useRoute();
-const version = import.meta.env.VITE_APP_VERSION as string | undefined;
+const version = computed(() => desktopInfo.value?.version ?? (import.meta.env.VITE_APP_VERSION as string | undefined));
+const update = computed(() => desktopInfo.value?.lastUpdate);
+
+onMounted(() => {
+  if (isDesktop.value) void loadDesktopInfo();
+});
 
 const items = [
   { to: "/app", key: "dashboard", icon: LayoutDashboard, exact: true },
   { to: "/app/sync", key: "sync", icon: RefreshCw },
   { to: "/app/cleanup", key: "cleanup", icon: Sparkles, soon: true },
   { to: "/app/history", key: "history", icon: History },
-  { to: "/app/settings", key: "settings", icon: Settings, soon: true },
+  { to: "/app/settings", key: "settings", icon: Settings },
 ];
 const active = computed(() => (item: (typeof items)[number]) =>
   item.exact ? route.path === item.to : route.path === item.to || route.path.startsWith(`${item.to}/`)
@@ -50,10 +56,16 @@ const active = computed(() => (item: (typeof items)[number]) =>
         </template>
       </nav>
       <span class="flex-1"></span>
-      <a class="flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-base-content/70 hover:bg-base-200" :href="`${repoUrl}#support`" target="_blank">
+      <router-link to="/app/settings/about" class="flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium text-base-content/70 hover:bg-base-200">
         <HandHeart class="size-[18px] text-secondary" />{{ $t("app.support") }}
-      </a>
-      <div v-if="version" class="mt-2 border-t border-base-300 px-3 pt-3 text-xs text-base-content/50">v{{ version }}</div>
+      </router-link>
+      <div v-if="version" class="mt-2 flex items-center gap-2 border-t border-base-300 px-3 pt-3 text-xs text-base-content/50" data-testid="app-version">
+        <span class="flex-1">v{{ version }}</span>
+        <router-link v-if="update?.status === 'available' || update?.status === 'ready'" to="/app/settings/updates" class="flex items-center gap-1 font-medium text-primary">
+          <ArrowUpCircle class="size-3.5" />{{ $t("settings.updates.newVersion", { version: update.version }) }}
+        </router-link>
+        <span v-else-if="update?.status === 'current'" class="flex items-center gap-1"><CircleCheck class="size-3.5 text-success" />{{ $t("settings.updates.upToDate") }}</span>
+      </div>
     </aside>
 
     <div class="flex min-w-0 flex-1 flex-col pb-16 lg:pb-0">
@@ -70,7 +82,7 @@ const active = computed(() => (item: (typeof items)[number]) =>
       <main class="flex-1 px-4 pb-8 sm:px-8"><slot /></main>
     </div>
 
-    <nav class="fixed inset-x-0 bottom-0 z-10 grid grid-cols-3 border-t border-base-300 bg-base-100 text-[11px] font-medium lg:hidden" :aria-label="$t('app.navigation')">
+    <nav class="fixed inset-x-0 bottom-0 z-10 grid grid-cols-4 border-t border-base-300 bg-base-100 text-[11px] font-medium lg:hidden" :aria-label="$t('app.navigation')">
       <router-link
         v-for="item in items.filter((i) => !i.soon)"
         :key="item.key"
