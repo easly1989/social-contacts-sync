@@ -1,55 +1,137 @@
 # Social Contacts Sync
 
 <p align="center">
-    <img src="web/public/logo.png" alt="logo" width="150"/>
+    <img src="web/public/logo.png" alt="Social Contacts Sync logo" width="120"/>
 </p>
 
 <p align="center">
-    <a href="https://www.buymeacoffee.com/guyzyl">
-        <img
-            src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png"
-            alt="Buy Me A Coffee"
-            width="220px"
-        />
-    </a>
+    <b>Give every contact a face.</b><br/>
+    Fill your Google Contacts with your contacts' profile photos from WhatsApp and Gravatar,
+    and tidy up duplicates on the way. Free, open source, and private: it runs on your computer.
+</p>
+
+<p align="center">
+    <a href="https://github.com/easly1989/social-contacts-sync/releases/latest"><img alt="Latest release" src="https://img.shields.io/github/v/release/easly1989/social-contacts-sync?include_prereleases&label=download"/></a>
+    <a href="https://github.com/easly1989/social-contacts-sync/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/easly1989/social-contacts-sync/actions/workflows/ci.yml/badge.svg"/></a>
+    <a href="LICENSE"><img alt="License: Apache 2.0 with Commons Clause" src="https://img.shields.io/badge/license-Apache%202.0%20%2B%20Commons%20Clause-blue"/></a>
 </p>
 
 > Social Contacts Sync is a fork of
 > [WhatsApp Contact Sync](https://github.com/guyzyl/whatsapp-contact-sync) by
-> Guy Zylberberg, extended towards more sources and a desktop app. All credit
-> for the original project goes to its author.
-
-A simple web app for syncing the profile pictures from WhatsApp to Google Contacts.\
-The app matches contacts based on their phone numbers, and utilizes
-[whatsapp-web.js](https://github.com/pedroslopez/whatsapp-web.js) and [Google People API](https://developers.google.com/people) to update the profile picture in Google Contacts.
-
-## Demo
+> **Guy Zylberberg**, extended with a desktop app, more photo sources and contact
+> clean-up. All credit for the original idea and project goes to its author:
+> [support him too](https://www.buymeacoffee.com/guyzyl).
 
 <p align="center">
-    <img src="https://user-images.githubusercontent.com/3015856/214192748-1681d9be-201a-4ffc-b8da-79857718b7eb.gif" width="600"/>
+    <img src="docs/images/dashboard.png" alt="Dashboard: photo coverage, sources, recent activity" width="820"/>
 </p>
 
-## Why Was This Developed?
+## Features
 
-Whenever someone used to call me or I looked them up in my contacts, they all apear as colorful circles with a single letter in it.\
-The annoying part is that every single person I know has a WhatsApp account which has a profile picture. They are both based on the same phone number but the picture is only available in one of them.\
-In order to fix this grievence I developed this app which allows anyone to sync their contacts photos from WhatsApp to Google Contacts.
+- **Photos from your sources.** WhatsApp (matched by phone number) and Gravatar
+  (matched by email), in the priority order you choose. Telegram is on its way.
+- **You stay in control.** Fill in only missing photos, replace them all, or
+  review each one with the keyboard.
+- **Nothing changes without a way back.** Every sync has a report and can be
+  undone, as a whole or one contact at a time.
+- **Clean up.** Find duplicate contacts and merge them field by field, find
+  numbers saved on different people, and add missing country codes. Every
+  change is backed up and can be undone from History.
+- **Desktop app for Windows, Linux and macOS.** Download and run, with no Docker or
+  server. A setup wizard walks you through connecting your own Google project,
+  and sign-ins are kept encrypted with your system's keychain.
+- **English and Italian; light, dark or system theme.**
 
-## How To Use
+| Sync photos | Report and undo |
+|---|---|
+| ![Sync setup](docs/images/sync-setup.png) | ![Sync report](docs/images/sync-report.png) |
+| **Clean up duplicates** | **Setup wizard** |
+| ![Clean up](docs/images/cleanup.png) | ![Google project setup](docs/images/setup-google.png) |
 
-The app is extremley easy to use (and self explantory):
+<p align="center">
+    <img src="docs/images/dashboard-dark.png" alt="Dark theme" width="560"/>
+    <img src="docs/images/dashboard-mobile.png" alt="On a phone" width="180"/>
+</p>
 
-1. Go to [whasync.com](https://whasync.com/)
-2. Press "Get Started"
-3. Scan the QR code with WhatsApp to authorize it
-4. Connect you Google account
-5. Choose you sync options
-6. That's it :)
+## Download
 
-The whole process is very simple and automated, so you don't need to worry about anything else.\
-Setting up should take less then a minute, and syncing should take about 1 second per photo (due to Google's API rate limitiations of 60 requests per user per minute)
+Get the latest version from the
+[releases page](https://github.com/easly1989/social-contacts-sync/releases/latest):
 
-## How to Run Locally
+| System | Package | Updates |
+|---|---|---|
+| Windows | `…-portable.exe` (no installation) or `…-setup.exe` | installer: automatic · portable: notification |
+| Linux | `.AppImage` (no installation) or `.deb` | AppImage: automatic · deb: notification |
+| macOS | universal `.dmg` | notification |
+
+The packages are not code-signed yet:
+
+- **Windows:** SmartScreen may warn on the first launch; choose *More info → Run anyway*.
+- **macOS:** right-click the app, choose *Open*, then *Open Anyway* in *System Settings → Privacy & Security*.
+- **Linux:** the app starts without Chromium's sandbox, because recent Ubuntu
+  releases block it for AppImages. That's acceptable here because the window only
+  shows the app's own local pages; everything else opens in your browser.
+
+## Getting Started
+
+1. **Start the app.** The portable `.exe` and the AppImage keep their settings
+   next to themselves; installed versions use your user folder.
+2. **Connect your own Google project.** Google requires every app that edits
+   contacts to have its own credentials. Creating yours is free and takes a few
+   minutes; the wizard links each page of the Google Cloud Console and checks
+   the result. See the [step-by-step guide](docs/google-setup.md).
+3. **Sign in to Google** in your browser.
+4. **Link WhatsApp** by scanning a QR code, like WhatsApp Web. Gravatar needs
+   no sign-in.
+5. **Sync photos** from the dashboard, and look at **Clean up** for duplicates.
+
+Google allows about 40 photo updates per minute, so a large address book takes a
+while; the app shows progress and an estimate.
+
+## Support the Project
+
+Social Contacts Sync is free. If it saved you an evening of copying photos,
+consider a small donation:
+
+<p>
+    <a href="https://buymeacoffee.com/easly1989"><img alt="Buy Me a Coffee" src="https://img.shields.io/badge/Buy%20me%20a%20coffee-FFDD00?logo=buymeacoffee&logoColor=black&style=for-the-badge"/></a>
+    <a href="https://paypal.me/carloruggiero"><img alt="PayPal" src="https://img.shields.io/badge/PayPal-003087?logo=paypal&logoColor=white&style=for-the-badge"/></a>
+    <a href="https://buy.stripe.com/8x26oAeqA7h6dPk80hfbq00"><img alt="Stripe" src="https://img.shields.io/badge/Stripe-635BFF?logo=stripe&logoColor=white&style=for-the-badge"/></a>
+    <a href="https://liberapay.com/amon2126/donate"><img alt="Liberapay" src="https://img.shields.io/badge/Liberapay-F6C915?logo=liberapay&logoColor=black&style=for-the-badge"/></a>
+    <a href="https://github.com/sponsors/easly1989"><img alt="GitHub Sponsors" src="https://img.shields.io/badge/GitHub%20Sponsors-EA4AAA?logo=githubsponsors&logoColor=white&style=for-the-badge"/></a>
+</p>
+
+And please support the author of the original project:
+
+<a href="https://www.buymeacoffee.com/guyzyl"><img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy Guy Zylberberg a coffee" width="180"/></a>
+
+## Credits
+
+- [**WhatsApp Contact Sync**](https://github.com/guyzyl/whatsapp-contact-sync)
+  by [Guy Zylberberg](https://github.com/guyzyl): the original project this app
+  grew from, and its hosted service at [whasync.com](https://whasync.com).
+- [whatsapp-web.js](https://github.com/pedroslopez/whatsapp-web.js),
+  [Google People API](https://developers.google.com/people),
+  [Gravatar](https://gravatar.com), [Electron](https://www.electronjs.org),
+  [Vue](https://vuejs.org), [daisyUI](https://daisyui.com) and
+  [Lucide](https://lucide.dev).
+- Social Contacts Sync is maintained by **Carlo Ruggiero** —
+  [easly1989.github.io](https://easly1989.github.io).
+
+Licensed under the original project's [licence](LICENSE): Apache 2.0 with the
+Commons Clause (free to use, not for sale). See the
+[privacy policy](web/src/pages/Privacy.vue) for what the app stores and where it
+connects.
+
+---
+
+## Self-Hosting the Web Version
+
+The same app also runs as a web server (Node.js or Docker), for example on a home
+server. In this mode Google credentials come from the environment and sessions are
+kept in memory.
+
+### Run Locally
 
 In order for the backend to function, it requires an OAuth 2.0 client ID and secret.\
 Since (for obvious reasons) this is a private app, you will need to create one for your own.\
@@ -85,40 +167,50 @@ The server build uses TypeScript 7. Both packages also install Microsoft's
 because `ts-node` and `vue-tsc` still require the JavaScript compiler API.
 The `@typescript/native` alias provides TypeScript 7's `tsc` executable.
 
-## Tests
+### Docker
 
-Every pull request runs the [CI workflow](.github/workflows/ci.yml): server
-build and unit tests, web type-check and build, a smoke test of the built
-server, a Docker build and browser end-to-end tests. The end-to-end tests mock
-the backend inside the browser, so they need no WhatsApp or Google account; the
-screenshots they take are posted on the pull request.
+There are 3 different `Dockerfile`s for this app:
+
+- [`Dockerfile`](Dockerfile) - This is an image containing both the backend and the web app
+- [`Dockerfile`](web/Dockerfile) - An image containing only the web app
+- [`Dockerfile`](server/Dockerfile) - An image containing only the backend
+
+In order to build and run the complete app, you need to run the following commands:
 
 ```bash
-cd server && npm test             # unit tests
-cd web && npm run build && npm run test:e2e   # end-to-end (Playwright)
+docker build -t social-contacts-sync .
+docker run --rm -it -p 80:10000 --env-file server/.env social-contacts-sync
 ```
 
-Run `npx playwright install chromium` once before the first end-to-end run.
+### Deploy on Render
 
-## Keeping the Fork in Sync
+The GitHub Actions workflow publishes the full application to GitHub Container
+Registry after every successful push to `main`. Make the resulting package
+public in GitHub's package settings, then configure a Render **Web Service**
+from the image:
 
-This repository is a fork of [guyzyl/whatsapp-contact-sync](https://github.com/guyzyl/whatsapp-contact-sync).
-The [`Upstream sync`](.github/workflows/upstream-sync.yml) workflow checks the
-original repository on the 1st of every month (or when started by hand from the
-Actions tab):
+- Image: `ghcr.io/easly1989/social-contacts-sync:latest`
+- Health check path: `/api/`
+- `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET`: your Google OAuth values
+- `SESSION_SECRET`: a long, random secret
+- `ENFORCE_PAYMENTS=false`
 
-- new upstream commits are merged into the `upstream-sync` branch and offered as
-  a pull request labelled `upstream-sync` — merge it with **Create a merge
-  commit**, never squash or rebase;
-- if the merge conflicts, an issue labelled `upstream-conflict` lists the files
-  and the commands to resolve it; it closes itself after the next clean sync.
+Render provides `PORT` automatically; do not override it. Add
+`https://whasync-latest.onrender.com/api/google_callback` as an authorized
+redirect URI in the Google Cloud OAuth client.
 
-The workflow needs a fine-grained personal access token stored as the
-`UPSTREAM_SYNC_TOKEN` repository secret, limited to this repository with
-read & write access to Contents, Pull requests, Issues and Workflows (pull
-requests opened with the default `GITHUB_TOKEN` would not run CI).
+This service runs the frontend, API and WebSocket in one container. A service
+that sleeps or is restarted ends an in-progress WhatsApp sync, so use an
+always-on host for long synchronizations.
 
-## Desktop App (preview)
+In order to build the seperate images for the backend and frontend, execute the following commands from the projects main directory:
+
+```bash
+docker build -t social-contacts-sync-backend --env-file server/.env -f server/Dockerfile .
+docker build -t social-contacts-sync-web -f web/Dockerfile .
+```
+
+## Desktop App Details
 
 The [`desktop/`](desktop) folder packages the server and the web app into an
 Electron app for Windows, Linux and macOS. It runs everything locally: the
@@ -160,25 +252,14 @@ removes `config.env` and the data folder, and restarts the app on the setup
 wizard. Your Google contacts are not touched. A portable folder copied to another computer can't
 decrypt the Google sign-in; you just sign in again.
 
-### Downloads and updates
+### Releases
 
 Every `v*` tag publishes a [GitHub Release](https://github.com/easly1989/social-contacts-sync/releases)
-built by the [release workflow](.github/workflows/release.yml), which also
-launches each package before publishing:
+built by the [release workflow](.github/workflows/release.yml), which launches each
+package before publishing it (tags with a `-`, like `v0.2.0-beta.1`, are
+pre-releases). See [Download](#download) for the packages and how they update.
 
-| System | Package | Updates |
-|---|---|---|
-| Windows | `…-portable.exe` (no installation) or `…-setup.exe` | installer: automatic · portable: notification |
-| Linux | `.AppImage` (no installation) or `.deb` | AppImage: automatic · deb: notification |
-| macOS | universal `.dmg` | notification |
-
-The packages are not code-signed yet:
-
-- **Windows:** SmartScreen may warn on the first launch; choose *More info → Run anyway*.
-- **macOS:** right-click the app, choose *Open*, then *Open Anyway* in *System Settings → Privacy & Security*.
-- **Linux:** the app starts without Chromium's sandbox, because recent Ubuntu releases block it for AppImages. That's acceptable here because the window only shows the app's own local pages; everything else opens in your browser.
-
-### Development
+### Desktop Development
 
 ```bash
 cd desktop
@@ -189,45 +270,37 @@ npm run pack    # unpacked build for this OS in desktop/dist
 npm run test:e2e  # launches the packaged app (Linux needs a display, e.g. xvfb-run)
 ```
 
-## Build Docker Images
+## Development
 
-There are 3 different `Dockerfile`s for this app:
+### Tests
 
-- [`Dockerfile`](Dockerfile) - This is an image containing both the backend and the web app
-- [`Dockerfile`](web/Dockerfile) - An image containing only the web app
-- [`Dockerfile`](server/Dockerfile) - An image containing only the backend
-
-In order to build and run the complete app, you need to run the following commands:
-
-```bash
-docker build -t social-contacts-sync .
-docker run --rm -it -p 80:10000 --env-file server/.env social-contacts-sync
-```
-
-## Deploy on Render
-
-The GitHub Actions workflow publishes the full application to GitHub Container
-Registry after every successful push to `main`. Make the resulting package
-public in GitHub's package settings, then configure a Render **Web Service**
-from the image:
-
-- Image: `ghcr.io/easly1989/social-contacts-sync:latest`
-- Health check path: `/api/`
-- `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET`: your Google OAuth values
-- `SESSION_SECRET`: a long, random secret
-- `ENFORCE_PAYMENTS=false`
-
-Render provides `PORT` automatically; do not override it. Add
-`https://whasync-latest.onrender.com/api/google_callback` as an authorized
-redirect URI in the Google Cloud OAuth client.
-
-This service runs the frontend, API and WebSocket in one container. A service
-that sleeps or is restarted ends an in-progress WhatsApp sync, so use an
-always-on host for long synchronizations.
-
-In order to build the seperate images for the backend and frontend, execute the following commands from the projects main directory:
+Every pull request runs the [CI workflow](.github/workflows/ci.yml): server
+build and unit tests, web type-check and build, a smoke test of the built
+server, a Docker build and browser end-to-end tests. The end-to-end tests mock
+the backend inside the browser, so they need no WhatsApp or Google account; the
+screenshots they take are posted on the pull request.
 
 ```bash
-docker build -t social-contacts-sync-backend --env-file server/.env -f server/Dockerfile .
-docker build -t social-contacts-sync-web -f web/Dockerfile .
+cd server && npm test             # unit tests
+cd web && npm run build && npm run test:e2e   # end-to-end (Playwright)
 ```
+
+Run `npx playwright install chromium` once before the first end-to-end run.
+
+### Keeping the Fork in Sync
+
+This repository is a fork of [guyzyl/whatsapp-contact-sync](https://github.com/guyzyl/whatsapp-contact-sync).
+The [`Upstream sync`](.github/workflows/upstream-sync.yml) workflow checks the
+original repository on the 1st of every month (or when started by hand from the
+Actions tab):
+
+- new upstream commits are merged into the `upstream-sync` branch and offered as
+  a pull request labelled `upstream-sync` — merge it with **Create a merge
+  commit**, never squash or rebase;
+- if the merge conflicts, an issue labelled `upstream-conflict` lists the files
+  and the commands to resolve it; it closes itself after the next clean sync.
+
+The workflow needs a fine-grained personal access token stored as the
+`UPSTREAM_SYNC_TOKEN` repository secret, limited to this repository with
+read & write access to Contents, Pull requests, Issues and Workflows (pull
+requests opened with the default `GITHUB_TOKEN` would not run CI).
