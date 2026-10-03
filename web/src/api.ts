@@ -1,4 +1,4 @@
-import { CleanupActionSummary, CleanupScan, CleanupSummary, DesktopInfo, GoogleAccount, MergeRequest, GoogleStats, RunRecord, RunSummary, SessionStatus, UpdateCheck } from "../../interfaces/api";
+import { CleanupActionSummary, CleanupScan, CleanupSummary, DesktopInfo, DuplicateGroup, GoogleAccount, MergeRequest, GoogleStats, RunRecord, RunSummary, SessionStatus, UpdateCheck } from "../../interfaces/api";
 
 // Small typed wrappers around the server API.
 
@@ -48,6 +48,11 @@ export const api = {
   scan: (region?: string) => post<CleanupScan>("/api/cleanup/scan", { region }),
   notDuplicates: (groupId: string) => post<CleanupSummary>("/api/cleanup/ignore", { groupId }),
   merge: (request: MergeRequest) => post<{ actionId: string; summary: CleanupSummary }>("/api/cleanup/merge", request),
+  keepNumber: (e164: string, contactId: string) => post<{ actionId: string; summary: CleanupSummary }>("/api/cleanup/keep_number", { e164, contactId }),
+  markShared: (e164: string, shared = true) => post<CleanupSummary>("/api/cleanup/mark_shared", { e164, shared }),
+  groupFromNumber: (e164: string) => post<{ group: DuplicateGroup; summary: CleanupSummary }>("/api/cleanup/group", { e164 }),
+  fixCountryCodes: (items: { contactId: string; value: string }[]) =>
+    post<{ actionId: string; fixed: number; summary: CleanupSummary }>("/api/cleanup/fix_country_codes", { items }),
   cleanupActions: () => get<CleanupActionSummary[]>("/api/cleanup/actions"),
   undoCleanup: (id: string) => post(`/api/cleanup/actions/${encodeURIComponent(id)}/undo`),
   photoUrl: (runId: string, index: number, kind: "photo" | "previous") =>

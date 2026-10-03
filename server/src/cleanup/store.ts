@@ -4,6 +4,7 @@ import path from "path";
 import { CleanupActionSummary, CleanupScan } from "../../../interfaces/api";
 import { getFromCache, setInCache } from "../cache";
 import { Base64 } from "../types";
+import { EditBackup } from "./edits";
 import { MergeBackup } from "./merge";
 
 /*
@@ -16,9 +17,9 @@ import { MergeBackup } from "./merge";
 const retentionDays = 90;
 const memoryActionsPerSession = 20;
 
-export interface CleanupAction extends CleanupActionSummary {
-  backup: MergeBackup;
-}
+export type CleanupAction =
+  | (CleanupActionSummary & { kind: "merge"; backup: MergeBackup })
+  | (CleanupActionSummary & { kind: "keepNumber" | "countryCodes"; backup: EditBackup });
 
 export interface CleanupPrefs {
   ignoredPairs: string[];
@@ -63,7 +64,8 @@ export function savePrefs(sessionId: string, prefs: CleanupPrefs): void {
   fs.renameSync(`${file}.tmp`, file);
 }
 
-function summary({ backup: _backup, ...rest }: CleanupAction): CleanupActionSummary {
+function summary(action: CleanupAction): CleanupActionSummary {
+  const { backup: _backup, ...rest } = action;
   return rest;
 }
 
@@ -77,11 +79,14 @@ export function saveAction(sessionId: string, action: CleanupAction): void {
   }
   const actionDir = path.join(dir, action.id);
   fs.mkdirSync(actionDir, { recursive: true });
-  action.backup.photos.forEach((photo, i) => {
-    const file = path.join(actionDir, `photo-${i}.jpg`);
-    if (photo && !fs.existsSync(file)) fs.writeFileSync(file, Buffer.from(photo, "base64"));
-  });
-  const stored = { ...action, backup: { ...action.backup, photos: action.backup.photos.map((p) => (p ? true : null)) } };
+  let stored: unknown = action;
+  if (action.kind === "merge") {
+    action.backup.photos.forEach((photo, i) => {
+      const file = path.join(actionDir, `photo-${i}.jpg`);
+      if (photo && !fs.existsSync(file)) fs.writeFileSync(file, Buffer.from(photo, "base64"));
+    });
+    stored = { ...action, backup: { ...action.backup, photos: action.backup.photos.map((p) => (p ? true : null)) } };
+  }
   fs.writeFileSync(path.join(actionDir, "action.json"), JSON.stringify(stored));
   prune(dir);
 }
@@ -92,6 +97,7 @@ export function getAction(sessionId: string, id: string): CleanupAction | undefi
   if (!/^[\w.-]+$/.test(id)) return undefined;
   try {
     const stored = JSON.parse(fs.readFileSync(path.join(dir, id, "action.json"), "utf8"));
+    if (stored.kind !== "merge") return stored;
     stored.backup.photos = stored.backup.photos.map((has: boolean | null, i: number): Base64 | null =>
       has ? fs.readFileSync(path.join(dir, id, `photo-${i}.jpg`)).toString("base64") : null
     );

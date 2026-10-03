@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { onMounted, ref } from "vue";
 import { useI18n } from "vue-i18n";
-import { GitMerge, RefreshCw } from "lucide-vue-next";
+import { Globe, GitMerge, Phone, RefreshCw } from "lucide-vue-next";
 
 import AppShell from "../../components/AppShell.vue";
 import SourceBadge from "../../components/SourceBadge.vue";
@@ -16,7 +16,8 @@ const actions = ref<CleanupActionSummary[]>([]);
 const undoing = ref<string>();
 
 async function undo(action: CleanupActionSummary): Promise<void> {
-  if (!window.confirm(t("history.undoMergeConfirm", { name: action.title }))) return;
+  const question = action.kind === "merge" ? t("history.undoMergeConfirm", { name: action.title }) : t("history.undoNumbersConfirm");
+  if (!window.confirm(question)) return;
   undoing.value = action.id;
   try {
     await api.undoCleanup(action.id);
@@ -80,9 +81,15 @@ onMounted(async () => {
             <td class="w-48 whitespace-nowrap text-base-content/70">{{ dateTime(action.at, locale) }}</td>
             <td>
               <div class="flex items-center gap-3">
-                <span class="grid size-8 place-items-center rounded-lg bg-base-200 text-secondary"><GitMerge class="size-4" /></span>
+                <span class="grid size-8 place-items-center rounded-lg bg-base-200 text-secondary">
+                  <GitMerge v-if="action.kind === 'merge'" class="size-4" /><Phone v-else-if="action.kind === 'keepNumber'" class="size-4" /><Globe v-else class="size-4" />
+                </span>
                 <div>
-                  <div class="font-medium">{{ $t("history.merge", { name: action.title }) }}</div>
+                  <div class="font-medium">
+                    <template v-if="action.kind === 'merge'">{{ $t("history.merge", { name: action.title }) }}</template>
+                    <template v-else-if="action.kind === 'keepNumber'">{{ $t("history.keepNumber", { number: action.number, name: action.title }) }}</template>
+                    <template v-else>{{ $t("history.countryCodes", Number(action.title)) }}</template>
+                  </div>
                   <div class="text-xs text-base-content/60">{{ $t("cleanup.contacts", { count: action.contacts }) }}</div>
                 </div>
               </div>

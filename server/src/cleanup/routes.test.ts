@@ -115,3 +115,51 @@ test("desktop: choices and merge backups are files in the data folder", async (t
   const restored = [...google.people.values()].find((p) => p.names?.[0].displayName === "Marco R.")!;
   assert.equal(google.photos.get(restored.resourceName!), "QkJC");
 });
+
+test("shared numbers: keep on one, mark as shared, merge; country codes; undo", async (t) => {
+  withEnv({ SCS_DESKTOP: undefined }, t);
+  const { google, call } = await start(t, "web-numbers");
+  google.people.set("people/l", { resourceName: "people/l", etag: "e0", metadata: meta("2025-01-01T10:00:00Z"), names: [{ displayName: "Luca" }], phoneNumbers: [{ value: "+39 328 309 7537" }] });
+  google.people.set("people/r", { resourceName: "people/r", etag: "e0", metadata: meta("2026-01-01T10:00:00Z"), names: [{ displayName: "Luca Romano" }], phoneNumbers: [{ value: "+39 328 309 7537" }, { value: "06 1234 5678" }] });
+  google.people.set("people/s", { resourceName: "people/s", etag: "e0", metadata: meta("2025-01-01T10:00:00Z"), names: [{ displayName: "Studio" }], phoneNumbers: [{ value: "+39 02 8899 1100" }] });
+  google.people.set("people/p", { resourceName: "people/p", etag: "e0", metadata: meta("2025-01-01T10:00:00Z"), names: [{ displayName: "Paolo Bianchi" }], phoneNumbers: [{ value: "+39 02 8899 1100" }] });
+
+  let scan = (await call("POST", "/cleanup/scan", { region: "IT" })).json;
+  assert.deepEqual(scan.sharedNumbers.map((s: { e164: string }) => s.e164), ["+390288991100", "+393283097537", "+393402216527"]);
+
+  // Keep Mamma's number on Mamma only.
+  const kept = await call("POST", "/cleanup/keep_number", { e164: "+393402216527", contactId: "people/m" });
+  assert.equal(kept.status, 200);
+  assert.deepEqual((await google.get("people/e")).phoneNumbers, []);
+  assert.equal(kept.json.summary.sharedNumbers, 2);
+
+  // The studio landline is shared by design.
+  assert.equal((await call("POST", "/cleanup/mark_shared", { e164: "+390288991100" })).json.sharedNumbers, 1);
+  scan = (await call("POST", "/cleanup/scan", { region: "IT" })).json;
+  assert.deepEqual(scan.markedShared, ["+390288991100"]);
+  assert.deepEqual(scan.sharedNumbers.map((s: { e164: string }) => s.e164), ["+393283097537"]);
+  assert.equal((await call("POST", "/cleanup/mark_shared", { e164: "not a number" })).status, 400);
+
+  // Luca and Luca Romano are the same person: they become a duplicate group.
+  const grouped = await call("POST", "/cleanup/group", { e164: "+393283097537" });
+  assert.deepEqual(grouped.json.group.contactIds, ["people/r", "people/l"]);
+  assert.equal((await call("GET", "/cleanup")).json.scan.duplicates[0].id, grouped.json.group.id);
+
+  // Country codes: only the chosen numbers change.
+  const missing = (await call("GET", "/cleanup")).json.scan.missingCountryCode;
+  assert.deepEqual(missing.map((m: { contactId: string; value: string }) => [m.contactId, m.value]), [["people/b", "333 8125517"], ["people/r", "06 1234 5678"]]);
+  const fixed = await call("POST", "/cleanup/fix_country_codes", { items: [{ contactId: "people/r", value: "06 1234 5678" }] });
+  assert.equal(fixed.json.fixed, 1);
+  assert.deepEqual((await google.get("people/r")).phoneNumbers!.map((p) => p.value), ["+39 328 309 7537", "+39 06 1234 5678"]);
+  assert.equal((await call("GET", "/cleanup")).json.scan.missingCountryCode.length, 1);
+  assert.equal((await call("POST", "/cleanup/fix_country_codes", { items: [{ contactId: "people/x", value: "1" }] })).status, 400);
+
+  const actions = (await call("GET", "/cleanup/actions")).json;
+  assert.deepEqual(actions.map((a: { kind: string; title: string; number?: string }) => [a.kind, a.title, a.number]), [
+    ["countryCodes", "1", undefined],
+    ["keepNumber", "Mamma", "+393402216527"],
+  ]);
+  for (const action of actions) assert.equal((await call("POST", `/cleanup/actions/${action.id}/undo`, {})).status, 200);
+  assert.deepEqual((await google.get("people/r")).phoneNumbers!.map((p) => p.value), ["+39 328 309 7537", "06 1234 5678"]);
+  assert.deepEqual((await google.get("people/e")).phoneNumbers!.map((p) => p.value), ["+39 340 221 6527"]);
+});

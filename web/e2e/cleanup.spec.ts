@@ -23,7 +23,7 @@ test("first scan, then the duplicates and the merge table", async ({ page }) => 
   await expect(page.getByText("Scanned 1,248 contacts 2 minutes ago.")).toBeVisible();
   await expect(page.getByRole("tab", { name: /Duplicates\s*6/ })).toHaveAttribute("aria-selected", "true");
   await expect(page.getByRole("tab", { name: /Shared numbers\s*3/ })).toBeVisible();
-  await expect(page.getByRole("tab", { name: /Missing country code\s*3/ })).toBeVisible();
+  await expect(page.getByRole("tab", { name: /Missing country code\s*4/ })).toBeVisible();
   await expect(page.getByTestId("cleanup-badge")).toHaveText("6");
 
   const panel = page.getByTestId("merge-panel");
@@ -85,33 +85,82 @@ test("not duplicates, skip, and a contact that changed since the scan", async ({
   await expect(panel.getByRole("alert")).toHaveText("One of these contacts changed since the scan. Scan again before merging.");
 });
 
-test("shared numbers and missing country codes are listed", async ({ page }) => {
+test("shared numbers: keep on one, merge, mark as shared and unmark", async ({ page }) => {
   backend.cleanupScan = sampleScan();
   await page.goto("/app/cleanup");
   await page.getByRole("tab", { name: /Shared numbers/ }).click();
-  await expect(page.getByText("+39 02 8899 1100", { exact: true })).toBeVisible();
-  await expect(page.getByText("Studio Bianchi")).toBeVisible();
+  const mamma = page.getByTestId("shared-+393402216527");
+  await expect(mamma).toContainText("+39 340 221 6527");
+  await expect(page.getByTestId("shared-+390288991100")).toContainText("Looks like a shared landline");
+  await mamma.getByRole("radio", { name: "Maria Esposito" }).click();
   await screenshot(page, "41-cleanup-shared");
 
+  await mamma.getByRole("button", { name: "Keep on selected" }).click();
+  await expect(page.getByRole("status").filter({ hasText: "The number is now only on Maria Esposito." })).toBeVisible();
+  await expect(mamma).toHaveCount(0);
+
+  await page.getByTestId("shared-+390288991100").getByRole("button", { name: "Mark as shared" }).click();
+  await expect(page.getByTestId("marked-shared")).toContainText("+390288991100");
+
+  await page.getByTestId("shared-+393283097537").getByRole("button", { name: "Merge" }).click();
+  await expect(page.getByRole("tab", { name: /Duplicates\s*7/ })).toHaveAttribute("aria-selected", "true");
+  await expect(page.getByTestId("merge-panel")).toContainText("Luca");
+
+  await page.getByRole("tab", { name: /Shared numbers/ }).click();
+  await page.getByTestId("marked-shared").getByRole("button", { name: "Unmark" }).click();
+  await expect(page.getByTestId("marked-shared")).toHaveCount(0);
+
+  expect(backend.cleanupRequests).toEqual([
+    { route: "keep_number", body: { e164: "+393402216527", contactId: "people/m2" } },
+    { route: "mark_shared", body: { e164: "+390288991100", shared: true } },
+    { route: "group", body: { e164: "+393283097537" } },
+    { route: "mark_shared", body: { e164: "+390288991100", shared: false } },
+  ]);
+});
+
+test("missing country codes: fix the selected numbers", async ({ page }) => {
+  backend.cleanupScan = sampleScan();
+  await page.goto("/app/cleanup");
   await page.getByRole("tab", { name: /Missing country code/ }).click();
+  await expect(page.getByText("Country used: Italy")).toBeVisible();
   const row = page.getByRole("row", { name: /Francesco Greco/ });
-  await expect(row).toContainText("333 1234567");
-  await expect(row).toContainText("+393331234567");
+  await expect(row).toContainText("+39 333 123 4567");
+  await expect(page.getByRole("row", { name: /Not a valid number/ }).getByRole("checkbox")).toBeDisabled();
+  await expect(page.getByRole("button", { name: "Add country code to 3 numbers" })).toBeEnabled();
+  await row.getByRole("checkbox").uncheck();
+  await screenshot(page, "42-cleanup-country-codes");
+
+  await page.getByRole("button", { name: "Add country code to 2 numbers" }).click();
+  await expect(page.getByText("Added the country code to 2 numbers.")).toBeVisible();
+  expect(backend.cleanupRequests).toEqual([
+    { route: "fix_country_codes", body: { items: [{ contactId: "people/d2", value: "347 100 2000" }, { contactId: "people/n2", value: "02 1234 5678" }] } },
+  ]);
+  await expect(page.getByRole("row", { name: /Elena Conti/ })).toHaveCount(0);
+  // Francesco stays unselected until chosen again.
+  await expect(page.getByRole("button", { name: "Nothing selected" })).toBeDisabled();
+  await page.getByRole("checkbox", { name: "Select all" }).check();
+  await expect(page.getByRole("button", { name: "Add country code to 1 number" })).toBeEnabled();
 });
 
 test("dashboard and history after a merge", async ({ page }) => {
   backend.cleanupScan = sampleScan();
-  backend.cleanupActions = [{ id: "merge-1", kind: "merge", at: "2026-10-03T12:00:00.000Z", title: "Elena Conti", contacts: 2 }];
+  backend.cleanupActions = [
+    { id: "numbers-2", kind: "countryCodes", at: "2026-10-03T12:10:00.000Z", title: "3", contacts: 3 },
+    { id: "number-1", kind: "keepNumber", at: "2026-10-03T12:05:00.000Z", title: "Maria Esposito", number: "+393402216527", contacts: 1 },
+    { id: "merge-1", kind: "merge", at: "2026-10-03T12:00:00.000Z", title: "Elena Conti", contacts: 2 },
+  ];
   await page.goto("/app");
   const card = page.getByTestId("cleanup-card");
   await expect(card.getByRole("listitem").filter({ hasText: "Duplicates" })).toContainText("6");
-  await expect(card.getByRole("listitem").filter({ hasText: "Missing country code" })).toContainText("3");
+  await expect(card.getByRole("listitem").filter({ hasText: "Missing country code" })).toContainText("4");
 
   await page.goto("/app/history");
   const history = page.getByTestId("cleanup-history");
+  await expect(history).toContainText("Added country codes to 3 numbers");
+  await expect(history).toContainText("Kept +393402216527 on Maria Esposito");
   await expect(history).toContainText("Merged Elena Conti");
   page.once("dialog", (dialog) => dialog.accept());
-  await history.getByRole("button", { name: "Undo" }).click();
-  await expect(history.getByText("Undone")).toBeVisible();
-  expect(backend.cleanupActions[0].undone).toBe(true);
+  await history.getByRole("row", { name: /Merged Elena Conti/ }).getByRole("button", { name: "Undo" }).click();
+  await expect(history.getByRole("row", { name: /Merged Elena Conti/ }).getByText("Undone")).toBeVisible();
+  expect(backend.cleanupActions[2].undone).toBe(true);
 });

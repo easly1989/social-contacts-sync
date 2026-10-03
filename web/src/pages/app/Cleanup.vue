@@ -6,13 +6,13 @@ import { ChevronRight, CircleCheck, Copy, Globe, Phone, RefreshCw, Sparkles, Tri
 import AppShell from "../../components/AppShell.vue";
 import ContactAvatar from "../../components/ContactAvatar.vue";
 import MergePanel from "../../components/cleanup/MergePanel.vue";
+import SharedNumberCard from "../../components/cleanup/SharedNumberCard.vue";
 import { api } from "../../api";
 import { browserRegion, cleanupSummary } from "../../cleanupState";
 import { number, relativeTime } from "../../format";
-import { CleanupScan, DuplicateGroup } from "../../../../interfaces/api";
+import { CleanupScan, DuplicateGroup, MissingCountryCode } from "../../../../interfaces/api";
 
-// Mockup 4 in issue #8. Shared numbers and country codes are listed here;
-// fixing them comes with issue 2/2.
+// Mockup 4 in issue #8 (issues #28 and #30).
 type Tab = "duplicates" | "shared" | "missing";
 const { locale, t } = useI18n();
 const scan = ref<CleanupScan | null>();
@@ -20,7 +20,10 @@ const scanning = ref(false);
 const scanError = ref(false);
 const tab = ref<Tab>("duplicates");
 const selectedId = ref<string>();
-const merged = ref<{ name: string; actionId: string; undone?: boolean; undoing?: boolean }>();
+/** The last change, with undo: a merge, a kept number or fixed country codes. */
+const done = ref<{ message: string; undoneMessage: string; actionId: string; undone?: boolean; undoing?: boolean }>();
+const busy = ref(false);
+const actionError = ref<string>();
 
 const selected = computed(() => scan.value?.duplicates.find((g) => g.id === selectedId.value) ?? scan.value?.duplicates[0]);
 const tabs = computed(() => [
@@ -42,7 +45,7 @@ async function runScan(): Promise<void> {
   try {
     scan.value = await api.scan(browserRegion());
     selectedId.value = undefined;
-    merged.value = undefined;
+    done.value = undefined;
     syncSummary();
   } catch {
     scanError.value = true;
@@ -55,12 +58,6 @@ function reasonText(group: DuplicateGroup): string {
   return t("cleanup.same", { what: new Intl.ListFormat(locale.value, { type: "conjunction" }).format(what) });
 }
 
-/** The number as one of the contacts saved it with a country code, else E.164. */
-function displayNumber(e164: string, contactIds: string[]): string {
-  const saved = contactIds.flatMap((id) => scan.value?.contacts[id]?.phones ?? []).filter((p) => p.e164 === e164);
-  return saved.find((p) => p.value.trim().startsWith("+"))?.value ?? e164;
-}
-
 function removeSelected(): void {
   const list = scan.value!.duplicates;
   const index = list.findIndex((g) => g.id === selected.value?.id);
@@ -70,10 +67,87 @@ function removeSelected(): void {
 }
 
 function onMerged(actionId: string): void {
-  const kept = scan.value!.contacts[selected.value!.contactIds[0]];
-  merged.value = { name: kept?.name ?? t("cleanup.noName"), actionId };
+  const name = scan.value!.contacts[selected.value!.contactIds[0]]?.name ?? t("cleanup.noName");
+  done.value = { message: t("cleanup.merged", { name }), undoneMessage: t("cleanup.undone", { name }), actionId };
   removeSelected();
 }
+
+/** Runs a change, then removes what it fixed from the page. */
+async function act(run: () => Promise<void>): Promise<void> {
+  busy.value = true;
+  actionError.value = undefined;
+  try {
+    await run();
+  } catch {
+    actionError.value = t("cleanup.actionError");
+  }
+  busy.value = false;
+  syncSummary();
+}
+
+function nameOf(id: string): string {
+  return scan.value!.contacts[id]?.name ?? t("cleanup.noName");
+}
+
+const keepNumber = (e164: string, contactId: string) =>
+  act(async () => {
+    const { actionId } = await api.keepNumber(e164, contactId);
+    scan.value!.sharedNumbers = scan.value!.sharedNumbers.filter((s) => s.e164 !== e164);
+    done.value = { message: t("cleanup.keptNumber", { name: nameOf(contactId) }), undoneMessage: t("cleanup.undoneChange"), actionId };
+  });
+
+const markShared = (e164: string, shared = true) =>
+  act(async () => {
+    await api.markShared(e164, shared);
+    const marked = new Set(scan.value!.markedShared ?? []);
+    if (shared) marked.add(e164);
+    else marked.delete(e164);
+    scan.value!.markedShared = [...marked];
+    if (shared) scan.value!.sharedNumbers = scan.value!.sharedNumbers.filter((s) => s.e164 !== e164);
+  });
+
+const mergeNumber = (e164: string) =>
+  act(async () => {
+    const { group } = await api.groupFromNumber(e164);
+    scan.value!.sharedNumbers = scan.value!.sharedNumbers.filter((s) => s.e164 !== e164);
+    scan.value!.duplicates = [group, ...scan.value!.duplicates.filter((g) => g.id !== group.id)];
+    selectedId.value = group.id;
+    tab.value = "duplicates";
+  });
+
+// Missing country codes: every fixable number is selected to start with.
+const fixKey = (m: MissingCountryCode) => `${m.contactId}\n${m.value}`;
+const unselected = ref(new Set<string>());
+const fixable = computed(() => scan.value?.missingCountryCode.filter((m) => m.suggestion) ?? []);
+const toFix = computed(() => fixable.value.filter((m) => !unselected.value.has(fixKey(m))));
+const regionName = computed(() => {
+  const region = scan.value?.region;
+  try {
+    return region ? new Intl.DisplayNames([locale.value], { type: "region" }).of(region) : undefined;
+  } catch {
+    return region;
+  }
+});
+
+function setFix(m: MissingCountryCode, on: boolean): void {
+  const next = new Set(unselected.value);
+  if (on) next.delete(fixKey(m));
+  else next.add(fixKey(m));
+  unselected.value = next;
+}
+
+function setAll(on: boolean): void {
+  unselected.value = on ? new Set() : new Set(fixable.value.map(fixKey));
+}
+
+const fixCountryCodes = () =>
+  act(async () => {
+    const items = toFix.value.map(({ contactId, value }) => ({ contactId, value }));
+    const { actionId, fixed } = await api.fixCountryCodes(items);
+    const keys = new Set(items.map((i) => `${i.contactId}\n${i.value}`));
+    scan.value!.missingCountryCode = scan.value!.missingCountryCode.filter((m) => !keys.has(fixKey(m)));
+    done.value = { message: t("cleanup.fixed", fixed), undoneMessage: t("cleanup.undoneChange"), actionId };
+  });
 
 async function notDuplicates(): Promise<void> {
   await api.notDuplicates(selected.value!.id).catch(() => undefined);
@@ -86,8 +160,8 @@ function skip(): void {
   selectedId.value = list[(index + 1) % list.length]?.id;
 }
 
-async function undoMerge(): Promise<void> {
-  const m = merged.value!;
+async function undoDone(): Promise<void> {
+  const m = done.value!;
   m.undoing = true;
   try {
     await api.undoCleanup(m.actionId);
@@ -127,12 +201,13 @@ onMounted(async () => {
 
     <template v-else>
       <div v-if="scanError" class="alert alert-error mb-4 text-sm" role="alert">{{ $t("cleanup.scanError") }}</div>
-      <div v-if="merged" class="alert mb-4 text-sm" :class="merged.undone ? '' : 'alert-success alert-soft'" role="status">
+      <div v-if="done" class="alert mb-4 text-sm" :class="done.undone ? '' : 'alert-success alert-soft'" role="status">
         <CircleCheck class="size-4" />
-        <span class="flex-1">{{ merged.undone ? $t("cleanup.undone", { name: merged.name }) : $t("cleanup.merged", { name: merged.name }) }}</span>
-        <button v-if="!merged.undone" type="button" class="btn btn-ghost btn-xs" :disabled="merged.undoing" @click="undoMerge">{{ $t("report.undo") }}</button>
+        <span class="flex-1">{{ done.undone ? done.undoneMessage : done.message }}</span>
+        <button v-if="!done.undone" type="button" class="btn btn-ghost btn-xs" :disabled="done.undoing" @click="undoDone">{{ $t("report.undo") }}</button>
       </div>
-      <div v-if="scan.stale && !merged?.undone" class="alert alert-warning alert-soft mb-4 text-sm" role="status">
+      <div v-if="actionError" class="alert alert-error alert-soft mb-4 text-sm" role="alert">{{ actionError }}</div>
+      <div v-if="scan.stale && !done?.undone" class="alert alert-warning alert-soft mb-4 text-sm" role="status">
         <TriangleAlert class="size-4" /><span class="flex-1">{{ $t("cleanup.stale") }}</span>
         <button type="button" class="btn btn-ghost btn-xs" :disabled="scanning" @click="runScan">{{ $t("cleanup.scanAgain") }}</button>
       </div>
@@ -183,39 +258,71 @@ onMounted(async () => {
 
       <!-- Shared numbers -->
       <div v-else-if="tab === 'shared'" class="mt-5 space-y-3">
-        <p class="text-sm text-base-content/70">{{ $t("cleanup.sharedLead") }} <span class="badge badge-ghost badge-sm">{{ $t("setup.sources.soon") }}</span></p>
-        <section v-for="item in scan.sharedNumbers" :key="item.e164" class="flex flex-wrap items-center gap-4 rounded-box border border-base-300 bg-base-100 p-5">
-          <div class="w-48">
-            <div class="font-semibold tabular-nums">{{ displayNumber(item.e164, item.contactIds) }}</div>
-            <div class="text-xs text-base-content/60">{{ $t("cleanup.contacts", { count: item.contactIds.length }) }}</div>
-          </div>
-          <div class="flex flex-1 flex-wrap gap-2">
-            <span v-for="id in item.contactIds" :key="id" class="flex items-center gap-2 rounded-full border border-base-300 py-1 pl-1 pr-3 text-sm">
-              <ContactAvatar :name="scan.contacts[id]?.name" :photo-url="scan.contacts[id]?.photoUrl" size="size-7" />{{ scan.contacts[id]?.name ?? $t("cleanup.noName") }}
-            </span>
-          </div>
-        </section>
+        <p class="text-sm text-base-content/70">{{ $t("cleanup.sharedLead") }}</p>
+        <SharedNumberCard
+          v-for="item in scan.sharedNumbers"
+          :key="item.e164"
+          :item="item"
+          :contacts="scan.contacts"
+          :busy="busy"
+          @keep="(id) => keepNumber(item.e164, id)"
+          @merge="mergeNumber(item.e164)"
+          @mark-shared="markShared(item.e164)"
+        />
         <p v-if="!scan.sharedNumbers.length" class="rounded-box border border-base-300 bg-base-100 py-12 text-center text-sm text-base-content/60">{{ $t("cleanup.noShared") }}</p>
+        <div v-if="scan.markedShared?.length" class="rounded-box border border-base-300 bg-base-100 p-5" data-testid="marked-shared">
+          <h2 class="text-sm font-semibold">{{ $t("cleanup.markedTitle") }}</h2>
+          <p class="mt-0.5 text-xs text-base-content/60">{{ $t("cleanup.markedHint") }}</p>
+          <ul class="mt-3 flex flex-wrap gap-2">
+            <li v-for="number in scan.markedShared" :key="number" class="flex items-center gap-2 rounded-full border border-base-300 py-1 pl-3 pr-1 text-sm tabular-nums">
+              {{ number }}<button type="button" class="btn btn-ghost btn-xs" :disabled="busy" @click="markShared(number, false)">{{ $t("cleanup.unmark") }}</button>
+            </li>
+          </ul>
+        </div>
       </div>
 
       <!-- Missing country code -->
       <div v-else class="mt-5 space-y-3">
-        <p class="text-sm text-base-content/70">{{ $t("cleanup.missingLead") }} <span class="badge badge-ghost badge-sm">{{ $t("setup.sources.soon") }}</span></p>
+        <p class="text-sm text-base-content/70">{{ $t("cleanup.missingLead") }}</p>
         <section class="overflow-x-auto rounded-box border border-base-300 bg-base-100">
-          <table v-if="scan.missingCountryCode.length" class="table">
-            <thead>
-              <tr><th>{{ $t("report.contact") }}</th><th>{{ $t("cleanup.savedAs") }}</th><th>{{ $t("cleanup.suggestion") }}</th></tr>
-            </thead>
-            <tbody>
-              <tr v-for="item in scan.missingCountryCode" :key="`${item.contactId}-${item.value}`">
-                <td>
-                  <div class="flex items-center gap-2"><ContactAvatar :name="scan.contacts[item.contactId]?.name" :photo-url="scan.contacts[item.contactId]?.photoUrl" size="size-7" />{{ scan.contacts[item.contactId]?.name ?? $t("cleanup.noName") }}</div>
-                </td>
-                <td class="tabular-nums">{{ item.value }}</td>
-                <td class="tabular-nums">{{ item.suggestion ?? "—" }}</td>
-              </tr>
-            </tbody>
-          </table>
+          <template v-if="scan.missingCountryCode.length">
+            <div class="flex flex-wrap items-center gap-3 border-b border-base-300 px-4 py-3">
+              <span class="flex-1 text-sm text-base-content/60">{{ regionName ? $t("cleanup.country", { country: regionName }) : $t("cleanup.noCountry") }}</span>
+              <button type="button" class="btn btn-primary btn-sm" :disabled="busy || !toFix.length" @click="fixCountryCodes">
+                <span v-if="busy" class="loading loading-spinner loading-xs"></span>
+                {{ busy ? $t("cleanup.fixing", toFix.length) : $t("cleanup.fixSelected", toFix.length) }}
+              </button>
+            </div>
+            <table class="table">
+              <thead>
+                <tr>
+                  <th class="w-10">
+                    <input type="checkbox" class="checkbox checkbox-primary checkbox-sm" :aria-label="$t('cleanup.selectAll')" :checked="toFix.length === fixable.length && fixable.length > 0" @change="setAll(($event.target as HTMLInputElement).checked)" />
+                  </th>
+                  <th>{{ $t("report.contact") }}</th><th>{{ $t("cleanup.savedAs") }}</th><th>{{ $t("cleanup.suggestion") }}</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="item in scan.missingCountryCode" :key="fixKey(item)" :class="{ 'opacity-60': !item.suggestion }">
+                  <td>
+                    <input
+                      type="checkbox"
+                      class="checkbox checkbox-primary checkbox-sm"
+                      :aria-label="`${nameOf(item.contactId)} ${item.value}`"
+                      :disabled="!item.suggestion"
+                      :checked="Boolean(item.suggestion) && !unselected.has(fixKey(item))"
+                      @change="setFix(item, ($event.target as HTMLInputElement).checked)"
+                    />
+                  </td>
+                  <td>
+                    <div class="flex items-center gap-2"><ContactAvatar :name="scan.contacts[item.contactId]?.name" :photo-url="scan.contacts[item.contactId]?.photoUrl" size="size-7" />{{ nameOf(item.contactId) }}</div>
+                  </td>
+                  <td class="tabular-nums">{{ item.value }}</td>
+                  <td class="tabular-nums">{{ item.suggestion ?? $t("cleanup.cantParse") }}</td>
+                </tr>
+              </tbody>
+            </table>
+          </template>
           <p v-else class="py-12 text-center text-sm text-base-content/60">{{ $t("cleanup.noMissing") }}</p>
         </section>
       </div>

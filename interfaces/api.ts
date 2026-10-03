@@ -183,7 +183,7 @@ export interface SharedNumber {
 export interface MissingCountryCode {
   contactId: string;
   value: string;
-  /** The number with the country code of the scan's region, when it parses. */
+  /** The number with the scan region's country code, as it will be saved ("+39 333 123 4567"). */
   suggestion?: string;
 }
 
@@ -198,6 +198,8 @@ export interface CleanupScan {
   missingCountryCode: MissingCountryCode[];
   /** Contacts changed since (e.g. a merge was undone): scan again. */
   stale?: boolean;
+  /** Numbers the user marked as shared (E.164): skipped by syncs. */
+  markedShared?: string[];
 }
 
 export interface CleanupSummary {
@@ -225,11 +227,14 @@ export interface MergeRequest {
 
 export interface CleanupActionSummary {
   id: string;
-  kind: "merge";
+  /** Merge duplicates, keep a shared number on one contact, add country codes. */
+  kind: "merge" | "keepNumber" | "countryCodes";
   at: string;
-  /** e.g. the merged contact's name. */
+  /** The merged contact's name, the kept number's owner, or the number of fixed numbers. */
   title: string;
   contacts: number;
+  /** keepNumber: the number. */
+  number?: string;
   undone?: boolean;
   /** Something failed half-way; undo puts back what was changed. */
   incomplete?: boolean;
