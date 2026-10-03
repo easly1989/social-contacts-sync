@@ -1,0 +1,112 @@
+name: Release desktop app
+
+# A v* tag builds every package, launches each one, and publishes a GitHub
+# Release (a pre-release when the tag contains "-", e.g. v0.2.0-beta.1).
+# Pull requests touching the desktop app, and manual runs, build and test the
+# packages on every OS without publishing.
+on:
+  push:
+    tags: ["v*"]
+  pull_request:
+    paths:
+      - "desktop/**"
+      - "server/package*.json"
+      - ".github/workflows/release.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  build:
+    name: Build (${{ matrix.name }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Windows
+            os: windows-latest
+            target: --win
+          - name: Linux
+            os: ubuntu-latest
+            target: --linux
+          - name: macOS
+            os: macos-latest
+            target: --mac
+    runs-on: ${{ matrix.os }}
+    env:
+      PUPPETEER_SKIP_DOWNLOAD: "true"
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            server/package-lock.json
+            web/package-lock.json
+            desktop/package-lock.json
+      - name: Version from the tag
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: npm pkg set version="${GITHUB_REF_NAME#v}"
+        working-directory: desktop
+      - run: npm ci && npm run build
+        working-directory: server
+      - run: npm ci && npx vite build
+        working-directory: web
+      - run: npm ci && npm test
+        working-directory: desktop
+      - name: Package
+        run: node scripts/stage.mjs --no-build && npx electron-builder --config electron-builder.config.js ${{ matrix.target }} --publish never
+        working-directory: desktop
+      - name: Launch the packaged app
+        run: ${{ runner.os == 'Linux' && 'xvfb-run -a ' || '' }}npm run test:e2e
+        working-directory: desktop
+      - uses: actions/upload-artifact@v4
+        with:
+          name: packages-${{ matrix.name }}
+          if-no-files-found: error
+          path: |
+            desktop/dist/*.exe
+            desktop/dist/*.AppImage
+            desktop/dist/*.deb
+            desktop/dist/*.dmg
+            desktop/dist/*.blockmap
+            desktop/dist/latest*.yml
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: traces-${{ matrix.name }}
+          path: desktop/e2e/.results/
+
+  publish:
+    name: Publish GitHub Release
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: packages-*
+          merge-multiple: true
+          path: dist
+      - name: Create the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          prerelease=()
+          [[ "$version" == *-* ]] && prerelease=(--prerelease)
+          gh release create "$GITHUB_REF_NAME" dist/* \
+            --repo "$GITHUB_REPOSITORY" \
+            --title "Social Contacts Sync $version" \
+            --generate-notes "${prerelease[@]}"

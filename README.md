@@ -140,6 +140,26 @@ checks it with Google and saves it to `config.env` (`GOOGLE_CLIENT_ID`,
 WhatsApp Web runs in an installed Chrome, Edge, Chromium or Brave. If none is
 installed, Chrome for Testing is downloaded once into the data folder.
 
+### Downloads and updates
+
+Every `v*` tag publishes a [GitHub Release](https://github.com/easly1989/social-contacts-sync/releases)
+built by the [release workflow](.github/workflows/release.yml), which also
+launches each package before publishing:
+
+| System | Package | Updates |
+|---|---|---|
+| Windows | `…-portable.exe` (no installation) or `…-setup.exe` | installer: automatic · portable: notification |
+| Linux | `.AppImage` (no installation) or `.deb` | AppImage: automatic · deb: notification |
+| macOS | universal `.dmg` | notification |
+
+The packages are not code-signed yet:
+
+- **Windows:** SmartScreen may warn on the first launch; choose *More info → Run anyway*.
+- **macOS:** right-click the app, choose *Open*, then *Open Anyway* in *System Settings → Privacy & Security*.
+- **Linux:** the app starts without Chromium's sandbox, because recent Ubuntu releases block it for AppImages. That's acceptable here because the window only shows the app's own local pages; everything else opens in your browser.
+
+### Development
+
 ```bash
 cd desktop
 npm install

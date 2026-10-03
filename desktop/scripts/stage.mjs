@@ -42,23 +42,27 @@ fs.cpSync(path.join(root, "server", "build"), path.join(app, "server-build"), {
 });
 fs.cpSync(path.join(root, "web", "dist"), path.join(app, "web"), { recursive: true });
 
-// Install the server's production dependencies from its lockfile, only when
-// they changed since the last staging.
+// Install the server's production dependencies from its lockfile, plus the
+// desktop's own runtime dependencies, only when they changed since the last
+// staging.
+const desktopPackage = JSON.parse(fs.readFileSync(path.join(desktop, "package.json"), "utf8"));
+const desktopDeps = desktopPackage.dependencies ?? {};
 const serverPackage = fs.readFileSync(path.join(root, "server", "package.json"), "utf8");
 const serverLock = fs.readFileSync(path.join(root, "server", "package-lock.json"), "utf8");
-const depsHash = createHash("sha256").update(serverPackage).update(serverLock).digest("hex");
+const depsHash = createHash("sha256").update(serverPackage).update(serverLock).update(JSON.stringify(desktopDeps)).digest("hex");
 const hashFile = path.join(app, "node_modules", ".staged-deps");
 if (!fs.existsSync(hashFile) || fs.readFileSync(hashFile, "utf8") !== depsHash) {
   fs.writeFileSync(path.join(app, "package.json"), serverPackage);
   fs.writeFileSync(path.join(app, "package-lock.json"), serverLock);
   run("npm ci --omit=dev --no-audit --no-fund", app);
+  const extra = Object.entries(desktopDeps).map(([name, range]) => `${name}@${range}`);
+  if (extra.length) run(`npm install --omit=dev --no-save --no-audit --no-fund ${extra.join(" ")}`, app);
   fs.writeFileSync(hashFile, depsHash);
 }
 fs.rmSync(path.join(app, "package-lock.json"), { force: true });
 
 // The packaged app's own manifest.
-const desktopPackage = JSON.parse(fs.readFileSync(path.join(desktop, "package.json"), "utf8"));
-const { dependencies } = JSON.parse(serverPackage);
+const dependencies = { ...JSON.parse(serverPackage).dependencies, ...desktopDeps };
 fs.writeFileSync(
   path.join(app, "package.json"),
   JSON.stringify(

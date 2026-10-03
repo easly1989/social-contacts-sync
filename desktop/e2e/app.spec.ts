@@ -8,11 +8,18 @@ import { _electron as electron, ElectronApplication, expect, Page, test } from "
 // The unpacked build of the current platform (npm run pack), or DESKTOP_APP.
 function packagedApp(): string {
   if (process.env.DESKTOP_APP) return process.env.DESKTOP_APP;
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { executableName } = require("../electron-builder.config.js");
   const dist = path.join(__dirname, "..", "dist");
-  if (process.platform === "win32") return path.join(dist, "win-unpacked", "Social Contacts Sync.exe");
-  if (process.platform === "darwin")
-    return path.join(dist, "mac-universal", "Social Contacts Sync.app", "Contents", "MacOS", "Social Contacts Sync");
-  return path.join(dist, "linux-unpacked", "social-contacts-sync");
+  if (process.platform === "win32") return path.join(dist, "win-unpacked", `${executableName}.exe`);
+  if (process.platform === "darwin") {
+    // mac-universal/, mac-arm64/ or mac/, depending on the build.
+    const dir = fs.readdirSync(dist).find((d) => d.startsWith("mac"))!;
+    const bundle = fs.readdirSync(path.join(dist, dir)).find((f) => f.endsWith(".app"))!;
+    const macos = path.join(dist, dir, bundle, "Contents", "MacOS");
+    return path.join(macos, fs.readdirSync(macos)[0]);
+  }
+  return path.join(dist, "linux-unpacked", executableName);
 }
 
 type Opened = { opened?: string[] };
