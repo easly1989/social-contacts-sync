@@ -7,6 +7,7 @@ import cookieParser from "cookie-parser";
 import session from "express-session";
 import MemoryStore from "memorystore";
 import path from "path";
+import { Server } from "http";
 
 import winston from "winston";
 import expressWinston from "express-winston";
@@ -19,6 +20,8 @@ const app = ews.app;
 // Render (and most container platforms) provide the port at runtime. Keep the
 // local-development default so `npm run dev` continues to work unchanged.
 const port = Number(process.env.PORT) || 8080;
+// The desktop app binds to 127.0.0.1 so nothing is reachable from the network.
+const host = process.env.HOST || "0.0.0.0";
 
 const isProd = process.env.NODE_ENV == "production";
 
@@ -89,7 +92,7 @@ app.use(routePrefix, router);
 // The production image puts Vite's built files in `server/public`. Serving
 // them from the same Express process keeps the API, WebSocket and browser on
 // one origin, which is required for the session cookie and Google OAuth flow.
-const webRoot = path.join(__dirname, "../../public");
+const webRoot = process.env.WEB_ROOT || path.join(__dirname, "../../public");
 app.use(express.static(webRoot));
 app.get("/{*path}", (req: Request, res: Response, next) => {
   if (req.path.startsWith(`${routePrefix}/`) || req.path === routePrefix) {
@@ -98,6 +101,22 @@ app.get("/{*path}", (req: Request, res: Response, next) => {
   res.sendFile(path.join(webRoot, "index.html"));
 });
 
-app.listen(port, "0.0.0.0", () => {
-  console.log(`Listening on port ${port}`);
-});
+/** Starts listening; resolves with the server once the port is bound (0 picks a free port). */
+export function startServer(listenPort = port, listenHost = host): Promise<Server> {
+  return new Promise((resolve, reject) => {
+    const server = app.listen(listenPort, listenHost, () => {
+      const address = server.address();
+      console.log(`Listening on ${listenHost}:${typeof address === "object" && address ? address.port : listenPort}`);
+      resolve(server);
+    });
+    server.on("error", reject);
+  });
+}
+
+// Started directly (container, `npm run dev`) rather than embedded by the desktop app.
+if (require.main === module) {
+  startServer().catch((e) => {
+    console.error(e);
+    process.exit(1);
+  });
+}

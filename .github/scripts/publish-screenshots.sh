@@ -64,7 +64,7 @@ body="$(mktemp)"
   echo "$marker"
   echo "### Screenshots"
   echo
-  echo "From the end-to-end tests on ${HEAD_SHA:0:7} (mocked backend, 1280×800)."
+  echo "From the end-to-end tests on ${HEAD_SHA:0:7}: web app with a mocked backend (1280×800); \`desktop-*\` from the packaged desktop app."
   echo
   for file in "$src"/*.png; do
     name="$(basename "$file" .png)"

@@ -1,4 +1,3 @@
-import crypto from "crypto";
 import express from "express";
 import { Request, Response } from "express";
 import WebSocket from "ws";
@@ -7,13 +6,15 @@ import patch from "express-ws/lib/add-ws-method";
 
 import { WAState } from "whatsapp-web.js";
 
-import { SessionStatus, SyncOptions } from "../../interfaces/api";
+import { EventType, SessionStatus, SyncOptions } from "../../interfaces/api";
 import { initWhatsApp } from "../src/whatsapp";
 import { initSync } from "../src/sync";
 import { generateGoogleAuthUrl, getOAuth2ClientFromCode } from "../src/gapi";
 import { deleteFromCache, getFromCache, setInCache } from "../src/cache";
 import { enforcePayments } from "../src/config";
 import { checkPurchase } from "../src/payments";
+import { consumeOAuthState, createOAuthState } from "../src/oauthState";
+import { sendEvent } from "../src/ws";
 
 // Based on https://github.com/HenningM/express-ws/issues/86
 const router = express.Router({ mergeParams: true });
@@ -40,6 +41,13 @@ function cleanup(sessionID: string) {
 
   setInCache(sessionID, "cleanup", timeout);
 }
+
+const signedInPage = `<!doctype html><html><head><meta charset="utf-8"><title>Social Contacts Sync</title>
+<meta name="viewport" content="width=device-width, initial-scale=1"></head>
+<body style="font-family:system-ui,sans-serif;display:grid;place-items:center;height:100vh;margin:0;background:#f5f5fa;color:#1c1d26">
+<main style="text-align:center;max-width:28rem;padding:2rem"><h1 style="font-size:1.5rem">Signed in to Google</h1>
+<p>You can close this tab and go back to Social Contacts Sync.</p>
+<p lang="it" style="color:#6b6c78">Accesso effettuato: puoi chiudere questa scheda e tornare a Social Contacts Sync.</p></main></body></html>`;
 
 router.get("/", (req: Request, res: Response) => {
   res.send("{}");
@@ -90,8 +98,7 @@ router.get("/init_whatsapp", async (req: Request, res: Response) => {
 });
 
 router.get("/google_auth_start", (req: Request, res: Response) => {
-  const state = crypto.randomBytes(16).toString("hex");
-  setInCache(req.sessionID, "oauth_state", state);
+  const state = createOAuthState(req.sessionID);
   const redirectUri = `${req.protocol}://${req.get("host")}/api/google_callback`;
   const authUrl = generateGoogleAuthUrl(redirectUri, state);
   res.redirect(authUrl);
@@ -104,17 +111,23 @@ router.get("/google_callback", async (req: Request, res: Response) => {
     return res.redirect("/?error=google_auth_denied");
   }
 
-  const storedState = getFromCache(req.sessionID, "oauth_state");
-  if (!state || state !== storedState) {
+  // The session that started the sign-in. In the desktop app the consent page
+  // runs in the system browser, so this may not be the session of `req`.
+  const sessionID = consumeOAuthState(state);
+  if (!sessionID) {
     return res.redirect("/?error=invalid_state");
   }
-  deleteFromCache(req.sessionID, "oauth_state");
 
   const redirectUri = `${req.protocol}://${req.get("host")}/api/google_callback`;
   try {
     const gAuth = await getOAuth2ClientFromCode(code as string, redirectUri);
-    setInCache(req.sessionID, "gauth", gAuth);
-    res.redirect("/options");
+    setInCache(sessionID, "gauth", gAuth);
+    if (sessionID === req.sessionID) return res.redirect("/options");
+
+    // Signed in from another browser: move the app window on and tell the
+    // user they can go back to it.
+    sendEvent(getFromCache(sessionID, "ws"), EventType.Redirect, "/options");
+    res.send(signedInPage);
   } catch (e) {
     res.redirect("/?error=google_token_exchange_failed");
   }

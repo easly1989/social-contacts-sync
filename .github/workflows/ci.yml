@@ -97,6 +97,46 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
+  desktop:
+    name: Desktop app
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            server/package-lock.json
+            web/package-lock.json
+            desktop/package-lock.json
+      - run: npm ci && npm run build
+        working-directory: server
+      - run: npm ci && npx vite build
+        working-directory: web
+      - run: npm ci
+        working-directory: desktop
+      - name: Unit tests
+        run: npm test && npm run typecheck:e2e
+        working-directory: desktop
+      - name: Package (unpacked Linux build)
+        run: node scripts/stage.mjs --no-build && npx electron-builder --config electron-builder.config.js --linux dir --publish never
+        working-directory: desktop
+      - name: Launch the packaged app
+        run: xvfb-run -a npm run test:e2e
+        working-directory: desktop
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: desktop-screenshots
+          path: desktop/e2e/screenshots/
+          if-no-files-found: ignore
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: desktop-traces
+          path: desktop/e2e/.results/
+
   workflow-scripts:
     name: Workflow scripts
     runs-on: ubuntu-latest
@@ -110,7 +150,7 @@ jobs:
   # pull requests from forks get a read-only token.
   screenshots:
     name: PR screenshots
-    needs: web
+    needs: [web, desktop]
     if: >-
       always() && github.event_name == 'pull_request' &&
       github.event.pull_request.head.repo.full_name == github.repository
@@ -124,7 +164,8 @@ jobs:
         id: download
         continue-on-error: true
         with:
-          name: e2e-screenshots
+          pattern: "*-screenshots"
+          merge-multiple: true
           path: screenshots
       - name: Publish and comment
         if: steps.download.outcome == 'success'

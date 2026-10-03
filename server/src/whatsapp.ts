@@ -15,10 +15,12 @@ import { toE164Digits } from "./phone";
 const wwebVersion = "2.2407.3";
 const clientOptions = {
   puppeteer: {
+    // CHROME_PATH lets the desktop app pick an installed Chrome/Edge/Chromium.
     executablePath:
-      process.env.RUNNING_IN_DOCKER === "true"
+      process.env.CHROME_PATH ||
+      (process.env.RUNNING_IN_DOCKER === "true"
         ? "/usr/bin/chromium-browser"
-        : undefined,
+        : undefined),
     args: ["--no-sandbox", "--disable-setuid-sandbox", "--disable-gpu"],
   },
   webVersionCache: {
