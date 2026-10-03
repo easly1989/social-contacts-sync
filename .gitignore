@@ -137,6 +137,6 @@ build
 .DS_Store
 
 # Playwright
-e2e/.results/
-e2e/screenshots/
+web/e2e/.results/
+web/e2e/screenshots/
 playwright-report/
