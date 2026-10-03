@@ -28,8 +28,9 @@
 
 ## Features
 
-- **Photos from your sources.** WhatsApp (matched by phone number) and Gravatar
-  (matched by email), in the priority order you choose. Telegram is on its way.
+- **Photos from your sources.** WhatsApp and Telegram (matched by phone number)
+  and Gravatar (matched by email), in the priority order you choose. Only your
+  existing Telegram contacts are read; nothing is added to your account.
 - **You stay in control.** Fill in only missing photos, replace them all, or
   review each one with the keyboard.
 - **Nothing changes without a way back.** Every sync has a report and can be
@@ -81,8 +82,9 @@ The packages are not code-signed yet:
    minutes; the wizard links each page of the Google Cloud Console and checks
    the result. See the [step-by-step guide](docs/google-setup.md).
 3. **Sign in to Google** in your browser.
-4. **Link WhatsApp** by scanning a QR code, like WhatsApp Web. Gravatar needs
-   no sign-in.
+4. **Link WhatsApp** by scanning a QR code, like WhatsApp Web, and/or **sign in
+   to Telegram** with your phone number and the code Telegram sends you.
+   Gravatar needs no sign-in.
 5. **Sync photos** from the dashboard, and look at **Clean up** for duplicates.
 
 Google allows about 40 photo updates per minute, so a large address book takes a
@@ -140,6 +142,7 @@ Once you do that, create the file `server/.env`, and set the following environme
 
 - `GOOGLE_CLIENT_ID`
 - `GOOGLE_CLIENT_SECRET`
+- `TELEGRAM_API_ID` and `TELEGRAM_API_HASH` (optional, from [my.telegram.org](https://my.telegram.org)) to enable the Telegram source
 
 You also need to add the following **Authorized Redirect URI** to your OAuth 2.0 client in the [Google Cloud Console](https://console.cloud.google.com) based on how you are running the app:
 
@@ -193,6 +196,8 @@ from the image:
 - Health check path: `/api/`
 - `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET`: your Google OAuth values
 - `SESSION_SECRET`: a long, random secret
+- `TELEGRAM_API_ID` and `TELEGRAM_API_HASH` (optional): your Telegram app from
+  [my.telegram.org](https://my.telegram.org), to enable the Telegram source
 - `ENFORCE_PAYMENTS=false`
 
 Render provides `PORT` automatically; do not override it. Add
@@ -241,6 +246,7 @@ The app stays signed in between launches, unless you turn off
 | `google-token.enc` | the Google sign-in, encrypted (AES-256-GCM) |
 | `secret.key` | the key for `google-token.enc`, itself protected by the OS keychain (DPAPI, Keychain, libsecret/kwallet) |
 | `whatsapp/` | WhatsApp's linked-device session |
+| `telegram-session.enc` | the Telegram sign-in, encrypted like the Google one |
 | `history/` | past syncs with the photos they changed, for reports and undo (kept 90 days) |
 | `history/cleanup/` | backups of merged contacts (all their fields and photos), for undo (kept 90 days) |
 | `cleanup.json` | clean-up choices, such as groups marked *Not duplicates* |

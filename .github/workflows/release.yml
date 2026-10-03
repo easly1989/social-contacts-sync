@@ -64,6 +64,11 @@ jobs:
       - run: npm ci && npm test
         working-directory: desktop
       - name: Package
+        # Telegram app credentials (repository secrets); empty for pull
+        # requests from forks, which then build without Telegram.
+        env:
+          TELEGRAM_API_ID: ${{ secrets.TELEGRAM_API_ID }}
+          TELEGRAM_API_HASH: ${{ secrets.TELEGRAM_API_HASH }}
         run: node scripts/stage.mjs --no-build && npx electron-builder --config electron-builder.config.js ${{ matrix.target }} --publish never
         working-directory: desktop
       - name: Launch the packaged app

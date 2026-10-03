@@ -2,7 +2,7 @@ import { mkdirSync } from "fs";
 import path from "path";
 import { Page, Request, Route, WebSocketRoute, expect } from "@playwright/test";
 
-import { CleanupActionSummary, CleanupScan, DesktopInfo, EventType, MergeRequest, GoogleAccount, GoogleStats, RunRecord, SessionStatus, UpdateCheck } from "../../interfaces/api";
+import { TelegramState, CleanupActionSummary, CleanupScan, DesktopInfo, EventType, MergeRequest, GoogleAccount, GoogleStats, RunRecord, SessionStatus, UpdateCheck } from "../../interfaces/api";
 import { avatars } from "./avatars";
 
 /**
@@ -44,6 +44,10 @@ export class FakeBackend {
   cleanupRequests: { route: string; body: any }[] = [];
   /** Error code the next merge fails with. */
   mergeError?: string;
+  /** Telegram sign-in: the account state and what the next answers are. */
+  telegram: TelegramState = { available: true, connected: false };
+  telegramPassword?: string;
+  telegramRequests: { route: string; body: any }[] = [];
   /** Answer of "Check for updates". */
   updateCheck: Omit<UpdateCheck, "checkedAt"> = { status: "current" };
   /** Bodies posted to /api/desktop/* Settings actions, by route. */
@@ -126,6 +130,7 @@ export class FakeBackend {
         return route.fulfill({ contentType: "image/jpeg", body: Buffer.from(avatar, "base64") });
       }
       if (pathname.startsWith("/api/cleanup")) return this.cleanup(route, pathname, request);
+      if (pathname.startsWith("/api/telegram")) return this.telegramRoute(route, pathname, request);
       if (pathname === "/api/check_purchase")
         return route.fulfill({ json: { purchased: this.status.purchased } });
       return route.fulfill({ json: {} });
@@ -137,6 +142,30 @@ export class FakeBackend {
         this.received.push(JSON.parse(message.toString()));
       });
     });
+  }
+
+  private telegramRoute(route: Route, pathname: string, request: Request) {
+    const body = request.method() === "POST" ? request.postDataJSON() ?? {} : {};
+    const step = pathname.replace("/api/telegram", "").replace("/", "");
+    if (step) this.telegramRequests.push({ route: step, body });
+    const fail = (error: string) => route.fulfill({ status: 400, json: { error } });
+    const t = this.telegram;
+    if (step === "send_code") {
+      if (body.phone.replace(/\D/g, "").length < 8) return fail("invalid_phone");
+      Object.assign(t, { step: "code", phone: body.phone.replace(/[^\d+]/g, "") });
+    } else if (step === "sign_in") {
+      if (body.code !== "12345") return fail("invalid_code");
+      if (this.telegramPassword) t.step = "password";
+      else Object.assign(t, { step: undefined, connected: true });
+    } else if (step === "password") {
+      if (body.password !== this.telegramPassword) return fail("invalid_password");
+      Object.assign(t, { step: undefined, connected: true });
+    } else if (step === "sign_out") {
+      Object.assign(t, { step: undefined, connected: false, phone: undefined });
+    }
+    this.status.telegramConnected = t.connected;
+    this.status.telegramAvailable = t.available;
+    return route.fulfill({ json: t });
   }
 
   private cleanupSummary() {

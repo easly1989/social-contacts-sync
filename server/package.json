@@ -14,6 +14,7 @@
   "license": "ISC",
   "dependencies": {
     "@googleapis/people": "^12.0.1",
+    "big-integer": "^1.6.52",
     "body-parser": "^2.3.0",
     "cookie-parser": "^1.4.7",
     "cors": "^2.8.6",
@@ -26,6 +27,7 @@
     "limiter": "^3.0.0",
     "lru-cache": "^11.5.2",
     "memorystore": "^1.6.8",
+    "telegram": "^2.26.22",
     "whatsapp-web.js": "github:pedroslopez/whatsapp-web.js#main",
     "winston": "^3.19.0"
   },

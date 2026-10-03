@@ -17,6 +17,7 @@ import { consumeOAuthState, createOAuthState } from "../src/oauthState";
 import { desktopMode, safeReturnPath } from "../src/desktop";
 import { hasSavedWhatsAppSession, persistGoogleAuth } from "../src/desktopSession";
 import { sendEvent } from "../src/ws";
+import { telegramState } from "../src/telegramSession";
 
 // Based on https://github.com/HenningM/express-ws/issues/86
 const router = express.Router({ mergeParams: true });
@@ -86,6 +87,8 @@ router.get("/status", async (req: Request, res: Response) => {
     whatsappStarting: Boolean(whatsappClient) && !whatsappConnected,
     whatsappSaved: hasSavedWhatsAppSession(),
     googleConfigured: Boolean(process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET),
+    telegramAvailable: telegramState(req.sessionID).available,
+    telegramConnected: telegramState(req.sessionID).connected,
     purchased: enforcePayments
       ? getFromCache(req.sessionID, "purchased")
       : true,

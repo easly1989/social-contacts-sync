@@ -12,7 +12,7 @@ export const setupPaths = ["/setup/google", "/setup/signin", "/setup/sources"];
 export function nextDesktopStep(status: SessionStatus): string {
   if (!status.googleConfigured) return "/setup/google";
   if (!status.googleConnected) return "/setup/signin";
-  if (!status.whatsappConnected && !status.whatsappSaved) return "/setup/sources";
+  if (!status.whatsappConnected && !status.whatsappSaved && !status.telegramConnected) return "/setup/sources";
   return "/app";
 }
 

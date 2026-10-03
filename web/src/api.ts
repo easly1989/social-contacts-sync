@@ -1,4 +1,4 @@
-import { CleanupActionSummary, CleanupScan, CleanupSummary, DesktopInfo, DuplicateGroup, GoogleAccount, MergeRequest, GoogleStats, RunRecord, RunSummary, SessionStatus, UpdateCheck } from "../../interfaces/api";
+import { TelegramState, CleanupActionSummary, CleanupScan, CleanupSummary, DesktopInfo, DuplicateGroup, GoogleAccount, MergeRequest, GoogleStats, RunRecord, RunSummary, SessionStatus, UpdateCheck } from "../../interfaces/api";
 
 // Small typed wrappers around the server API.
 
@@ -55,6 +55,12 @@ export const api = {
     post<{ actionId: string; fixed: number; summary: CleanupSummary }>("/api/cleanup/fix_country_codes", { items }),
   cleanupActions: () => get<CleanupActionSummary[]>("/api/cleanup/actions"),
   undoCleanup: (id: string) => post(`/api/cleanup/actions/${encodeURIComponent(id)}/undo`),
+  // Telegram sign-in (issue #36).
+  telegram: () => get<TelegramState>("/api/telegram"),
+  telegramSendCode: (phone: string) => post<TelegramState>("/api/telegram/send_code", { phone }),
+  telegramSignIn: (code: string) => post<TelegramState>("/api/telegram/sign_in", { code }),
+  telegramPassword: (password: string) => post<TelegramState>("/api/telegram/password", { password }),
+  telegramSignOut: () => post<TelegramState>("/api/telegram/sign_out"),
   photoUrl: (runId: string, index: number, kind: "photo" | "previous") =>
     `/api/runs/${encodeURIComponent(runId)}/photos/${index}/${kind}`,
 };

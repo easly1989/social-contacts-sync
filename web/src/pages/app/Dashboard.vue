@@ -126,10 +126,12 @@ onMounted(() => load());
             <span v-if="status?.whatsappConnected" class="badge badge-soft badge-success badge-sm">{{ $t("dashboard.connected") }}</span>
             <router-link v-else :to="whatsappLink" class="btn btn-xs">{{ $t("dashboard.connect") }}</router-link>
           </li>
-          <li class="flex items-center gap-3 py-3 opacity-60">
+          <li class="flex items-center gap-3 py-3" :class="{ 'opacity-60': status && !status.telegramAvailable }">
             <SourceMark source="telegram" />
             <div class="flex-1"><div class="text-sm font-semibold">Telegram</div><div class="text-xs text-base-content/60">{{ $t("setup.sources.byPhone") }}</div></div>
-            <span class="badge badge-ghost badge-sm">{{ $t("setup.sources.soon") }}</span>
+            <span v-if="status?.telegramConnected" class="badge badge-soft badge-success badge-sm">{{ $t("dashboard.connected") }}</span>
+            <router-link v-else-if="status?.telegramAvailable" to="/app/settings/sources" class="btn btn-xs">{{ $t("dashboard.connect") }}</router-link>
+            <span v-else-if="status" class="badge badge-ghost badge-sm">{{ $t("dashboard.unavailable") }}</span>
           </li>
           <li class="flex items-center gap-3 py-3">
             <SourceMark source="gravatar" />

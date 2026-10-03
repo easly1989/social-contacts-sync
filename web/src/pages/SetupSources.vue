@@ -4,13 +4,15 @@ import { useRouter } from "vue-router";
 import { ArrowLeft, AtSign, Check, CircleCheck, Info, Phone, Send } from "lucide-vue-next";
 
 import FlowFrame from "../components/FlowFrame.vue";
+import TelegramLink from "../components/TelegramLink.vue";
 import WhatsAppLink from "../components/WhatsAppLink.vue";
-import { SessionStatus } from "../../../interfaces/api";
+import { SessionStatus, TelegramState } from "../../../interfaces/api";
 
-// Mockup 1.4 in issue #8. Telegram and Gravatar arrive in later steps.
+// Mockup 1.4 in issue #8: WhatsApp, Telegram (issue #36) and Gravatar.
 const router = useRouter();
 const whatsappConnected = ref<boolean>();
 const whatsappSaved = ref(false);
+const telegram = ref<TelegramState>();
 let poll: number | undefined;
 
 async function checkStatus(): Promise<void> {
@@ -75,28 +77,31 @@ onUnmounted(() => window.clearInterval(poll));
         <div v-else class="grid flex-1 place-items-center py-10"><span class="loading loading-spinner"></span></div>
       </section>
 
-      <section class="flex flex-col rounded-box border border-base-300 p-5 opacity-70">
+      <section
+        class="flex flex-col rounded-box border p-5"
+        :class="telegram?.connected ? 'border-2 border-success/40 bg-success/5' : 'border-base-300'"
+        data-testid="setup-telegram"
+      >
         <div class="flex items-center gap-3">
           <div class="grid size-9 place-items-center rounded-xl bg-[#2AABEE] text-white"><Send class="size-5" /></div>
           <div class="flex-1">
             <div class="font-semibold">Telegram</div>
             <div class="text-xs text-base-content/60">{{ $t("setup.sources.byPhone") }}</div>
           </div>
-          <span class="badge badge-soft badge-sm">{{ $t("setup.sources.soon") }}</span>
         </div>
-        <p class="mt-5 text-sm text-base-content/70">{{ $t("setup.sources.telegramText") }}</p>
+        <div class="mt-4"><TelegramLink @change="(state) => (telegram = state)" /></div>
       </section>
 
-      <section class="flex flex-col rounded-box border border-base-300 p-5 opacity-70">
+      <section class="flex flex-col rounded-box border-2 border-success/40 bg-success/5 p-5" data-testid="setup-gravatar">
         <div class="flex items-center gap-3">
           <div class="grid size-9 place-items-center rounded-xl bg-[#1E6FD9] text-white"><AtSign class="size-5" /></div>
           <div class="flex-1">
             <div class="font-semibold">Gravatar</div>
             <div class="text-xs text-base-content/60">{{ $t("setup.sources.byEmail") }}</div>
           </div>
-          <span class="badge badge-soft badge-sm">{{ $t("setup.sources.soon") }}</span>
         </div>
         <p class="mt-5 text-sm text-base-content/70">{{ $t("setup.sources.gravatarText") }}</p>
+        <div class="mt-auto flex items-center gap-1.5 pt-6 text-sm font-medium text-success"><CircleCheck class="size-4" />{{ $t("dashboard.ready") }}</div>
       </section>
     </div>
 
@@ -105,8 +110,8 @@ onUnmounted(() => window.clearInterval(poll));
     <template #actions>
       <router-link to="/setup/signin" class="btn btn-ghost"><ArrowLeft class="size-4" />{{ $t("common.back") }}</router-link>
       <span class="flex-1"></span>
-      <span class="mr-2 text-sm text-base-content/60">{{ $t("setup.sources.ready", whatsappConnected ? 1 : 0) }}</span>
-      <button type="button" class="btn btn-primary" :disabled="!whatsappConnected" @click="router.push('/app')">
+      <span class="mr-2 text-sm text-base-content/60">{{ $t("setup.sources.ready", (whatsappConnected ? 1 : 0) + (telegram?.connected ? 1 : 0)) }}</span>
+      <button type="button" class="btn btn-primary" :disabled="!whatsappConnected && !telegram?.connected" @click="router.push('/app')">
         {{ $t("setup.sources.finish") }}<Check class="size-4" />
       </button>
     </template>

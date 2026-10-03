@@ -6,6 +6,7 @@ import { deleteFromCache, getFromCache } from "../src/cache";
 import { rememberSignIns, setRememberSignIns, signOutGoogle, whatsappDataPath } from "../src/desktopSession";
 import { askDesktop, desktopMode, saveDesktopConfig } from "../src/desktop";
 import { historyUsage } from "../src/runs";
+import { forgetSavedTelegram, saveTelegram, signOutTelegram } from "../src/telegramSession";
 import { getAccountSummary } from "../src/gapi";
 import { parseGoogleCredentials, verifyGoogleCredentials } from "../src/googleCredentials";
 
@@ -107,6 +108,8 @@ router.post("/desktop/remember_sign_ins", async (req: Request, res: Response) =>
     return res.status(500).send({ error: "save_failed" });
   }
   setRememberSignIns(req.sessionID, req.body.enabled);
+  if (req.body.enabled) saveTelegram(req.sessionID);
+  else forgetSavedTelegram();
   res.send({ ok: true, rememberSignIns: rememberSignIns() });
 });
 
@@ -116,6 +119,7 @@ router.post("/desktop/delete_all_data", async (req: Request, res: Response) => {
   if (req.body?.confirm !== true) return res.status(400).send({ error: "confirm_required" });
   await signOutGoogle(req.sessionID);
   await unlinkWhatsApp(req.sessionID);
+  await signOutTelegram(req.sessionID);
   try {
     await askDesktop("delete-data");
   } catch (e) {

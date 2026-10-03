@@ -37,3 +37,9 @@ test("numbers marked as shared are not used for matching", () => {
   );
   assert.equal(withoutSharedNumbers(contacts, [], "IT"), contacts);
 });
+
+test("Telegram is used only when signed in", () => {
+  assert.deepEqual(requestedSources({ sources: "telegram,gravatar" }, client).map((s) => s.id), ["gravatar"]);
+  const telegram = {} as Parameters<typeof requestedSources>[2];
+  assert.deepEqual(requestedSources({ sources: "telegram,gravatar" }, client, telegram).map((s) => s.id), ["telegram", "gravatar"]);
+});
