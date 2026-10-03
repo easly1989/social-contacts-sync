@@ -35,12 +35,17 @@ module.exports = {
     category: "Utility",
     synopsis: "Give every contact a face",
     maintainer: "Carlo Ruggiero <noreply@github.com>",
+    // See the sandbox note in src/main.ts.
+    executableArgs: ["--no-sandbox"],
   },
   mac: {
     target: [{ target: "dmg", arch: ["universal"] }],
     category: "public.app-category.productivity",
-    // Unsigned for now: see the README for opening it the first time.
-    identity: null,
+    // No Apple Developer ID yet: ad-hoc signing lets Apple Silicon run it,
+    // and the README explains "Open Anyway" for the first launch.
+    identity: "-",
+    hardenedRuntime: false,
+    notarize: false,
   },
   publish: [{ provider: "github", owner: "easly1989", repo: "social-contacts-sync" }],
 };

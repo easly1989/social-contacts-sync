@@ -1,12 +1,19 @@
 import fs from "fs";
 import path from "path";
-import { app, BrowserWindow, Menu, nativeTheme, shell, utilityProcess, UtilityProcess } from "electron";
+import { app, BrowserWindow, Menu, nativeTheme, Notification, shell, utilityProcess, UtilityProcess } from "electron";
 
 import { resolvePaths } from "./paths";
 import { loadConfig } from "./config";
 import { downloadBrowser, findInstalledBrowser } from "./browser";
+import { findUpdate, isPrerelease, updateStrategy } from "./updates";
 
 const productName = "Social Contacts Sync";
+
+// Recent Ubuntu releases restrict the user namespaces Chromium's sandbox
+// needs, so AppImages fail to start. The window only shows the app's own
+// local pages (everything else opens in the system browser), so the AppImage
+// runs without it, like the .deb launcher (see electron-builder.config.js).
+if (process.platform === "linux" && process.env.APPIMAGE) app.commandLine.appendSwitch("no-sandbox");
 
 // One instance at a time: a second launch focuses the existing window.
 if (!app.requestSingleInstanceLock()) app.quit();
@@ -127,8 +134,35 @@ async function start(): Promise<void> {
     const origin = `http://127.0.0.1:${port}`;
     keepLinksOutside(win, origin);
     await win.loadURL(origin);
+    void checkForUpdates();
   } catch (error) {
     await showStatus(win, `${productName} could not start`, error instanceof Error ? error.message : String(error));
+  }
+}
+
+async function checkForUpdates(): Promise<void> {
+  const strategy = updateStrategy(process.platform, process.env, app.isPackaged);
+  try {
+    if (strategy === "auto") {
+      // Downloads in the background and installs when the app quits.
+      const { autoUpdater } = await import("electron-updater");
+      autoUpdater.allowPrerelease = isPrerelease(app.getVersion());
+      await autoUpdater.checkForUpdatesAndNotify({
+        title: `${productName} {version} is ready`,
+        body: "It will be installed when you close the app.",
+      });
+    } else if (strategy === "notify") {
+      const update = await findUpdate(app.getVersion());
+      if (!update || !Notification.isSupported()) return;
+      const notification = new Notification({
+        title: `${productName} ${update.version} is available`,
+        body: "Click to open the download page.",
+      });
+      notification.on("click", () => void shell.openExternal(update.url));
+      notification.show();
+    }
+  } catch (error) {
+    console.warn("Update check failed:", error);
   }
 }
 
