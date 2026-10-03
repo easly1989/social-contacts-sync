@@ -4,11 +4,17 @@ import { event } from "vue-gtag";
 
 import { isWsReady } from "../services/ws";
 import { SessionStatus } from "../../../interfaces/api";
+import { appName, repoUrl, upstreamAuthor, upstreamName, upstreamUrl } from "../brand";
 
 export default defineComponent({
   data: () => ({
     sessionStatus: undefined as SessionStatus | undefined,
     wsReady: false,
+    appName,
+    repoUrl,
+    upstreamAuthor,
+    upstreamName,
+    upstreamUrl,
   }),
   mounted() {
     isWsReady.then((val) => {
@@ -30,7 +36,7 @@ export default defineComponent({
   <div id="home" class="hero h-full bg-base-200">
     <div class="hero-content text-center">
       <div class="max-w-md">
-        <h1 class="text-5xl font-bold">WhatsApp Contact Sync</h1>
+        <h1 class="text-5xl font-bold">{{ appName }}</h1>
         <p class="py-6">
           This app will sync your contact images from WhatsApp to Google
           Contacts.
@@ -39,11 +45,10 @@ export default defineComponent({
           account and to your Google account with contacts permissions.
           <br /><br />
           You can checkout the code and open new issues on the
-          <a
-            href="
-          https://github.com/guyzyl/whatsapp-contact-sync"
-            >GitHub repository</a
-          >.
+          <a :href="repoUrl">GitHub repository</a>.
+          <br /><br />
+          Based on <a :href="upstreamUrl">{{ upstreamName }}</a> by
+          {{ upstreamAuthor }}.
         </p>
         <!-- Button is disabled until WS is connected to ensure the backed is serving before continuing. -->
         <router-link

@@ -1,6 +1,7 @@
 <script lang="ts">
 import { defineComponent } from "vue";
 import { enforcePayments } from "../settings";
+import { repoUrl } from "../brand";
 
 const steps = ["/contribute", "/whatsapp", "/gauth", "/options", "/sync"];
 
@@ -9,6 +10,7 @@ export default defineComponent({
     showSteps: false,
     showContribute: false,
     currentStep: 0,
+    repoUrl,
   }),
 
   mounted() {
@@ -50,7 +52,7 @@ export default defineComponent({
         <router-link to="/privacy" tag="a">Privacy Policy</router-link>
       </div>
       <div class="grid-flow-col justify-self-end">
-        <a href="https://github.com/guyzyl/whatsapp-contact-sync"
+        <a :href="repoUrl" aria-label="GitHub repository"
           ><svg
             xmlns="http://www.w3.org/2000/svg"
             width="24"

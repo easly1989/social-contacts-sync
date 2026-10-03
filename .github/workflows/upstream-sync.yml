@@ -18,8 +18,9 @@ jobs:
   sync:
     name: Merge upstream into upstream-sync
     runs-on: ubuntu-latest
-    # Further forks of this fork should not open PRs against themselves.
-    if: github.repository == 'easly1989/whatsapp-contact-sync'
+    # Further forks of this fork should not open PRs against themselves. The
+    # owner (not the full name) is checked so renaming the repository is safe.
+    if: github.repository_owner == 'easly1989'
     steps:
       # PRs opened with the default GITHUB_TOKEN do not trigger CI, so the sync
       # uses a fine-grained token (Contents, Pull requests, Issues, Workflows).
