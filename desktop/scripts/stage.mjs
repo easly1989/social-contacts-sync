@@ -82,4 +82,13 @@ fs.writeFileSync(
   ) + "\n"
 );
 fs.copyFileSync(path.join(root, "LICENSE"), path.join(app, "LICENSE"));
+
+// Telegram app credentials (issue #36). Release builds get them from CI
+// secrets; other builds go without, and users can add their own to config.env.
+const telegramId = process.env.TELEGRAM_API_ID?.trim();
+const telegramHash = process.env.TELEGRAM_API_HASH?.trim();
+if (telegramId && telegramHash) {
+  fs.writeFileSync(path.join(app, "telegram.json"), JSON.stringify({ apiId: telegramId, apiHash: telegramHash }));
+  console.log("Telegram app credentials included.");
+}
 console.log(`Staged ${path.relative(root, app)} (version ${desktopPackage.version}).`);

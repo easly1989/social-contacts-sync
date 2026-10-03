@@ -8,6 +8,7 @@ import { loadDataKey } from "./dataKey";
 import { downloadBrowser, findInstalledBrowser } from "./browser";
 import { findUpdate, isPrerelease, releasesRepo, updateStrategy } from "./updates";
 import { deleteLocalData, packageKind, writableValues } from "./localData";
+import { telegramEnv } from "./telegramApp";
 
 const productName = "Social Contacts Sync";
 
@@ -201,6 +202,7 @@ async function start(): Promise<void> {
     const port = await startServer({
       ...process.env,
       ...config,
+      ...telegramEnv(app.getAppPath(), config),
       CHROME_PATH: chromePath,
       HOST: "127.0.0.1",
       SCS_DESKTOP: "1",

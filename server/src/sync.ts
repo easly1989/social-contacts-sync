@@ -11,11 +11,14 @@ import { saveRun } from "./runs";
 import { PhotoSource } from "./sources/types";
 import { whatsappSource } from "./sources/whatsapp";
 import { gravatarSource } from "./sources/gravatar";
+import { telegramSource } from "./sources/telegram";
+import { TelegramConnection } from "./telegram";
+import { telegramConnection } from "./telegramSession";
 import { getPrefs } from "./cleanup/store";
 import { inferRegion, toE164Digits } from "./phone";
 import { SimpleContact } from "./interfaces";
 
-const knownSources: SourceId[] = ["whatsapp", "gravatar"];
+const knownSources: SourceId[] = ["whatsapp", "telegram", "gravatar"];
 
 // Google allows about 60 photo uploads per minute per user; stay below it.
 export function googleRateLimiter(): RateLimiter {
@@ -28,13 +31,14 @@ export function syncMode(options: SyncOptions): SyncMode {
 }
 
 /** Sources asked for, in priority order, that are usable in this session. */
-export function requestedSources(options: SyncOptions, whatsapp: Client | undefined): PhotoSource[] {
+export function requestedSources(options: SyncOptions, whatsapp: Client | undefined, telegram?: TelegramConnection): PhotoSource[] {
   const ids = (options.sources ?? "whatsapp")
     .split(",")
     .map((s) => s.trim())
     .filter((s, i, all): s is SourceId => knownSources.includes(s as SourceId) && all.indexOf(s) === i);
   return ids.flatMap((id) => {
     if (id === "whatsapp") return whatsapp ? [whatsappSource(whatsapp)] : [];
+    if (id === "telegram") return telegram ? [telegramSource(telegram)] : [];
     return [gravatarSource()];
   });
 }
@@ -65,7 +69,7 @@ export async function initSync(id: string, syncOptions: SyncOptions) {
         currentPhoto: downloadContactPhoto,
         setPhoto: (contactId, photo) => updateContactPhoto(gAuth, contactId, photo),
       },
-      requestedSources(syncOptions, whatsappClient),
+      requestedSources(syncOptions, whatsappClient, telegramConnection(id)),
       mode,
       {
         progress: (update) => sendEvent(ws, EventType.SyncProgress, update),

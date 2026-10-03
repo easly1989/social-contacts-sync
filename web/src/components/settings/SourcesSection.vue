@@ -4,6 +4,7 @@ import { Info } from "lucide-vue-next";
 
 import SettingsCard from "./SettingsCard.vue";
 import SourceMark from "../SourceMark.vue";
+import TelegramLink from "../TelegramLink.vue";
 import { api } from "../../api";
 import { isDesktop } from "../../settings";
 import { SessionStatus } from "../../../../interfaces/api";
@@ -46,13 +47,13 @@ onMounted(async () => {
       </div>
       <span class="badge badge-soft badge-success badge-sm">{{ $t("dashboard.ready") }}</span>
     </div>
-    <div class="flex flex-wrap items-center gap-3 py-4 opacity-60">
+    <div class="flex flex-wrap items-start gap-3 py-4" data-testid="settings-source-telegram">
       <SourceMark source="telegram" />
       <div class="min-w-[10rem] flex-1">
         <div class="font-medium">Telegram</div>
         <div class="text-sm text-base-content/60">{{ $t("setup.sources.byPhone") }}</div>
       </div>
-      <span class="badge badge-ghost badge-sm">{{ $t("setup.sources.soon") }}</span>
+      <div class="w-full sm:w-80"><TelegramLink /></div>
     </div>
     <p class="flex items-start gap-1.5 pt-4 text-xs text-base-content/50"><Info class="mt-px size-3.5 shrink-0" />{{ $t("setup.sources.unavailable") }}</p>
   </SettingsCard>

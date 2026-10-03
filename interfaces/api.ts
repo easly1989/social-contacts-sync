@@ -104,6 +104,9 @@ export interface SessionStatus {
   whatsappStarting?: boolean;
   /** The desktop app has a saved WhatsApp link to reconnect with. */
   whatsappSaved?: boolean;
+  /** Telegram app credentials are set (built in, config.env or environment). */
+  telegramAvailable?: boolean;
+  telegramConnected?: boolean;
 }
 
 export interface GoogleStats {
@@ -238,4 +241,14 @@ export interface CleanupActionSummary {
   undone?: boolean;
   /** Something failed half-way; undo puts back what was changed. */
   incomplete?: boolean;
+}
+
+/** GET /api/telegram and the sign-in steps (issue #36). */
+export interface TelegramState {
+  available: boolean;
+  connected: boolean;
+  /** Waiting for the login code, or for the two-step verification password. */
+  step?: "code" | "password";
+  phone?: string;
+  name?: string;
 }

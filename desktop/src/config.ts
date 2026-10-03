@@ -15,6 +15,11 @@ const template = (sessionSecret: string) => `# Social Contacts Sync settings. Ed
 GOOGLE_CLIENT_ID=
 GOOGLE_CLIENT_SECRET=
 
+# Telegram app credentials from my.telegram.org. Releases include them;
+# set them only for a build without, or to use your own app.
+# TELEGRAM_API_ID=
+# TELEGRAM_API_HASH=
+
 # Keep Google and WhatsApp signed in between launches (saved encrypted).
 REMEMBER_SIGN_INS=true
 

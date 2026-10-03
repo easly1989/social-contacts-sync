@@ -55,6 +55,7 @@ watch(prefs, (value) => {
 
 function available(source: SourceId): boolean {
   if (source === "whatsapp") return Boolean(status.value?.whatsappConnected);
+  if (source === "telegram") return Boolean(status.value?.telegramConnected);
   return source === "gravatar";
 }
 
@@ -110,7 +111,7 @@ onMounted(async () => {
               <div class="flex-1">
                 <div class="text-sm font-semibold">{{ sourceInfo[source].name }}</div>
                 <div class="text-xs text-base-content/60">
-                  <template v-if="source === 'telegram'">{{ $t("setup.sources.soon") }}</template>
+                  <template v-if="source === 'telegram' && status && !status.telegramAvailable">{{ $t("dashboard.unavailable") }}</template>
                   <template v-else-if="!available(source)">{{ $t("dashboard.notConnected") }}</template>
                   <template v-else>{{ $t(sourceInfo[source].matchedBy === "phone" ? "setup.sources.byPhone" : "setup.sources.byEmail") }}</template>
                 </div>
@@ -120,6 +121,7 @@ onMounted(async () => {
                 <button type="button" class="btn btn-ghost btn-xs join-item" :disabled="index === prefs.order.length - 1" :aria-label="$t('syncSetup.moveDown', { name: sourceInfo[source].name })" @click="move(index, 1)"><ChevronDown class="size-4" /></button>
               </div>
               <router-link v-if="source === 'whatsapp' && !available(source)" :to="isDesktop ? '/setup/sources' : '/whatsapp'" class="btn btn-xs">{{ $t("dashboard.connect") }}</router-link>
+              <router-link v-else-if="source === 'telegram' && !available(source) && status?.telegramAvailable" to="/app/settings/sources" class="btn btn-xs">{{ $t("dashboard.connect") }}</router-link>
               <input
                 v-else
                 type="checkbox"
