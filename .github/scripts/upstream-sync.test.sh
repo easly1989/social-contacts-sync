@@ -18,6 +18,10 @@ export STUB="$root/stub"
 mkdir -p "$STUB/bin"
 cat >"$STUB/bin/gh" <<'EOF'
 #!/usr/bin/env bash
+if [[ "${GH_REPO:-}" != "test/fork" ]]; then
+  echo "gh called without GH_REPO=test/fork" >&2
+  exit 1
+fi
 echo "$*" >>"$STUB/calls"
 case "$1 $2" in
   "pr list") cat "$STUB/open_pr" 2>/dev/null || true ;;
@@ -45,6 +49,8 @@ commit "$root/fork" fork.txt "fork only" "fork change"
 git -C "$root/fork" push --quiet origin main
 
 export UPSTREAM_URL="$root/upstream.git" UPSTREAM_NAME="up/stream"
+export GITHUB_REPOSITORY="test/fork"
+unset GH_REPO
 
 run_sync() {
   : >"$STUB/calls"
