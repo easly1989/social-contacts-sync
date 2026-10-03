@@ -93,7 +93,7 @@ test("numbers without a country code get a suggestion from the region", () => {
     now: new Date("2026-10-03T12:00:00Z"),
   });
   assert.deepEqual(scan.missingCountryCode, [
-    { contactId: "a", value: "333 1234567", suggestion: "+393331234567" },
+    { contactId: "a", value: "333 1234567", suggestion: "+39 333 123 4567" },
     { contactId: "b", value: "12", suggestion: undefined },
   ]);
   assert.equal(scan.scannedAt, "2026-10-03T12:00:00.000Z");

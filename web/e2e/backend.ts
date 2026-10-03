@@ -40,6 +40,8 @@ export class FakeBackend {
   nextScan?: CleanupScan;
   cleanupActions: CleanupActionSummary[] = [];
   mergeRequests: MergeRequest[] = [];
+  /** Bodies of the shared-number and country-code actions, by route. */
+  cleanupRequests: { route: string; body: any }[] = [];
   /** Error code the next merge fails with. */
   mergeError?: string;
   /** Answer of "Check for updates". */
@@ -168,6 +170,31 @@ export class FakeBackend {
       const id = `merge-${this.cleanupActions.length + 1}`;
       this.cleanupActions.unshift({ id, kind: "merge", at: new Date().toISOString(), title: this.cleanupScan!.contacts[body.keepId].name ?? "", contacts: group.contactIds.length });
       return route.fulfill({ json: { actionId: id, summary: this.cleanupSummary() } });
+    }
+    const numbers = /^\/api\/cleanup\/(keep_number|mark_shared|group|fix_country_codes)$/.exec(pathname);
+    if (numbers) {
+      const scan = this.cleanupScan!;
+      this.cleanupRequests.push({ route: numbers[1], body });
+      const shared = scan.sharedNumbers.find((n) => n.e164 === body.e164);
+      scan.sharedNumbers = scan.sharedNumbers.filter((n) => n !== shared || numbers[1] === "fix_country_codes" || (numbers[1] === "mark_shared" && body.shared === false));
+      if (numbers[1] === "mark_shared") {
+        scan.markedShared = body.shared === false ? (scan.markedShared ?? []).filter((n) => n !== body.e164) : [...(scan.markedShared ?? []), body.e164];
+        return route.fulfill({ json: this.cleanupSummary() });
+      }
+      if (numbers[1] === "group") {
+        const group = { id: "g-shared", contactIds: shared!.contactIds, reasons: ["phone" as const] };
+        scan.duplicates.unshift(group);
+        return route.fulfill({ json: { group, summary: this.cleanupSummary() } });
+      }
+      const id = `${numbers[1]}-${this.cleanupActions.length + 1}`;
+      if (numbers[1] === "keep_number") {
+        this.cleanupActions.unshift({ id, kind: "keepNumber", at: new Date().toISOString(), title: scan.contacts[body.contactId].name ?? "", number: body.e164, contacts: shared!.contactIds.length - 1 });
+        return route.fulfill({ json: { actionId: id, summary: this.cleanupSummary() } });
+      }
+      const fixed = body.items.length;
+      scan.missingCountryCode = scan.missingCountryCode.filter((m) => !body.items.some((i: { contactId: string; value: string }) => i.contactId === m.contactId && i.value === m.value));
+      this.cleanupActions.unshift({ id, kind: "countryCodes", at: new Date().toISOString(), title: String(fixed), contacts: fixed });
+      return route.fulfill({ json: { actionId: id, fixed, summary: this.cleanupSummary() } });
     }
     if (pathname === "/api/cleanup/actions") return route.fulfill({ json: this.cleanupActions });
     const undo = /^\/api\/cleanup\/actions\/([^/]+)\/undo$/.exec(pathname);

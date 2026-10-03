@@ -52,6 +52,7 @@ export function sampleScan(): CleanupScan {
     c("people/n2", "Davide Gallo", { phones: [{ value: "02 1234 5678", e164: "+390212345678" }] }),
   ];
   return {
+    markedShared: [],
     scannedAt: new Date(Date.now() - 2 * 60_000).toISOString(),
     totalContacts: 1248,
     region: "IT",
@@ -70,9 +71,10 @@ export function sampleScan(): CleanupScan {
       { e164: "+393283097537", contactIds: ["people/l1", "people/c1"] },
     ],
     missingCountryCode: [
-      { contactId: "people/d2", value: "347 100 2000", suggestion: "+393471002000" },
-      { contactId: "people/n1", value: "333 1234567", suggestion: "+393331234567" },
-      { contactId: "people/n2", value: "02 1234 5678", suggestion: "+390212345678" },
+      { contactId: "people/d2", value: "347 100 2000", suggestion: "+39 347 100 2000" },
+      { contactId: "people/n1", value: "333 1234567", suggestion: "+39 333 123 4567" },
+      { contactId: "people/n2", value: "02 1234 5678", suggestion: "+39 02 1234 5678" },
+      { contactId: "people/n2", value: "12", suggestion: undefined },
     ],
   };
 }

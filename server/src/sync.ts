@@ -11,6 +11,9 @@ import { saveRun } from "./runs";
 import { PhotoSource } from "./sources/types";
 import { whatsappSource } from "./sources/whatsapp";
 import { gravatarSource } from "./sources/gravatar";
+import { getPrefs } from "./cleanup/store";
+import { inferRegion, toE164Digits } from "./phone";
+import { SimpleContact } from "./interfaces";
 
 const knownSources: SourceId[] = ["whatsapp", "gravatar"];
 
@@ -36,6 +39,16 @@ export function requestedSources(options: SyncOptions, whatsapp: Client | undefi
   });
 }
 
+/**
+ * Numbers marked as shared in Clean up belong to several people, so no
+ * photo is matched through them.
+ */
+export function withoutSharedNumbers(contacts: SimpleContact[], shared: string[], region?: Parameters<typeof toE164Digits>[1]): SimpleContact[] {
+  if (!shared.length) return contacts;
+  const skip = new Set(shared.map((n) => n.replace(/\D/g, "")));
+  return contacts.map((c) => ({ ...c, numbers: c.numbers.filter((n) => !skip.has(toE164Digits(n, region) ?? n.replace(/\D/g, ""))) }));
+}
+
 export async function initSync(id: string, syncOptions: SyncOptions) {
   const ws: WebSocket = getFromCache(id, "ws");
   const whatsappClient: Client | undefined = getFromCache(id, "whatsapp");
@@ -47,7 +60,8 @@ export async function initSync(id: string, syncOptions: SyncOptions) {
   try {
     const result = await runSync(
       {
-        listContacts: () => listContacts(gAuth),
+        listContacts: async () =>
+          withoutSharedNumbers(await listContacts(gAuth), getPrefs(id).sharedNumbers, inferRegion(whatsappClient?.info?.wid?.user)),
         currentPhoto: downloadContactPhoto,
         setPhoto: (contactId, photo) => updateContactPhoto(gAuth, contactId, photo),
       },

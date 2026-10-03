@@ -149,7 +149,7 @@ export function scanContacts(contacts: CleanupContact[], options: ScanOptions = 
   const missingCountryCode: MissingCountryCode[] = contacts.flatMap((c) =>
     c.phones
       .filter((p) => !hasCountryCode(p.value))
-      .map((p) => ({ contactId: c.id, value: p.value, suggestion: p.e164 }))
+      .map((p) => ({ contactId: c.id, value: p.value, suggestion: p.e164 ? parsePhoneNumberFromString(p.e164)?.formatInternational() : undefined }))
   );
 
   const involved = new Set([
