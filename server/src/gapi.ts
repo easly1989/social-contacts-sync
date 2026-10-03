@@ -1,4 +1,8 @@
-import { google, Auth, people_v1 } from "googleapis";
+import { auth as googleAuth, people as peopleApi, people_v1 } from "@googleapis/people";
+
+// The standalone People API client: the full `googleapis` package bundles
+// every Google API (200+ MB) while only this one is used.
+export type OAuth2Client = InstanceType<typeof googleAuth.OAuth2>;
 
 import { SimpleContact } from "./interfaces";
 import { Base64 } from "./types";
@@ -9,7 +13,7 @@ export function generateGoogleAuthUrl(
   redirectUri: string,
   state: string
 ): string {
-  const oauth2Client = new google.auth.OAuth2(
+  const oauth2Client = new googleAuth.OAuth2(
     process.env.GOOGLE_CLIENT_ID,
     process.env.GOOGLE_CLIENT_SECRET,
     redirectUri
@@ -25,8 +29,8 @@ export function generateGoogleAuthUrl(
 export async function getOAuth2ClientFromCode(
   code: string,
   redirectUri: string
-): Promise<Auth.OAuth2Client> {
-  const oauth2Client = new google.auth.OAuth2(
+): Promise<OAuth2Client> {
+  const oauth2Client = new googleAuth.OAuth2(
     process.env.GOOGLE_CLIENT_ID,
     process.env.GOOGLE_CLIENT_SECRET,
     redirectUri
@@ -37,9 +41,9 @@ export async function getOAuth2ClientFromCode(
 }
 
 export async function listContacts(
-  auth: Auth.OAuth2Client
+  auth: OAuth2Client
 ): Promise<SimpleContact[]> {
-  const people: people_v1.People = google.people({ version: "v1", auth });
+  const people: people_v1.People = peopleApi({ version: "v1", auth });
 
   let simpleContacts: SimpleContact[] = [];
   let nextPageToken = "";
@@ -85,11 +89,11 @@ export async function listContacts(
 }
 
 export async function updateContactPhoto(
-  auth: Auth.OAuth2Client,
+  auth: OAuth2Client,
   resourceName: string,
   photo: Base64
 ): Promise<void> {
-  const people: people_v1.People = google.people({ version: "v1", auth });
+  const people: people_v1.People = peopleApi({ version: "v1", auth });
 
   try {
     await people.people.updateContactPhoto({

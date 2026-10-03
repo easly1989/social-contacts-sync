@@ -1,10 +1,9 @@
 import WebSocket from "ws";
-import { Auth } from "googleapis";
 import { RateLimiter } from "limiter";
 import { Client } from "whatsapp-web.js";
 
 import { EventType, SyncOptions } from "../../interfaces/api";
-import { listContacts, updateContactPhoto } from "./gapi";
+import { listContacts, OAuth2Client, updateContactPhoto } from "./gapi";
 import { downloadFile, loadContacts } from "./whatsapp";
 import { sendEvent, sendMessageAndWait } from "./ws";
 import { SimpleContact } from "./interfaces";
@@ -27,7 +26,7 @@ export async function initSync(id: string, syncOptions: SyncOptions) {
 
   const ws: WebSocket = getFromCache(id, "ws");
   const whatsappClient: Client = getFromCache(id, "whatsapp");
-  const gAuth: Auth.OAuth2Client = getFromCache(id, "gauth");
+  const gAuth: OAuth2Client = getFromCache(id, "gauth");
 
   let googleContacts: SimpleContact[];
   let whatsappContacts: Map<string, string>;
