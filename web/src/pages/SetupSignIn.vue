@@ -22,6 +22,16 @@ async function refresh(): Promise<void> {
     .catch(() => ({}));
 }
 
+async function signOut(): Promise<void> {
+  await fetch("/api/desktop/google_sign_out", {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: "{}",
+  });
+  account.value = undefined;
+}
+
 function signIn(): void {
   waiting.value = true;
   window.location.href = "/api/google_auth_start?return=" + encodeURIComponent("/setup/signin?connected=1");
@@ -50,6 +60,7 @@ watch(() => route.query.connected, refresh);
         </div>
         <CircleCheck class="size-6 text-success" />
       </div>
+      <button v-if="account" type="button" class="btn btn-ghost btn-xs mt-2 text-base-content/60" @click="signOut">{{ $t("setup.signin.signOut") }}</button>
       <div v-else-if="waiting" class="mt-8 rounded-box border border-base-300 p-6">
         <span class="loading loading-dots loading-md text-primary"></span>
         <div class="mt-2 font-semibold">{{ $t("setup.signin.waiting") }}</div>

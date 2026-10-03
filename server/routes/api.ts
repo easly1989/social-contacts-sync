@@ -15,6 +15,7 @@ import { enforcePayments } from "../src/config";
 import { checkPurchase } from "../src/payments";
 import { consumeOAuthState, createOAuthState } from "../src/oauthState";
 import { desktopMode, safeReturnPath } from "../src/desktop";
+import { hasSavedWhatsAppSession, persistGoogleAuth } from "../src/desktopSession";
 import { sendEvent } from "../src/ws";
 
 // Based on https://github.com/HenningM/express-ws/issues/86
@@ -22,6 +23,9 @@ const router = express.Router({ mergeParams: true });
 patch(router);
 
 function cleanup(sessionID: string) {
+  // The desktop app's session lives as long as the app.
+  if (desktopMode) return;
+
   /*
     Cleanup the session and client objects.
     This is done with a timeout to prevent cleanup on websocket disconnect
@@ -67,9 +71,10 @@ router.ws("/ws", (ws: WebSocket, req: Request) => {
 // Used by route guard
 router.get("/status", async (req: Request, res: Response) => {
   let whatsappConnected = false;
+  const whatsappClient = getFromCache(req.sessionID, "whatsapp");
   try {
     whatsappConnected =
-      (await getFromCache(req.sessionID, "whatsapp")?.getState()) ===
+      (await whatsappClient?.getState()) ===
       WAState.CONNECTED;
   } catch {}
 
@@ -78,6 +83,8 @@ router.get("/status", async (req: Request, res: Response) => {
     googleConnected: getFromCache(req.sessionID, "gauth") !== undefined,
     enforcePayments,
     desktop: desktopMode,
+    whatsappStarting: Boolean(whatsappClient) && !whatsappConnected,
+    whatsappSaved: hasSavedWhatsAppSession(),
     googleConfigured: Boolean(process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET),
     purchased: enforcePayments
       ? getFromCache(req.sessionID, "purchased")
@@ -88,6 +95,14 @@ router.get("/status", async (req: Request, res: Response) => {
 });
 
 router.get("/init_whatsapp", async (req: Request, res: Response) => {
+  // Desktop: keep a session that is starting or reconnecting, and show the
+  // page that asks again the QR code it is waiting on.
+  if (desktopMode && getFromCache(req.sessionID, "whatsapp") !== undefined) {
+    const qr = getFromCache(req.sessionID, "whatsapp_qr");
+    if (qr) sendEvent(getFromCache(req.sessionID, "ws"), EventType.WhatsAppQR, qr);
+    return res.send("{}");
+  }
+
   if (getFromCache(req.sessionID, "whatsapp") !== undefined)
     try {
       const client = getFromCache(req.sessionID, "whatsapp");
@@ -126,6 +141,7 @@ router.get("/google_callback", async (req: Request, res: Response) => {
     const gAuth = await getOAuth2ClientFromCode(code as string, redirectUri);
     const { sessionId: sessionID, returnTo = "/options" } = signIn;
     setInCache(sessionID, "gauth", gAuth);
+    persistGoogleAuth(gAuth);
     if (sessionID === req.sessionID) return res.redirect(returnTo);
 
     // Signed in from another browser: move the app window on and tell the

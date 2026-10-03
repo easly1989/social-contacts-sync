@@ -5,6 +5,7 @@ export enum EventType {
   SyncProgress = "sync_progress",
   SyncConfirm = "sync_confirm",
   SyncPhotoConfirm = "sync_photo_confirm",
+  WhatsAppError = "whatsapp_error",
 }
 
 export interface Event {
@@ -30,6 +31,10 @@ export interface SessionStatus {
   desktop?: boolean;
   /** Google OAuth client ID and secret are set. */
   googleConfigured?: boolean;
+  /** A WhatsApp session is starting (QR not scanned yet, or reconnecting). */
+  whatsappStarting?: boolean;
+  /** The desktop app has a saved WhatsApp link to reconnect with. */
+  whatsappSaved?: boolean;
 }
 
 export interface GoogleAccount {

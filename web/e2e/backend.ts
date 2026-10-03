@@ -54,6 +54,14 @@ export class FakeBackend {
         return route.fulfill({ status: this.credentialsResult.status, json: this.credentialsResult.body });
       }
       if (pathname === "/api/google_account") return route.fulfill({ json: this.account });
+      if (pathname === "/api/desktop/google_sign_out") {
+        this.status.googleConnected = false;
+        return route.fulfill({ json: { ok: true } });
+      }
+      if (pathname === "/api/desktop/whatsapp_unlink") {
+        Object.assign(this.status, { whatsappConnected: false, whatsappSaved: false, whatsappStarting: false });
+        return route.fulfill({ json: { ok: true } });
+      }
       if (pathname === "/api/check_purchase")
         return route.fulfill({ json: { purchased: this.status.purchased } });
       return route.fulfill({ json: {} });
@@ -75,6 +83,10 @@ export class FakeBackend {
 
   requested(pathname: string): Request | undefined {
     return this.requests.find((r) => new URL(r.url()).pathname === pathname);
+  }
+
+  count(pathname: string): number {
+    return this.requests.filter((r) => new URL(r.url()).pathname === pathname).length;
   }
 }
 

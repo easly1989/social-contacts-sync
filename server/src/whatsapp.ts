@@ -1,6 +1,7 @@
 import {
   Client,
   Contact,
+  LocalAuth,
   MessageMedia,
   RemoteWebCacheOptions,
 } from "whatsapp-web.js";
@@ -8,7 +9,8 @@ import {
 import { sendEvent } from "./ws";
 import { Base64 } from "./types";
 import { EventType } from "../../interfaces/api";
-import { deleteFromCache, getFromCache } from "./cache";
+import { deleteFromCache, getFromCache, setInCache } from "./cache";
+import { whatsappDataPath } from "./desktopSession";
 import { verifyPurchaseWAId } from "./payments";
 import { toE164Digits } from "./phone";
 
@@ -30,9 +32,13 @@ const clientOptions = {
 };
 
 export function initWhatsApp(id: string): Client {
-  const client = new Client(clientOptions);
+  // The desktop app keeps the linked-device session between runs.
+  const dataPath = whatsappDataPath();
+  const client = new Client({ ...clientOptions, ...(dataPath ? { authStrategy: new LocalAuth({ dataPath }) } : {}) });
 
   client.on("qr", (qr: string) => {
+    // Kept so a page opened later can show the current code.
+    setInCache(id, "whatsapp_qr", qr);
     let ws = getFromCache(id, "ws");
     sendEvent(ws, EventType.WhatsAppQR, qr);
   });
@@ -43,6 +49,7 @@ export function initWhatsApp(id: string): Client {
   });
 
   client.on("ready", async () => {
+    deleteFromCache(id, "whatsapp_qr");
     let ws = getFromCache(id, "ws");
     const email = getFromCache(id, "email");
 
@@ -73,7 +80,13 @@ export function initWhatsApp(id: string): Client {
 
   client.on("auth_failure", (msg) => { });
 
-  client.initialize();
+  client.initialize().catch((e: unknown) => {
+    // E.g. no usable browser: tell the page instead of leaving it waiting.
+    console.error("WhatsApp Web failed to start:", e);
+    if (getFromCache(id, "whatsapp") === client) deleteFromCache(id, "whatsapp");
+    deleteFromCache(id, "whatsapp_qr");
+    sendEvent(getFromCache(id, "ws"), EventType.WhatsAppError, e instanceof Error ? e.message : String(e));
+  });
   return client;
 }
 

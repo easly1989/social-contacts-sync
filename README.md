@@ -140,6 +140,19 @@ checks it with Google and saves it to `config.env` (`GOOGLE_CLIENT_ID`,
 WhatsApp Web runs in an installed Chrome, Edge, Chromium or Brave. If none is
 installed, Chrome for Testing is downloaded once into the data folder.
 
+The app stays signed in between launches. The data folder holds:
+
+| Item | Contents |
+|---|---|
+| `google-token.enc` | the Google sign-in, encrypted (AES-256-GCM) |
+| `secret.key` | the key for `google-token.enc`, itself protected by the OS keychain (DPAPI, Keychain, libsecret/kwallet) |
+| `whatsapp/` | WhatsApp's linked-device session |
+| `logs/` | server logs |
+
+Sign out of Google or unlink WhatsApp from the setup steps. Deleting the
+folder removes everything. A portable folder copied to another computer can't
+decrypt the Google sign-in; you just sign in again.
+
 ### Downloads and updates
 
 Every `v*` tag publishes a [GitHub Release](https://github.com/easly1989/social-contacts-sync/releases)
