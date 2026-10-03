@@ -80,6 +80,24 @@ The server build uses TypeScript 7. Both packages also install Microsoft's
 because `ts-node` and `vue-tsc` still require the JavaScript compiler API.
 The `@typescript/native` alias provides TypeScript 7's `tsc` executable.
 
+## Keeping the Fork in Sync
+
+This repository is a fork of [guyzyl/whatsapp-contact-sync](https://github.com/guyzyl/whatsapp-contact-sync).
+The [`Upstream sync`](.github/workflows/upstream-sync.yml) workflow checks the
+original repository on the 1st of every month (or when started by hand from the
+Actions tab):
+
+- new upstream commits are merged into the `upstream-sync` branch and offered as
+  a pull request labelled `upstream-sync` — merge it with **Create a merge
+  commit**, never squash or rebase;
+- if the merge conflicts, an issue labelled `upstream-conflict` lists the files
+  and the commands to resolve it; it closes itself after the next clean sync.
+
+The workflow needs a fine-grained personal access token stored as the
+`UPSTREAM_SYNC_TOKEN` repository secret, limited to this repository with
+read & write access to Contents, Pull requests, Issues and Workflows (pull
+requests opened with the default `GITHUB_TOKEN` would not run CI).
+
 ## Build Docker Images
 
 There are 3 different `Dockerfile`s for this app:

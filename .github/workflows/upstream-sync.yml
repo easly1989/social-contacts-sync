@@ -1,0 +1,41 @@
+name: Upstream sync
+
+# Offers changes from the original repository as a pull request. The upstream
+# project changes rarely, so a monthly check is enough; run it by hand from the
+# Actions tab when you know something landed.
+on:
+  schedule:
+    - cron: "23 6 1 * *" # 06:23 UTC on the 1st of every month
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: upstream-sync
+
+jobs:
+  sync:
+    name: Merge upstream into upstream-sync
+    runs-on: ubuntu-latest
+    # Further forks of this fork should not open PRs against themselves.
+    if: github.repository == 'easly1989/whatsapp-contact-sync'
+    steps:
+      # PRs opened with the default GITHUB_TOKEN do not trigger CI, so the sync
+      # uses a fine-grained token (Contents, Pull requests, Issues, Workflows).
+      - name: Check token
+        env:
+          TOKEN: ${{ secrets.UPSTREAM_SYNC_TOKEN }}
+        run: |
+          if [ -z "$TOKEN" ]; then
+            echo "::error::Add the UPSTREAM_SYNC_TOKEN secret (see README, 'Keeping the fork in sync')."
+            exit 1
+          fi
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.UPSTREAM_SYNC_TOKEN }}
+      - name: Sync
+        env:
+          GH_TOKEN: ${{ secrets.UPSTREAM_SYNC_TOKEN }}
+        run: .github/scripts/upstream-sync.sh
