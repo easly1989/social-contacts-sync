@@ -15,6 +15,8 @@ import expressWinston from "express-winston";
 import router from "./routes/api";
 import desktopRouter from "./routes/desktop";
 import { crossSiteGuard, desktopMode } from "./src/desktop";
+import { desktopSessionId, restoreDesktopSession } from "./src/desktopSession";
+import { initWhatsApp } from "./src/whatsapp";
 
 let ews = expressWs(express());
 const mStore = MemoryStore(session);
@@ -55,6 +57,8 @@ app.use(
     },
     resave: false,
     saveUninitialized: true,
+    // The desktop app has a single user: every request shares one session.
+    ...(desktopMode ? { genid: () => desktopSessionId } : {}),
   })
 );
 
@@ -89,7 +93,10 @@ app.disable("etag");
 // Keep the public API under /api in every environment. The Vite development
 // proxy forwards this prefix unchanged, matching the production container.
 const routePrefix = process.env.ROUTE_PREFIX || "/api";
-if (desktopMode) app.use(routePrefix, crossSiteGuard);
+if (desktopMode) {
+  app.use(routePrefix, crossSiteGuard);
+  restoreDesktopSession(initWhatsApp);
+}
 app.use(routePrefix, router);
 app.use(routePrefix, desktopRouter);
 

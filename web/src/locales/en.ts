@@ -45,6 +45,9 @@ export default {
     waiting: "Waiting…",
   },
   whatsapp: {
+    error: "WhatsApp Web couldn't start.",
+    retry: "Try again",
+    reconnecting: "Reconnecting to WhatsApp…",
     title: "Link WhatsApp",
     lead: "Social Contacts Sync connects as a linked device, like WhatsApp Web, to read your contacts' profile photos.",
     step1: "Open WhatsApp on your phone",
@@ -133,6 +136,7 @@ export default {
       },
     },
     signin: {
+      signOut: "Sign out",
       title: "Sign in to Google Contacts",
       lead: "Your browser opens Google's sign-in page. Choose the account whose contacts you want to update and allow access to contacts.",
       button: "Sign in with Google",
@@ -145,6 +149,8 @@ export default {
       note: "Your Google sign-in stays on this computer.",
     },
     sources: {
+      unlink: "Unlink",
+      reconnecting: "Reconnecting…",
       title: "Where should photos come from?",
       lead: "Connect at least one source. More are on their way.",
       byPhone: "Matched by phone number",

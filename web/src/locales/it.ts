@@ -47,6 +47,9 @@ const it: typeof en = {
     waiting: "In attesa…",
   },
   whatsapp: {
+    error: "Impossibile avviare WhatsApp Web.",
+    retry: "Riprova",
+    reconnecting: "Riconnessione a WhatsApp…",
     title: "Collega WhatsApp",
     lead: "Social Contacts Sync si collega come dispositivo, come WhatsApp Web, per leggere le foto profilo dei tuoi contatti.",
     step1: "Apri WhatsApp sul telefono",
@@ -135,6 +138,7 @@ const it: typeof en = {
       },
     },
     signin: {
+      signOut: "Esci",
       title: "Accedi a Google Contatti",
       lead: "Il browser apre la pagina di accesso di Google. Scegli l'account di cui vuoi aggiornare i contatti e consenti l'accesso ai contatti.",
       button: "Accedi con Google",
@@ -147,6 +151,8 @@ const it: typeof en = {
       note: "L'accesso a Google resta su questo computer.",
     },
     sources: {
+      unlink: "Scollega",
+      reconnecting: "Riconnessione…",
       title: "Da dove prendiamo le foto?",
       lead: "Collega almeno una sorgente. Altre sono in arrivo.",
       byPhone: "Abbinate per numero di telefono",

@@ -120,3 +120,10 @@ export async function getAccountSummary(auth: OAuth2Client): Promise<GoogleAccou
     totalContacts: connections.data.totalItems ?? undefined,
   };
 }
+
+/** A client for previously saved tokens (desktop app restart). */
+export function oauth2ClientFromTokens(tokens: object): OAuth2Client {
+  const oauth2Client = new googleAuth.OAuth2(process.env.GOOGLE_CLIENT_ID, process.env.GOOGLE_CLIENT_SECRET);
+  oauth2Client.setCredentials(tokens);
+  return oauth2Client;
+}

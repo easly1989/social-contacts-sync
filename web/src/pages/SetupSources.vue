@@ -10,11 +10,13 @@ import { SessionStatus } from "../../../interfaces/api";
 // Mockup 1.4 in issue #8. Telegram and Gravatar arrive in later steps.
 const router = useRouter();
 const whatsappConnected = ref<boolean>();
+const whatsappSaved = ref(false);
 let poll: number | undefined;
 
 async function checkStatus(): Promise<void> {
   const status: SessionStatus = await fetch("/api/status", { credentials: "include" }).then((r) => r.json());
   whatsappConnected.value = status.whatsappConnected;
+  whatsappSaved.value = Boolean(status.whatsappSaved);
   if (status.whatsappConnected) window.clearInterval(poll);
 }
 
@@ -25,7 +27,21 @@ function onConnecting(): void {
   poll = window.setInterval(checkStatus, 2000);
 }
 
-onMounted(checkStatus);
+async function unlink(): Promise<void> {
+  await fetch("/api/desktop/whatsapp_unlink", {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: "{}",
+  });
+  await checkStatus();
+}
+
+onMounted(async () => {
+  await checkStatus();
+  // A saved link reconnects on its own, without a QR code: watch for it.
+  if (whatsappSaved.value && !whatsappConnected.value) onConnecting();
+});
 onUnmounted(() => window.clearInterval(poll));
 </script>
 
@@ -44,7 +60,7 @@ onUnmounted(() => window.clearInterval(poll));
           </div>
         </div>
         <template v-if="whatsappConnected === false">
-          <div class="mt-4"><WhatsAppLink :size="200" @connecting="onConnecting" /></div>
+          <div class="mt-4"><WhatsAppLink :size="200" :reconnecting="whatsappSaved" @connecting="onConnecting" /></div>
           <ol class="mt-4 list-inside list-decimal space-y-1 text-xs text-base-content/70">
             <li>{{ $t("whatsapp.step1") }}</li>
             <li>{{ $t("whatsapp.step2") }}</li>
@@ -52,7 +68,9 @@ onUnmounted(() => window.clearInterval(poll));
           </ol>
         </template>
         <div v-else-if="whatsappConnected" class="mt-auto flex items-center gap-1.5 pt-6 text-sm font-medium text-success">
-          <CircleCheck class="size-4" />{{ $t("setup.sources.connected") }}
+          <CircleCheck class="size-4" /><span>{{ $t("setup.sources.connected") }}</span>
+          <span class="flex-1"></span>
+          <button type="button" class="btn btn-ghost btn-xs text-base-content/60" @click="unlink">{{ $t("setup.sources.unlink") }}</button>
         </div>
         <div v-else class="grid flex-1 place-items-center py-10"><span class="loading loading-spinner"></span></div>
       </section>

@@ -123,3 +123,55 @@ test.describe("desktop guards", () => {
     await expect(page.getByRole("heading", { name: "What should change?" })).toBeVisible();
   });
 });
+
+test.describe("returning users", () => {
+  test.beforeEach(() => {
+    Object.assign(backend.status, { googleConfigured: true, googleConnected: true });
+  });
+
+  test("a saved WhatsApp link reconnects without a QR code", async ({ page }) => {
+    Object.assign(backend.status, { whatsappSaved: true, whatsappStarting: true });
+    await page.goto("/setup/sources");
+    await expect(page.getByText("Reconnecting to WhatsApp…")).toBeVisible();
+    await screenshot(page, "15-setup-reconnecting");
+    Object.assign(backend.status, { whatsappConnected: true, whatsappStarting: false });
+    await expect(page.getByText("Connected", { exact: true })).toBeVisible({ timeout: 10_000 });
+  });
+
+  test("with everything connected, Continue goes straight to the options", async ({ page }) => {
+    backend.status.whatsappConnected = true;
+    await page.goto("/");
+    await page.getByRole("link", { name: "Continue" }).click();
+    await expect(page).toHaveURL(/\/options$/);
+  });
+
+  test("WhatsApp can be unlinked, which shows a new QR code", async ({ page }) => {
+    backend.status.whatsappConnected = true;
+    await page.goto("/setup/sources");
+    await page.getByRole("button", { name: "Unlink" }).click();
+    await expect.poll(() => backend.requested("/api/desktop/whatsapp_unlink")).toBeTruthy();
+    await expect.poll(() => backend.requested("/api/init_whatsapp")).toBeTruthy();
+    await backend.send(EventType.WhatsAppQR, "2@new-qr");
+    await expect(page.locator("canvas")).toBeVisible();
+  });
+
+  test("Google can be signed out", async ({ page }) => {
+    await page.goto("/setup/signin");
+    await expect(page.getByRole("status")).toContainText("Connected as ada@example.com");
+    await page.getByRole("button", { name: "Sign out" }).click();
+    await expect(page.getByRole("button", { name: "Sign in with Google" })).toBeVisible();
+    expect(backend.requested("/api/desktop/google_sign_out")!.method()).toBe("POST");
+  });
+});
+
+test("a WhatsApp start failure is shown with a retry", async ({ page }) => {
+  Object.assign(backend.status, { googleConfigured: true, googleConnected: true });
+  await page.goto("/setup/sources");
+  await expect.poll(() => backend.count("/api/init_whatsapp")).toBe(1);
+  await backend.send(EventType.WhatsAppError, "Browser was not found at the configured path");
+  await expect(page.getByRole("alert")).toContainText("WhatsApp Web couldn't start.");
+  await expect(page.getByRole("alert")).toContainText("Browser was not found");
+  await screenshot(page, "16-whatsapp-error");
+  await page.getByRole("button", { name: "Try again" }).click();
+  await expect.poll(() => backend.count("/api/init_whatsapp")).toBe(2);
+});

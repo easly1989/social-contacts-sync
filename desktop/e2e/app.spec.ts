@@ -28,9 +28,12 @@ let app: ElectronApplication;
 let page: Page;
 let dataDir: string;
 
-async function launch(config: string, env: NodeJS.ProcessEnv = {}): Promise<void> {
-  dataDir = fs.mkdtempSync(path.join(os.tmpdir(), "scs-desktop-"));
-  fs.writeFileSync(path.join(dataDir, "config.env"), config);
+async function launch(config: string | undefined, env: NodeJS.ProcessEnv = {}): Promise<void> {
+  // `undefined` relaunches on the previous data folder.
+  if (config !== undefined) {
+    dataDir = fs.mkdtempSync(path.join(os.tmpdir(), "scs-desktop-"));
+    fs.writeFileSync(path.join(dataDir, "config.env"), config);
+  }
   app = await electron.launch({
     executablePath: packagedApp(),
     // CI runners (and root in containers) lack the Chromium sandbox setup.
@@ -142,4 +145,18 @@ test("setup: without credentials the wizard saves them to config.env", async () 
   } finally {
     google.close();
   }
+});
+
+test("setup: the data key and settings survive a restart", async () => {
+  await launch("GOOGLE_CLIENT_ID=1-abc.apps.googleusercontent.com\nGOOGLE_CLIENT_SECRET=s\n");
+  const keyFile = path.join(dataDir, "secret.key");
+  const key = fs.readFileSync(keyFile, "utf8");
+  expect(JSON.parse(key)).toMatchObject({ v: 1 });
+  const config = fs.readFileSync(path.join(dataDir, "config.env"), "utf8");
+  await app.close();
+
+  await launch(undefined);
+  await expect(page.getByRole("heading", { name: "Give every contact a face." })).toBeVisible();
+  expect(fs.readFileSync(keyFile, "utf8")).toBe(key);
+  expect(fs.readFileSync(path.join(dataDir, "config.env"), "utf8")).toBe(config);
 });

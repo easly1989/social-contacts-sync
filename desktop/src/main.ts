@@ -1,9 +1,10 @@
 import fs from "fs";
 import path from "path";
-import { app, BrowserWindow, Menu, nativeTheme, Notification, shell, utilityProcess, UtilityProcess } from "electron";
+import { app, BrowserWindow, Menu, nativeTheme, Notification, safeStorage, shell, utilityProcess, UtilityProcess } from "electron";
 
 import { resolvePaths } from "./paths";
 import { loadConfig, saveConfig } from "./config";
+import { loadDataKey } from "./dataKey";
 import { downloadBrowser, findInstalledBrowser } from "./browser";
 import { findUpdate, isPrerelease, updateStrategy } from "./updates";
 
@@ -145,6 +146,8 @@ async function start(): Promise<void> {
       SCS_DESKTOP: "1",
       WEB_ROOT: path.join(app.getAppPath(), "web"),
       SCS_DATA_DIR: paths.dataDir,
+      // Encrypts saved sign-ins; see dataKey.ts.
+      SCS_DATA_KEY: loadDataKey(path.join(paths.dataDir, "secret.key"), safeStorage),
     });
     const origin = `http://127.0.0.1:${port}`;
     keepLinksOutside(win, origin);

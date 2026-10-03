@@ -20,8 +20,11 @@ export function nextDesktopStep(status: SessionStatus): string {
 export function desktopRedirect(path: string, status: SessionStatus): string | undefined {
   if (path === "/" || path === "/privacy") return undefined;
   if (!status.googleConfigured) return path === "/setup/google" ? undefined : "/setup/google";
-  // The web flow's entry points lead into the wizard instead.
-  if (["/contribute", "/whatsapp", "/gauth"].includes(path)) {
+  // The web flow's entry points lead into the wizard instead; returning
+  // users with everything connected go straight to the options.
+  if (["/contribute", "/whatsapp"].includes(path)) return nextDesktopStep(status);
+  // WhatsApp's "linked" redirect: stay on the sources step to finish setup.
+  if (path === "/gauth") {
     const next = nextDesktopStep(status);
     return next === "/options" ? "/setup/sources" : next;
   }

@@ -2,14 +2,19 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { fork, ChildProcess } from "child_process";
 import http from "http";
+import crypto from "crypto";
+import fs from "fs";
 import { AddressInfo } from "net";
+import os from "os";
 import path from "path";
+
+import { encrypt } from "./secretStore";
 
 // Boots the real server in desktop mode in a child process.
 async function startDesktopServer(env: NodeJS.ProcessEnv): Promise<{ base: string; child: ChildProcess }> {
   const child = fork(path.join(__dirname, "..", "main.ts"), [], {
     execArgv: ["--require", "ts-node/register/transpile-only"],
-    env: { ...process.env, ...env, SCS_DESKTOP: "1", HOST: "127.0.0.1", PORT: "0", GOOGLE_CLIENT_ID: "", GOOGLE_CLIENT_SECRET: "" },
+    env: { ...process.env, SCS_DESKTOP: "1", HOST: "127.0.0.1", PORT: "0", GOOGLE_CLIENT_ID: "", GOOGLE_CLIENT_SECRET: "", ...env },
     stdio: ["ignore", "pipe", "pipe", "ipc"],
   });
   const port = await new Promise<number>((resolve, reject) => {
@@ -92,5 +97,40 @@ test("desktop mode", async (t) => {
     const response = await fetch(`${base}/google_auth_start?return=/setup/signin`, { redirect: "manual" });
     assert.equal(response.status, 302);
     assert.match(response.headers.get("location") ?? "", /^https:\/\/accounts\.google\.com\//);
+  });
+});
+
+test("desktop mode keeps the Google sign-in across restarts", async (t) => {
+  const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), "scs-session-"));
+  const key = crypto.randomBytes(32);
+  fs.writeFileSync(
+    path.join(dataDir, "google-token.enc"),
+    encrypt({ refresh_token: "1//saved", access_token: "ya29.saved", expiry_date: Date.now() + 3600_000 }, key)
+  );
+
+  const { base, child } = await startDesktopServer({
+    SCS_DATA_DIR: dataDir,
+    SCS_DATA_KEY: key.toString("base64"),
+    GOOGLE_CLIENT_ID: "1-abc.apps.googleusercontent.com",
+    GOOGLE_CLIENT_SECRET: "s",
+  });
+  t.after(() => child.kill());
+  const status = async () => (await (await fetch(`${base}/status`)).json()) as Record<string, unknown>;
+
+  await t.test("a saved token signs the app in at start", async () => {
+    const s = await status();
+    assert.equal(s.googleConnected, true);
+    assert.equal(s.whatsappSaved, false);
+  });
+
+  await t.test("signing out forgets the saved token", async () => {
+    const response = await fetch(`${base}/desktop/google_sign_out`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: "{}",
+    });
+    assert.deepEqual(await response.json(), { ok: true });
+    assert.equal((await status()).googleConnected, false);
+    assert.equal(fs.existsSync(path.join(dataDir, "google-token.enc")), false);
   });
 });

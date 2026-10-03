@@ -1,8 +1,11 @@
 import { LRUCache } from "lru-cache";
 
+import { desktopMode } from "./desktop";
+
+// The desktop app's single session must not expire while the app runs.
 export let sessionCache: LRUCache<string, object> = new LRUCache({
   max: 4096,
-  ttl: 60 * 60 * 1000,
+  ttl: desktopMode ? 0 : 60 * 60 * 1000,
 });
 
 export function getFromCache(id: string, key: string): any {
