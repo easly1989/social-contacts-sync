@@ -104,14 +104,22 @@ jobs:
           pattern: packages-*
           merge-multiple: true
           path: dist
-      - name: Create the release
+      - name: Create the release, or add the packages to it
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           version="${GITHUB_REF_NAME#v}"
           prerelease=()
           [[ "$version" == *-* ]] && prerelease=(--prerelease)
-          gh release create "$GITHUB_REF_NAME" dist/* \
-            --repo "$GITHUB_REPOSITORY" \
-            --title "Social Contacts Sync $version" \
-            --generate-notes "${prerelease[@]}"
+          # A release drafted by hand on GitHub (which also creates the tag)
+          # keeps its title and notes; it gets the packages and the
+          # pre-release flag.
+          if gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release upload "$GITHUB_REF_NAME" dist/* --repo "$GITHUB_REPOSITORY" --clobber
+            gh release edit "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --draft=false "${prerelease[@]}"
+          else
+            gh release create "$GITHUB_REF_NAME" dist/* \
+              --repo "$GITHUB_REPOSITORY" \
+              --title "Social Contacts Sync $version" \
+              --generate-notes "${prerelease[@]}"
+          fi

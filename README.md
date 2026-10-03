@@ -263,7 +263,9 @@ decrypt the Google sign-in; you just sign in again.
 Every `v*` tag publishes a [GitHub Release](https://github.com/easly1989/social-contacts-sync/releases)
 built by the [release workflow](.github/workflows/release.yml), which launches each
 package before publishing it (tags with a `-`, like `v0.2.0-beta.1`, are
-pre-releases). See [Download](#download) for the packages and how they update.
+pre-releases). Push the tag, or draft the release on GitHub with a new tag:
+the workflow then adds the packages to it and keeps its title and notes. See
+[Download](#download) for the packages and how they update.
 
 ### Desktop Development
 
