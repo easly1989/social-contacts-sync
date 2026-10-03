@@ -160,3 +160,69 @@ test("setup: the data key and settings survive a restart", async () => {
   expect(fs.readFileSync(keyFile, "utf8")).toBe(key);
   expect(fs.readFileSync(path.join(dataDir, "config.env"), "utf8")).toBe(config);
 });
+
+// Settings → Data & privacy, Updates and General talk to the main process
+// through the local server (issue #24).
+async function api(method: "GET" | "POST", route: string, body?: unknown): Promise<{ status: number; json: any }> {
+  return page.evaluate(
+    async ({ method, route, body }) => {
+      const response = await fetch(`/api/desktop/${route}`, {
+        method,
+        headers: body === undefined ? {} : { "Content-Type": "application/json" },
+        body: body === undefined ? undefined : JSON.stringify(body),
+      });
+      return { status: response.status, json: await response.json() };
+    },
+    { method, route, body }
+  );
+}
+
+test("settings: the app reports its folders and version", async () => {
+  const { status, json } = await api("GET", "info");
+  expect(status).toBe(200);
+  expect(json).toMatchObject({
+    version: await app.evaluate(({ app }) => app.getVersion()),
+    dataDir: path.resolve(dataDir),
+    configFile: path.join(path.resolve(dataDir), "config.env"),
+    portable: false,
+    rememberSignIns: true,
+    history: { runs: 0, bytes: 0 },
+  });
+  expect(["windows-installer", "deb", "macos", "development"]).toContain(json.packageKind);
+});
+
+test("settings: Open shows the data folder in the file manager", async () => {
+  await app.evaluate(({ shell }) => {
+    (globalThis as Opened).opened = [];
+    shell.openPath = async (target: string) => {
+      (globalThis as Opened).opened!.push(target);
+      return "";
+    };
+  });
+  expect((await api("POST", "open", { target: "data" })).json).toEqual({ ok: true });
+  expect(await app.evaluate(() => (globalThis as Opened).opened)).toEqual([path.resolve(dataDir)]);
+});
+
+test("settings: Remember sign-ins is saved to config.env", async () => {
+  expect((await api("POST", "remember_sign_ins", { enabled: false })).json).toEqual({ ok: true, rememberSignIns: false });
+  const config = fs.readFileSync(path.join(dataDir, "config.env"), "utf8");
+  expect(config).toMatch(/^REMEMBER_SIGN_INS=false$/m);
+  expect(config).toContain("GOOGLE_CLIENT_ID=test-client.apps.googleusercontent.com");
+  expect((await api("GET", "info")).json.rememberSignIns).toBe(false);
+});
+
+test("settings: Delete all local data removes the files and restarts", async () => {
+  await app.evaluate(({ app }) => {
+    const calls: string[] = [];
+    (globalThis as { calls?: string[] }).calls = calls;
+    app.relaunch = () => void calls.push("relaunch");
+    app.exit = () => void calls.push("exit");
+  });
+  fs.mkdirSync(path.join(dataDir, "history", "run-1"), { recursive: true });
+  expect((await api("POST", "delete_all_data", { confirm: true })).json).toEqual({ ok: true });
+
+  await expect.poll(() => app.evaluate(() => (globalThis as { calls?: string[] }).calls), { timeout: 15_000 }).toEqual(["relaunch", "exit"]);
+  expect(fs.existsSync(path.join(dataDir, "config.env"))).toBe(false);
+  expect(fs.existsSync(path.join(dataDir, "history"))).toBe(false);
+  expect(fs.existsSync(path.join(dataDir, "secret.key"))).toBe(false);
+});

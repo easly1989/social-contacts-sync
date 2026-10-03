@@ -140,17 +140,22 @@ checks it with Google and saves it to `config.env` (`GOOGLE_CLIENT_ID`,
 WhatsApp Web runs in an installed Chrome, Edge, Chromium or Brave. If none is
 installed, Chrome for Testing is downloaded once into the data folder.
 
-The app stays signed in between launches. The data folder holds:
+The app stays signed in between launches, unless you turn off
+**Settings → General → Remember sign-ins** (`REMEMBER_SIGN_INS=false` in
+`config.env`). The data folder holds:
 
 | Item | Contents |
 |---|---|
 | `google-token.enc` | the Google sign-in, encrypted (AES-256-GCM) |
 | `secret.key` | the key for `google-token.enc`, itself protected by the OS keychain (DPAPI, Keychain, libsecret/kwallet) |
 | `whatsapp/` | WhatsApp's linked-device session |
+| `history/` | past syncs with the photos they changed, for reports and undo (kept 90 days) |
 | `logs/` | server logs |
 
-Sign out of Google or unlink WhatsApp from the setup steps. Deleting the
-folder removes everything. A portable folder copied to another computer can't
+**Settings** shows these folders and lets you sign out of Google, unlink
+WhatsApp, check for updates, and **delete all local data**: that signs out,
+removes `config.env` and the data folder, and restarts the app on the setup
+wizard. Your Google contacts are not touched. A portable folder copied to another computer can't
 decrypt the Google sign-in; you just sign in again.
 
 ### Downloads and updates

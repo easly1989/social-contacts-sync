@@ -30,6 +30,8 @@ const routes: RouteRecordRaw[] = [
   { path: "/app/sync/run", component: () => import("./pages/app/SyncRun.vue") },
   { path: "/app/history", component: () => import("./pages/app/History.vue") },
   { path: "/app/history/:id", component: () => import("./pages/app/RunReport.vue") },
+  { path: "/app/settings", redirect: "/app/settings/general" },
+  { path: "/app/settings/:section", component: () => import("./pages/app/Settings.vue") },
   { path: "/options", redirect: "/app/sync" },
   {
     path: "/sync",

@@ -15,6 +15,9 @@ const template = (sessionSecret: string) => `# Social Contacts Sync settings. Ed
 GOOGLE_CLIENT_ID=
 GOOGLE_CLIENT_SECRET=
 
+# Keep Google and WhatsApp signed in between launches (saved encrypted).
+REMEMBER_SIGN_INS=true
+
 # Signs the cookie between the app window and its local server.
 # Generated on first start; changing it only signs you out.
 SESSION_SECRET=${sessionSecret}

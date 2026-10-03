@@ -124,3 +124,26 @@ export interface SyncOptions {
   manual_sync?: string; // "true" or "false" (since converted to string via query params)
   sources?: string; // comma-separated SourceId list in priority order; default "whatsapp"
 }
+
+/** Result of the desktop app's latest update check. */
+export interface UpdateCheck {
+  status: "current" | "available" | "ready" | "error" | "disabled";
+  version?: string;
+  /** Release page of `version`. */
+  url?: string;
+  checkedAt: string;
+}
+
+/** GET /api/desktop/info (desktop app only), for Settings. */
+export interface DesktopInfo {
+  version: string;
+  packageKind: "windows-installer" | "windows-portable" | "appimage" | "deb" | "macos" | "development";
+  dataDir: string;
+  configFile: string;
+  portable: boolean;
+  /** How this package updates: by itself, by notifying, or not at all (development). */
+  updates: "auto" | "notify" | "none";
+  lastUpdate?: UpdateCheck;
+  rememberSignIns: boolean;
+  history: { runs: number; bytes: number };
+}

@@ -13,10 +13,18 @@ interface ParentPort {
 }
 
 // Electron's channel to the main process; absent outside the desktop app.
-const parentPort = (process as unknown as { parentPort?: ParentPort }).parentPort;
+// Tests stand in for the main process over Node's IPC (SCS_DESKTOP_IPC=1).
+const parentPort: ParentPort | undefined =
+  (process as unknown as { parentPort?: ParentPort }).parentPort ??
+  (process.env.SCS_DESKTOP_IPC === "1" && process.send
+    ? {
+        postMessage: (message) => process.send!(message),
+        on: (_event, listener) => process.on("message", (data) => listener({ data })),
+      }
+    : undefined);
 
 let nextRequestId = 1;
-const pendingRequests = new Map<number, { resolve: () => void; reject: (error: Error) => void }>();
+const pendingRequests = new Map<number, { resolve: (value: any) => void; reject: (error: Error) => void }>();
 
 parentPort?.on("message", ({ data }) => {
   if (data?.type !== "reply") return;
@@ -24,21 +32,29 @@ parentPort?.on("message", ({ data }) => {
   if (!request) return;
   pendingRequests.delete(data.id);
   if (data.error) request.reject(new Error(data.error));
-  else request.resolve();
+  else request.resolve(data.value);
 });
 
-/** Asks the desktop app, the only writer of config.env, to save `values`. */
-export function saveDesktopConfig(values: Record<string, string>): Promise<void> {
+/**
+ * Asks the desktop app's main process, which owns config.env, the file
+ * manager, updates and the data folder (see desktop/src/main.ts).
+ */
+export function askDesktop<T = void>(request: string, payload: Record<string, unknown> = {}, timeoutMs = 5000): Promise<T> {
   const port = parentPort;
   if (!port) return Promise.reject(new Error("Not running inside the desktop app."));
   const id = nextRequestId++;
   return new Promise((resolve, reject) => {
     pendingRequests.set(id, { resolve, reject });
-    port.postMessage({ type: "save-config", id, values });
+    port.postMessage({ type: "request", id, request, payload });
     setTimeout(() => {
       if (pendingRequests.delete(id)) reject(new Error("The desktop app did not answer."));
-    }, 5000);
+    }, timeoutMs);
   });
+}
+
+/** Asks the desktop app, the only writer of config.env, to save `values`. */
+export function saveDesktopConfig(values: Record<string, string>): Promise<void> {
+  return askDesktop("save-config", { values });
 }
 
 /**

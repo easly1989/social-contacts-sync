@@ -1,12 +1,13 @@
 import fs from "fs";
 import path from "path";
-import { app, BrowserWindow, Menu, nativeTheme, Notification, safeStorage, shell, utilityProcess, UtilityProcess } from "electron";
+import { app, BrowserWindow, Menu, nativeTheme, Notification, safeStorage, session, shell, utilityProcess, UtilityProcess } from "electron";
 
 import { resolvePaths } from "./paths";
 import { loadConfig, saveConfig } from "./config";
 import { loadDataKey } from "./dataKey";
 import { downloadBrowser, findInstalledBrowser } from "./browser";
-import { findUpdate, isPrerelease, updateStrategy } from "./updates";
+import { findUpdate, isPrerelease, releasesRepo, updateStrategy } from "./updates";
+import { deleteLocalData, packageKind, writableValues } from "./localData";
 
 const productName = "Social Contacts Sync";
 
@@ -25,6 +26,7 @@ if (paths.portable) app.setPath("userData", path.join(paths.dataDir, "electron")
 
 let mainWindow: BrowserWindow | undefined;
 let server: UtilityProcess | undefined;
+let serverLog: fs.WriteStream | undefined;
 let quitting = false;
 
 function background(): string {
@@ -66,6 +68,7 @@ function startServer(env: NodeJS.ProcessEnv): Promise<number> {
   const logFile = path.join(logDir, "server.log");
   if (fs.existsSync(logFile)) fs.renameSync(logFile, path.join(logDir, "server.previous.log"));
   const log = fs.createWriteStream(logFile);
+  serverLog = log;
 
   server = utilityProcess.fork(path.join(__dirname, "server-process.js"), [], {
     env,
@@ -76,9 +79,9 @@ function startServer(env: NodeJS.ProcessEnv): Promise<number> {
   server.stderr?.pipe(log);
 
   return new Promise((resolve, reject) => {
-    server!.on("message", (message: { type?: string; port?: number; id?: number; values?: Record<string, string> }) => {
+    server!.on("message", (message: ServerMessage) => {
       if (message?.type === "ready" && message.port) resolve(message.port);
-      if (message?.type === "save-config") server!.postMessage(saveFromServer(message.id, message.values));
+      else if (message?.type === "request") void answer(message);
     });
     server!.on("exit", (code) => {
       if (!quitting) reject(new Error(`The local server stopped (code ${code}). See ${logFile}.`));
@@ -86,17 +89,74 @@ function startServer(env: NodeJS.ProcessEnv): Promise<number> {
   });
 }
 
-// Keys the server may write to config.env (from the setup wizard).
-const writableKeys = new Set(["GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET"]);
+interface ServerMessage {
+  type?: string;
+  port?: number;
+  id?: number;
+  request?: string;
+  payload?: Record<string, unknown>;
+}
 
-function saveFromServer(id: number | undefined, values: Record<string, string> = {}): { type: "reply"; id?: number; error?: string } {
-  const entries = Object.entries(values).filter(([key, value]) => writableKeys.has(key) && typeof value === "string");
+/*
+  Requests from the server process (setup wizard and Settings). The main
+  process is the only one that writes config.env, opens the file manager,
+  checks for updates and deletes the app's data.
+*/
+async function answer({ id, request, payload = {} }: ServerMessage): Promise<void> {
+  const reply = (value?: unknown, error?: string) => server?.postMessage({ type: "reply", id, value, error });
   try {
-    saveConfig(paths.configFile, Object.fromEntries(entries));
-    return { type: "reply", id };
+    switch (request) {
+      case "save-config":
+        saveConfig(paths.configFile, writableValues(payload.values));
+        return reply();
+      case "info":
+        return reply(desktopInfo());
+      case "open":
+        if (payload.target === "config") shell.showItemInFolder(paths.configFile);
+        else await shell.openPath(paths.dataDir);
+        return reply();
+      case "check-updates":
+        return reply(await checkForUpdates());
+      case "delete-data":
+        reply();
+        return void deleteDataAndRestart();
+      default:
+        return reply(undefined, `Unknown request: ${request}`);
+    }
   } catch (error) {
-    return { type: "reply", id, error: error instanceof Error ? error.message : String(error) };
+    reply(undefined, error instanceof Error ? error.message : String(error));
   }
+}
+
+function desktopInfo() {
+  return {
+    version: app.getVersion(),
+    packageKind: packageKind(process.platform, process.env, app.isPackaged),
+    dataDir: paths.dataDir,
+    configFile: paths.configFile,
+    portable: paths.portable,
+    updates: updateStrategy(process.platform, process.env, app.isPackaged),
+    lastUpdate,
+  };
+}
+
+/** "Delete all local data" in Settings: back to a first start. */
+async function deleteDataAndRestart(): Promise<void> {
+  quitting = true;
+  // Give the server a moment to answer the page before it stops.
+  await new Promise((resolve) => setTimeout(resolve, 500));
+  server?.kill();
+  // Let the server process exit and release its files first.
+  serverLog?.end();
+  await new Promise((resolve) => setTimeout(resolve, 1000));
+  await session.defaultSession.clearStorageData().catch(() => undefined);
+  const skipped = deleteLocalData(paths);
+  if (skipped.length) console.warn("Could not delete:", skipped);
+  // The portable .exe and the AppImage run from a temporary copy that goes
+  // away when this process exits: relaunch the file the user started.
+  const launcher = process.env.PORTABLE_EXECUTABLE_FILE || process.env.APPIMAGE;
+  app.relaunch(launcher ? { execPath: launcher, args: process.argv.slice(1) } : undefined);
+  app.exit(0);
 }
 
 function keepLinksOutside(win: BrowserWindow, origin: string): void {
@@ -144,6 +204,7 @@ async function start(): Promise<void> {
       CHROME_PATH: chromePath,
       HOST: "127.0.0.1",
       SCS_DESKTOP: "1",
+      SCS_APP_VERSION: app.getVersion(),
       WEB_ROOT: path.join(app.getAppPath(), "web"),
       SCS_DATA_DIR: paths.dataDir,
       // Encrypts saved sign-ins; see dataKey.ts.
@@ -158,30 +219,61 @@ async function start(): Promise<void> {
   }
 }
 
-async function checkForUpdates(): Promise<void> {
+interface UpdateResult {
+  status: "current" | "available" | "ready" | "error" | "disabled";
+  version?: string;
+  url?: string;
+  checkedAt: string;
+}
+
+let lastUpdate: UpdateResult | undefined;
+let notified = false;
+
+function releasePage(version: string): string {
+  return `https://github.com/${releasesRepo}/releases/tag/v${version}`;
+}
+
+/** Checks at start-up and from Settings; the result is shown in the app. */
+async function checkForUpdates(): Promise<UpdateResult> {
   const strategy = updateStrategy(process.platform, process.env, app.isPackaged);
+  const checkedAt = new Date().toISOString();
   try {
     if (strategy === "auto") {
       // Downloads in the background and installs when the app quits.
       const { autoUpdater } = await import("electron-updater");
       autoUpdater.allowPrerelease = isPrerelease(app.getVersion());
-      await autoUpdater.checkForUpdatesAndNotify({
+      if (!autoUpdater.listenerCount("update-downloaded")) {
+        autoUpdater.on("update-downloaded", (info) => {
+          lastUpdate = { status: "ready", version: info.version, url: releasePage(info.version), checkedAt: new Date().toISOString() };
+        });
+      }
+      if (lastUpdate?.status === "ready") return lastUpdate;
+      const result = await autoUpdater.checkForUpdatesAndNotify({
         title: `${productName} {version} is ready`,
         body: "It will be installed when you close the app.",
       });
+      const version = result?.isUpdateAvailable ? result.updateInfo.version : undefined;
+      lastUpdate = version ? { status: "available", version, url: releasePage(version), checkedAt } : { status: "current", checkedAt };
     } else if (strategy === "notify") {
       const update = await findUpdate(app.getVersion());
-      if (!update || !Notification.isSupported()) return;
-      const notification = new Notification({
-        title: `${productName} ${update.version} is available`,
-        body: "Click to open the download page.",
-      });
-      notification.on("click", () => void shell.openExternal(update.url));
-      notification.show();
+      lastUpdate = update ? { status: "available", ...update, checkedAt } : { status: "current", checkedAt };
+      if (update && !notified && Notification.isSupported()) {
+        notified = true;
+        const notification = new Notification({
+          title: `${productName} ${update.version} is available`,
+          body: "Click to open the download page.",
+        });
+        notification.on("click", () => void shell.openExternal(update.url));
+        notification.show();
+      }
+    } else {
+      lastUpdate = { status: "disabled", checkedAt };
     }
   } catch (error) {
     console.warn("Update check failed:", error);
+    lastUpdate = { status: "error", checkedAt };
   }
+  return lastUpdate;
 }
 
 app.on("second-instance", () => {

@@ -17,14 +17,35 @@ export const desktopSessionId = "desktop";
 
 const googleTokenFile = "google-token";
 
+/** "Remember sign-ins" in Settings (REMEMBER_SIGN_INS in config.env), on by default. */
+export function rememberSignIns(): boolean {
+  return process.env.REMEMBER_SIGN_INS !== "false";
+}
+
+function canSave(): boolean {
+  return desktopMode && secretStoreAvailable() && rememberSignIns();
+}
+
 /** Saves the tokens now and whenever Google refreshes them. */
 export function persistGoogleAuth(client: OAuth2Client): void {
-  if (!desktopMode || !secretStoreAvailable()) return;
-  writeSecret(googleTokenFile, client.credentials);
+  if (!desktopMode) return;
+  if (canSave()) writeSecret(googleTokenFile, client.credentials);
   client.on("tokens", (tokens) => {
     // Refreshes usually omit the refresh token: keep the saved one.
-    writeSecret(googleTokenFile, { ...readSecret<object>(googleTokenFile), ...tokens });
+    if (canSave()) writeSecret(googleTokenFile, { ...readSecret<object>(googleTokenFile), ...client.credentials, ...tokens });
   });
+}
+
+/**
+ * Applies a new "Remember sign-ins" choice: turning it off deletes the saved
+ * Google sign-in (WhatsApp's session goes at the next start, as the running
+ * client still uses it); turning it on saves the current Google sign-in.
+ */
+export function setRememberSignIns(sessionId: string, enabled: boolean): void {
+  process.env.REMEMBER_SIGN_INS = String(enabled);
+  if (!enabled) return deleteSecret(googleTokenFile);
+  const client: OAuth2Client | undefined = getFromCache(sessionId, "gauth");
+  if (client && canSave()) writeSecret(googleTokenFile, client.credentials);
 }
 
 export function restoreGoogleAuth(): OAuth2Client | undefined {
@@ -57,6 +78,12 @@ export function hasSavedWhatsAppSession(): boolean {
 
 /** Called once at startup in desktop mode. */
 export function restoreDesktopSession(startWhatsApp: (sessionId: string) => unknown): void {
+  if (!rememberSignIns()) {
+    deleteSecret(googleTokenFile);
+    const dir = whatsappDataPath();
+    if (dir) fs.rmSync(dir, { recursive: true, force: true });
+    return;
+  }
   const gAuth = restoreGoogleAuth();
   if (gAuth) setInCache(desktopSessionId, "gauth", gAuth);
   if (hasSavedWhatsAppSession()) setInCache(desktopSessionId, "whatsapp", startWhatsApp(desktopSessionId));

@@ -51,6 +51,12 @@ export function storedLocale(): string | null {
   return read(localeKey);
 }
 
-export function storeLocale(locale: string): void {
-  write(localeKey, locale);
+/** `null` forgets the choice, so the system language applies again. */
+export function storeLocale(locale: string | null): void {
+  if (locale !== null) return write(localeKey, locale);
+  try {
+    localStorage.removeItem(localeKey);
+  } catch {
+    // Nothing stored then.
+  }
 }
