@@ -133,11 +133,12 @@ Settings live in a `config.env` file, which you can edit by hand:
 | Windows installer, `.deb`, macOS | the OS user data folder |
 | any | the folder in `SCS_DATA_DIR`, if set |
 
-Until the setup wizard lands, put the client ID and secret of a Google OAuth
-client of type **Desktop app** into `config.env` (`GOOGLE_CLIENT_ID`,
-`GOOGLE_CLIENT_SECRET`). WhatsApp Web runs in an installed Chrome, Edge,
-Chromium or Brave. If none is installed, Chrome for Testing is downloaded once
-into the data folder.
+On first start a setup wizard guides you through creating your own Google
+OAuth client (type **Desktop app**, see [the guide](docs/google-setup.md)),
+checks it with Google and saves it to `config.env` (`GOOGLE_CLIENT_ID`,
+`GOOGLE_CLIENT_SECRET`); then you sign in to Google and link WhatsApp.
+WhatsApp Web runs in an installed Chrome, Edge, Chromium or Brave. If none is
+installed, Chrome for Testing is downloaded once into the data folder.
 
 ### Downloads and updates
 

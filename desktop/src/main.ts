@@ -3,7 +3,7 @@ import path from "path";
 import { app, BrowserWindow, Menu, nativeTheme, Notification, shell, utilityProcess, UtilityProcess } from "electron";
 
 import { resolvePaths } from "./paths";
-import { loadConfig } from "./config";
+import { loadConfig, saveConfig } from "./config";
 import { downloadBrowser, findInstalledBrowser } from "./browser";
 import { findUpdate, isPrerelease, updateStrategy } from "./updates";
 
@@ -75,13 +75,27 @@ function startServer(env: NodeJS.ProcessEnv): Promise<number> {
   server.stderr?.pipe(log);
 
   return new Promise((resolve, reject) => {
-    server!.on("message", (message: { type?: string; port?: number }) => {
+    server!.on("message", (message: { type?: string; port?: number; id?: number; values?: Record<string, string> }) => {
       if (message?.type === "ready" && message.port) resolve(message.port);
+      if (message?.type === "save-config") server!.postMessage(saveFromServer(message.id, message.values));
     });
     server!.on("exit", (code) => {
       if (!quitting) reject(new Error(`The local server stopped (code ${code}). See ${logFile}.`));
     });
   });
+}
+
+// Keys the server may write to config.env (from the setup wizard).
+const writableKeys = new Set(["GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET"]);
+
+function saveFromServer(id: number | undefined, values: Record<string, string> = {}): { type: "reply"; id?: number; error?: string } {
+  const entries = Object.entries(values).filter(([key, value]) => writableKeys.has(key) && typeof value === "string");
+  try {
+    saveConfig(paths.configFile, Object.fromEntries(entries));
+    return { type: "reply", id };
+  } catch (error) {
+    return { type: "reply", id, error: error instanceof Error ? error.message : String(error) };
+  }
 }
 
 function keepLinksOutside(win: BrowserWindow, origin: string): void {
@@ -128,6 +142,7 @@ async function start(): Promise<void> {
       ...config,
       CHROME_PATH: chromePath,
       HOST: "127.0.0.1",
+      SCS_DESKTOP: "1",
       WEB_ROOT: path.join(app.getAppPath(), "web"),
       SCS_DATA_DIR: paths.dataDir,
     });

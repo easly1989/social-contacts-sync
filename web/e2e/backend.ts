@@ -2,7 +2,7 @@ import { mkdirSync } from "fs";
 import path from "path";
 import { Page, Request, WebSocketRoute, expect } from "@playwright/test";
 
-import { EventType, SessionStatus } from "../../interfaces/api";
+import { EventType, GoogleAccount, SessionStatus } from "../../interfaces/api";
 
 /**
  * A fake backend living in the browser: `/api/*` requests are answered from
@@ -17,6 +17,11 @@ export class FakeBackend {
     purchased: true,
   };
   requests: Request[] = [];
+  /** Answer of the desktop credentials endpoint. */
+  credentialsResult: { status: number; body: unknown } = { status: 200, body: { ok: true } };
+  account: GoogleAccount = { email: "ada@example.com", name: "Ada Lovelace", totalContacts: 1248 };
+  /** When false, Google sign-in "opens in the system browser" and nothing happens here. */
+  signInCompletes = true;
   received: { type: string; data: any }[] = [];
   private socket?: WebSocketRoute;
 
@@ -39,9 +44,16 @@ export class FakeBackend {
       // Stands in for the whole Google consent round trip, which ends with the
       // backend's callback redirecting to /options.
       if (pathname === "/api/google_auth_start") {
+        if (!this.signInCompletes) return route.fulfill({ status: 204 });
         this.status.googleConnected = true;
-        return route.fulfill({ status: 302, headers: { location: "/options" } });
+        const back = new URL(request.url()).searchParams.get("return") ?? "/options";
+        return route.fulfill({ status: 302, headers: { location: back } });
       }
+      if (pathname === "/api/desktop/google_credentials") {
+        if (this.credentialsResult.status === 200) this.status.googleConfigured = true;
+        return route.fulfill({ status: this.credentialsResult.status, json: this.credentialsResult.body });
+      }
+      if (pathname === "/api/google_account") return route.fulfill({ json: this.account });
       if (pathname === "/api/check_purchase")
         return route.fulfill({ json: { purchased: this.status.purchased } });
       return route.fulfill({ json: {} });

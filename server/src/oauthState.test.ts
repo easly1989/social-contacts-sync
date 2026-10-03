@@ -5,7 +5,12 @@ import { consumeOAuthState, createOAuthState } from "./oauthState";
 
 test("a state resolves to the session that created it", () => {
   const state = createOAuthState("session-a");
-  assert.equal(consumeOAuthState(state), "session-a");
+  assert.deepEqual(consumeOAuthState(state), { sessionId: "session-a", returnTo: undefined });
+});
+
+test("a state remembers where to return", () => {
+  const state = createOAuthState("session-a", "/setup/signin?connected=1");
+  assert.equal(consumeOAuthState(state)?.returnTo, "/setup/signin?connected=1");
 });
 
 test("a state can only be used once", () => {
@@ -16,7 +21,7 @@ test("a state can only be used once", () => {
 
 test("states expire after ten minutes", () => {
   const now = 1_000_000;
-  const state = createOAuthState("session-a", now);
+  const state = createOAuthState("session-a", undefined, now);
   assert.equal(consumeOAuthState(state, now + 10 * 60 * 1000), undefined);
 });
 

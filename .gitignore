@@ -140,3 +140,4 @@ build
 web/e2e/.results/
 web/e2e/screenshots/
 playwright-report/
+test-results/

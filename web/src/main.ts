@@ -14,7 +14,8 @@ import { installAnalytics } from "./analytics";
 import { initWs } from "./services/ws";
 import { SessionStatus } from "../../interfaces/api";
 import { isbot } from "isbot";
-import { setEnforcePayments } from "./settings";
+import { applyStatus } from "./settings";
+import { desktopRedirect } from "./desktopFlow";
 
 const routes = [
   { path: "/", component: () => import("./pages/Home.vue") },
@@ -24,6 +25,10 @@ const routes = [
   { path: "/gauth", component: () => import("./pages/GoogleAuth.vue") },
   { path: "/options", component: () => import("./pages/Options.vue") },
   { path: "/sync", component: () => import("./pages/Sync.vue") },
+  // Desktop first-run wizard.
+  { path: "/setup/google", component: () => import("./pages/SetupGoogle.vue") },
+  { path: "/setup/signin", component: () => import("./pages/SetupSignIn.vue") },
+  { path: "/setup/sources", component: () => import("./pages/SetupSources.vue") },
 ];
 
 const router = createRouter({
@@ -45,7 +50,8 @@ router.beforeEach(
     const response = await fetch("/api/status", { credentials: "include" });
     const status: SessionStatus = await response.json();
 
-    setEnforcePayments(status.enforcePayments);
+    applyStatus(status);
+    if (status.desktop) return desktopRedirect(to.path, status);
 
     if (
       ["/whatsapp", "/sync", "/gauth", "/options"].includes(to.path) &&

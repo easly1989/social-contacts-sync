@@ -13,6 +13,8 @@ import winston from "winston";
 import expressWinston from "express-winston";
 
 import router from "./routes/api";
+import desktopRouter from "./routes/desktop";
+import { crossSiteGuard, desktopMode } from "./src/desktop";
 
 let ews = expressWs(express());
 const mStore = MemoryStore(session);
@@ -87,7 +89,9 @@ app.disable("etag");
 // Keep the public API under /api in every environment. The Vite development
 // proxy forwards this prefix unchanged, matching the production container.
 const routePrefix = process.env.ROUTE_PREFIX || "/api";
+if (desktopMode) app.use(routePrefix, crossSiteGuard);
 app.use(routePrefix, router);
+app.use(routePrefix, desktopRouter);
 
 // The production image puts Vite's built files in `server/public`. Serving
 // them from the same Express process keeps the API, WebSocket and browser on

@@ -10,25 +10,31 @@ import crypto from "crypto";
 */
 
 const ttl = 10 * 60 * 1000; // 10 minutes
-const pending = new Map<string, { sessionId: string; expires: number }>();
+export interface PendingSignIn {
+  sessionId: string;
+  /** App page to show after signing in, when not the default. */
+  returnTo?: string;
+}
+
+const pending = new Map<string, PendingSignIn & { expires: number }>();
 
 function purge(now: number): void {
   for (const [state, entry] of pending) if (entry.expires <= now) pending.delete(state);
 }
 
 /** Creates a state for a sign-in started by `sessionId`. */
-export function createOAuthState(sessionId: string, now = Date.now()): string {
+export function createOAuthState(sessionId: string, returnTo?: string, now = Date.now()): string {
   purge(now);
   const state = crypto.randomBytes(16).toString("hex");
-  pending.set(state, { sessionId, expires: now + ttl });
+  pending.set(state, { sessionId, returnTo, expires: now + ttl });
   return state;
 }
 
-/** Returns the session that created `state` and forgets it, or undefined. */
-export function consumeOAuthState(state: unknown, now = Date.now()): string | undefined {
+/** Returns the sign-in that created `state` and forgets it, or undefined. */
+export function consumeOAuthState(state: unknown, now = Date.now()): PendingSignIn | undefined {
   purge(now);
   if (typeof state !== "string") return undefined;
   const entry = pending.get(state);
   pending.delete(state);
-  return entry?.sessionId;
+  return entry && { sessionId: entry.sessionId, returnTo: entry.returnTo };
 }

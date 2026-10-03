@@ -14,6 +14,7 @@ import { deleteFromCache, getFromCache, setInCache } from "../src/cache";
 import { enforcePayments } from "../src/config";
 import { checkPurchase } from "../src/payments";
 import { consumeOAuthState, createOAuthState } from "../src/oauthState";
+import { desktopMode, safeReturnPath } from "../src/desktop";
 import { sendEvent } from "../src/ws";
 
 // Based on https://github.com/HenningM/express-ws/issues/86
@@ -76,6 +77,8 @@ router.get("/status", async (req: Request, res: Response) => {
     whatsappConnected,
     googleConnected: getFromCache(req.sessionID, "gauth") !== undefined,
     enforcePayments,
+    desktop: desktopMode,
+    googleConfigured: Boolean(process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET),
     purchased: enforcePayments
       ? getFromCache(req.sessionID, "purchased")
       : true,
@@ -98,7 +101,7 @@ router.get("/init_whatsapp", async (req: Request, res: Response) => {
 });
 
 router.get("/google_auth_start", (req: Request, res: Response) => {
-  const state = createOAuthState(req.sessionID);
+  const state = createOAuthState(req.sessionID, safeReturnPath(req.query.return));
   const redirectUri = `${req.protocol}://${req.get("host")}/api/google_callback`;
   const authUrl = generateGoogleAuthUrl(redirectUri, state);
   res.redirect(authUrl);
@@ -113,20 +116,21 @@ router.get("/google_callback", async (req: Request, res: Response) => {
 
   // The session that started the sign-in. In the desktop app the consent page
   // runs in the system browser, so this may not be the session of `req`.
-  const sessionID = consumeOAuthState(state);
-  if (!sessionID) {
+  const signIn = consumeOAuthState(state);
+  if (!signIn) {
     return res.redirect("/?error=invalid_state");
   }
 
   const redirectUri = `${req.protocol}://${req.get("host")}/api/google_callback`;
   try {
     const gAuth = await getOAuth2ClientFromCode(code as string, redirectUri);
+    const { sessionId: sessionID, returnTo = "/options" } = signIn;
     setInCache(sessionID, "gauth", gAuth);
-    if (sessionID === req.sessionID) return res.redirect("/options");
+    if (sessionID === req.sessionID) return res.redirect(returnTo);
 
     // Signed in from another browser: move the app window on and tell the
     // user they can go back to it.
-    sendEvent(getFromCache(sessionID, "ws"), EventType.Redirect, "/options");
+    sendEvent(getFromCache(sessionID, "ws"), EventType.Redirect, returnTo);
     res.send(signedInPage);
   } catch (e) {
     res.redirect("/?error=google_token_exchange_failed");

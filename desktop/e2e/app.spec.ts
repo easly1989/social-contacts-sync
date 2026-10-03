@@ -1,4 +1,5 @@
 import fs from "fs";
+import http from "http";
 import net from "net";
 import os from "os";
 import path from "path";
@@ -27,12 +28,9 @@ let app: ElectronApplication;
 let page: Page;
 let dataDir: string;
 
-test.beforeEach(async () => {
+async function launch(config: string, env: NodeJS.ProcessEnv = {}): Promise<void> {
   dataDir = fs.mkdtempSync(path.join(os.tmpdir(), "scs-desktop-"));
-  fs.writeFileSync(
-    path.join(dataDir, "config.env"),
-    "GOOGLE_CLIENT_ID=test-client.apps.googleusercontent.com\nGOOGLE_CLIENT_SECRET=test-secret\n"
-  );
+  fs.writeFileSync(path.join(dataDir, "config.env"), config);
   app = await electron.launch({
     executablePath: packagedApp(),
     // CI runners (and root in containers) lack the Chromium sandbox setup.
@@ -42,10 +40,16 @@ test.beforeEach(async () => {
       SCS_DATA_DIR: dataDir,
       // Any existing file skips the browser lookup/download; WhatsApp isn't started here.
       CHROME_PATH: process.execPath,
+      ...env,
     },
   });
   page = await app.firstWindow();
   await page.waitForURL(/^http:\/\/127\.0\.0\.1:\d+\/$/, { timeout: 30_000 });
+}
+
+test.beforeEach(async ({}, testInfo) => {
+  if (testInfo.title.startsWith("setup:")) return;
+  await launch("GOOGLE_CLIENT_ID=test-client.apps.googleusercontent.com\nGOOGLE_CLIENT_SECRET=test-secret\n");
 });
 
 test.afterEach(async () => {
@@ -106,4 +110,36 @@ test("Google sign-in opens in the system browser with a loopback redirect", asyn
   expect(url.searchParams.get("client_id")).toBe("test-client.apps.googleusercontent.com");
   // The app window itself never leaves the local server.
   expect(page.url().startsWith(origin)).toBe(true);
+});
+
+test("setup: without credentials the wizard saves them to config.env", async () => {
+  // Stands in for Google's token endpoint: accepts any client.
+  const google = http.createServer((_req, res) => {
+    res.writeHead(400, { "Content-Type": "application/json" });
+    res.end(JSON.stringify({ error: "invalid_grant" }));
+  });
+  await new Promise<void>((resolve) => google.listen(0, "127.0.0.1", resolve));
+  const port = (google.address() as net.AddressInfo).port;
+  try {
+    await launch("# no credentials yet\n", { SCS_GOOGLE_TOKEN_ENDPOINT: `http://127.0.0.1:${port}/token` });
+    await page.getByRole("link", { name: "Get started" }).click();
+    await expect(page.getByRole("heading", { name: "Connect your own Google project" })).toBeVisible();
+
+    await page.getByLabel("Client ID").fill("1234567890-abc.apps.googleusercontent.com");
+    await page.getByLabel("Client secret").fill("GOCSPX-desktop-test");
+    await page.getByRole("button", { name: "Check and save" }).click();
+    await expect(page.getByRole("status")).toHaveText("Credentials verified and saved.");
+
+    const config = fs.readFileSync(path.join(dataDir, "config.env"), "utf8");
+    expect(config).toContain("# no credentials yet");
+    expect(config).toContain("GOOGLE_CLIENT_ID=1234567890-abc.apps.googleusercontent.com");
+    expect(config).toContain("GOOGLE_CLIENT_SECRET=GOCSPX-desktop-test");
+    fs.mkdirSync(path.join(__dirname, "screenshots"), { recursive: true });
+    await page.screenshot({ path: path.join(__dirname, "screenshots", "desktop-setup-google.png") });
+
+    await page.getByRole("button", { name: "Continue" }).click();
+    await expect(page.getByRole("heading", { name: "Sign in to Google Contacts" })).toBeVisible();
+  } finally {
+    google.close();
+  }
 });

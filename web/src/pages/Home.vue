@@ -7,6 +7,7 @@ import IllustrationPortrait from "../components/IllustrationPortrait.vue";
 import { isWsReady } from "../services/ws";
 import { SessionStatus } from "../../../interfaces/api";
 import { track } from "../analytics";
+import { applyStatus } from "../settings";
 
 const sessionStatus = ref<SessionStatus>();
 const wsReady = ref(false);
@@ -24,7 +25,10 @@ onMounted(() => {
   isWsReady.then((value) => (wsReady.value = value));
   fetch("/api/status", { credentials: "include" })
     .then((res) => res.json())
-    .then((data) => (sessionStatus.value = data));
+    .then((data: SessionStatus) => {
+      sessionStatus.value = data;
+      applyStatus(data);
+    });
   track(`host_${window.location.host}`);
 });
 </script>

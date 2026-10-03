@@ -26,6 +26,17 @@ export interface SessionStatus {
   googleConnected: boolean;
   enforcePayments: boolean;
   purchased: boolean;
+  /** Running inside the desktop app. */
+  desktop?: boolean;
+  /** Google OAuth client ID and secret are set. */
+  googleConfigured?: boolean;
+}
+
+export interface GoogleAccount {
+  email?: string;
+  name?: string;
+  photoUrl?: string;
+  totalContacts?: number;
 }
 
 export interface SyncOptions {

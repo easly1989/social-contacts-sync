@@ -5,6 +5,7 @@ import { auth as googleAuth, people as peopleApi, people_v1 } from "@googleapis/
 export type OAuth2Client = InstanceType<typeof googleAuth.OAuth2>;
 
 import { SimpleContact } from "./interfaces";
+import { GoogleAccount } from "../../interfaces/api";
 import { Base64 } from "./types";
 
 const pageSize: number = 250;
@@ -103,4 +104,19 @@ export async function updateContactPhoto(
   } catch (e) {
     console.error(e);
   }
+}
+
+/** The signed-in account and the size of its address book. */
+export async function getAccountSummary(auth: OAuth2Client): Promise<GoogleAccount> {
+  const people = peopleApi({ version: "v1", auth });
+  const [me, connections] = await Promise.all([
+    people.people.get({ resourceName: "people/me", personFields: "names,emailAddresses,photos" }),
+    people.people.connections.list({ resourceName: "people/me", pageSize: 1, personFields: "names" }),
+  ]);
+  return {
+    email: me.data.emailAddresses?.find((e) => e.metadata?.primary)?.value ?? me.data.emailAddresses?.[0]?.value ?? undefined,
+    name: me.data.names?.[0]?.displayName ?? undefined,
+    photoUrl: me.data.photos?.find((p) => !p.default)?.url ?? undefined,
+    totalContacts: connections.data.totalItems ?? undefined,
+  };
 }
