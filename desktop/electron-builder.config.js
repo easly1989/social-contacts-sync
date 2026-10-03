@@ -46,6 +46,10 @@ module.exports = {
     identity: "-",
     hardenedRuntime: false,
     notarize: false,
+    // Native add-ons that ship prebuilt binaries for every platform (pulled
+    // in by the Telegram client): the universal app keeps them as they are
+    // instead of trying to merge the x64 and arm64 copies.
+    x64ArchFiles: "**/node_modules/{bufferutil,utf-8-validate}/prebuilds/**",
   },
   publish: [{ provider: "github", owner: "easly1989", repo: "social-contacts-sync" }],
 };
