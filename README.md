@@ -1,4 +1,4 @@
-# WhatsApp Contact Sync
+# Social Contacts Sync
 
 <p align="center">
     <img src="web/public/logo.png" alt="logo" width="150"/>
@@ -13,6 +13,11 @@
         />
     </a>
 </p>
+
+> Social Contacts Sync is a fork of
+> [WhatsApp Contact Sync](https://github.com/guyzyl/whatsapp-contact-sync) by
+> Guy Zylberberg, extended towards more sources and a desktop app. All credit
+> for the original project goes to its author.
 
 A simple web app for syncing the profile pictures from WhatsApp to Google Contacts.\
 The app matches contacts based on their phone numbers, and utilizes
@@ -124,8 +129,8 @@ There are 3 different `Dockerfile`s for this app:
 In order to build and run the complete app, you need to run the following commands:
 
 ```bash
-docker build -t whasync .
-docker run --rm -it -p 80:10000 --env-file server/.env whasync
+docker build -t social-contacts-sync .
+docker run --rm -it -p 80:10000 --env-file server/.env social-contacts-sync
 ```
 
 ## Deploy on Render
@@ -135,7 +140,7 @@ Registry after every successful push to `main`. Make the resulting package
 public in GitHub's package settings, then configure a Render **Web Service**
 from the image:
 
-- Image: `ghcr.io/easly1989/whatsapp-contact-sync:latest`
+- Image: `ghcr.io/easly1989/social-contacts-sync:latest`
 - Health check path: `/api/`
 - `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET`: your Google OAuth values
 - `SESSION_SECRET`: a long, random secret
@@ -152,6 +157,6 @@ always-on host for long synchronizations.
 In order to build the seperate images for the backend and frontend, execute the following commands from the projects main directory:
 
 ```bash
-docker build -t whasync-backend --env-file server/.env -f server/Dockerfile .
-docker build -t whasync-web -f web/Dockerfile .
+docker build -t social-contacts-sync-backend --env-file server/.env -f server/Dockerfile .
+docker build -t social-contacts-sync-web -f web/Dockerfile .
 ```

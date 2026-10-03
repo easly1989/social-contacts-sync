@@ -13,7 +13,12 @@ test.beforeEach(async ({ page }) => {
 
 test("home page introduces the app and enables Get Started once connected", async ({ page }) => {
   await page.goto("/");
-  await expect(page.getByRole("heading", { name: "WhatsApp Contact Sync" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Social Contacts Sync" })).toBeVisible();
+  // The original project keeps its credit.
+  await expect(page.getByRole("link", { name: "WhatsApp Contact Sync" })).toHaveAttribute(
+    "href",
+    "https://github.com/guyzyl/whatsapp-contact-sync"
+  );
   const start = page.getByRole("link", { name: "Get Started" });
   await expect(start).not.toHaveClass(/btn-disabled/);
   await screenshot(page, "01-home");
