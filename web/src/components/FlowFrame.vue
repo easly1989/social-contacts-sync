@@ -4,7 +4,7 @@ import { Check } from "lucide-vue-next";
 
 import BrandLogo from "./BrandLogo.vue";
 import PreferencesMenu from "./PreferencesMenu.vue";
-import { paymentsEnforced } from "../settings";
+import { isDesktop, paymentsEnforced } from "../settings";
 import { repoUrl, upstreamAuthor, upstreamName, upstreamUrl } from "../brand";
 
 // Page frame of the guided flow (mockups 1.1–1.4 in issue #8): header with
@@ -12,7 +12,9 @@ import { repoUrl, upstreamAuthor, upstreamName, upstreamUrl } from "../brand";
 const props = defineProps<{ step: string; wide?: boolean }>();
 
 const steps = computed(() =>
-  ["welcome", ...(paymentsEnforced.value ? ["contribute"] : []), "whatsapp", "google", "options", "sync"]
+  isDesktop.value
+    ? ["welcome", "googleProject", "signin", "sources", "options", "sync"]
+    : ["welcome", ...(paymentsEnforced.value ? ["contribute"] : []), "whatsapp", "google", "options", "sync"]
 );
 const current = computed(() => steps.value.indexOf(props.step));
 </script>
