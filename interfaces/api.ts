@@ -147,3 +147,90 @@ export interface DesktopInfo {
   rememberSignIns: boolean;
   history: { runs: number; bytes: number };
 }
+
+// Clean up (issue #28).
+
+/** A Google contact as the clean-up screens show it. */
+export interface CleanupContact {
+  id: string;
+  name?: string;
+  phones: { value: string; e164?: string; type?: string }[];
+  emails: { value: string; type?: string }[];
+  company?: string;
+  /** "1990-03-12", or "--03-12" without a year. */
+  birthday?: string;
+  addresses: { value: string; type?: string }[];
+  hasPhoto: boolean;
+  photoUrl?: string;
+  updatedAt?: string;
+}
+
+export type DuplicateReason = "phone" | "email" | "name";
+
+export interface DuplicateGroup {
+  id: string;
+  /** Most recently edited first: the first one is kept by default. */
+  contactIds: string[];
+  reasons: DuplicateReason[];
+}
+
+/** A number saved on contacts that aren't the same person. */
+export interface SharedNumber {
+  e164: string;
+  contactIds: string[];
+}
+
+export interface MissingCountryCode {
+  contactId: string;
+  value: string;
+  /** The number with the country code of the scan's region, when it parses. */
+  suggestion?: string;
+}
+
+export interface CleanupScan {
+  scannedAt: string;
+  totalContacts: number;
+  region?: string;
+  /** Only the contacts that appear in a finding. */
+  contacts: Record<string, CleanupContact>;
+  duplicates: DuplicateGroup[];
+  sharedNumbers: SharedNumber[];
+  missingCountryCode: MissingCountryCode[];
+  /** Contacts changed since (e.g. a merge was undone): scan again. */
+  stale?: boolean;
+}
+
+export interface CleanupSummary {
+  scannedAt?: string;
+  totalContacts?: number;
+  duplicates: number;
+  sharedNumbers: number;
+  missingCountryCode: number;
+}
+
+/** POST /api/cleanup/merge: which contact each value comes from. */
+export interface MergeRequest {
+  groupId: string;
+  keepId: string;
+  name?: string;
+  /** Contact whose photo to keep, or null for none. */
+  photo?: string | null;
+  company?: string | null;
+  birthday?: string | null;
+  /** Contacts whose phones / emails / addresses are combined. */
+  phones: string[];
+  emails: string[];
+  addresses: string[];
+}
+
+export interface CleanupActionSummary {
+  id: string;
+  kind: "merge";
+  at: string;
+  /** e.g. the merged contact's name. */
+  title: string;
+  contacts: number;
+  undone?: boolean;
+  /** Something failed half-way; undo puts back what was changed. */
+  incomplete?: boolean;
+}

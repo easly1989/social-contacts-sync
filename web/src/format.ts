@@ -4,6 +4,8 @@ export function relativeTime(iso: string, locale: string, now = Date.now()): str
   const seconds = Math.round((Date.parse(iso) - now) / 1000);
   const format = new Intl.RelativeTimeFormat(locale, { numeric: "auto" });
   const units: [Intl.RelativeTimeFormatUnit, number][] = [
+    ["year", 365 * 86400],
+    ["month", 30 * 86400],
     ["day", 86400],
     ["hour", 3600],
     ["minute", 60],
@@ -35,4 +37,13 @@ export function bytes(value: number, locale: string): string {
   ] as const;
   const [unit, size] = [...units].reverse().find(([, s]) => value >= s) ?? units[0];
   return new Intl.NumberFormat(locale, { style: "unit", unit, unitDisplay: "short", maximumFractionDigits: 1 }).format(value / size);
+}
+
+/** "1990-03-12" → "12 March 1990"; "--03-12" (no year) → "12 March". */
+export function birthday(value: string, locale: string): string {
+  const match = /^(\d{4}|-)-(\d{2})-(\d{2})$/.exec(value);
+  if (!match) return value;
+  const year = match[1] === "-" ? undefined : Number(match[1]);
+  const date = new Date(Date.UTC(year ?? 2000, Number(match[2]) - 1, Number(match[3])));
+  return new Intl.DateTimeFormat(locale, { day: "numeric", month: "long", year: year ? "numeric" : undefined, timeZone: "UTC" }).format(date);
 }
