@@ -76,6 +76,9 @@ export async function listContacts(
                 (phoneNumber) => phoneNumber.canonicalForm ?? phoneNumber.value
               )
               .filter((number): number is string => Boolean(number)),
+            emails: (connection.emailAddresses ?? [])
+              .map((email) => email.value)
+              .filter((email): email is string => Boolean(email)),
             hasPhoto: !connection.photos // Check if photos contain only the "default" photo
               ?.map((photo) => photo.default)
               .every((v) => v === true),
@@ -96,14 +99,25 @@ export async function updateContactPhoto(
 ): Promise<void> {
   const people: people_v1.People = peopleApi({ version: "v1", auth });
 
-  try {
-    await people.people.updateContactPhoto({
-      resourceName: resourceName,
-      requestBody: { photoBytes: photo },
-    });
-  } catch (e) {
-    console.error(e);
-  }
+  // Errors propagate so the sync can count them per contact.
+  await people.people.updateContactPhoto({
+    resourceName: resourceName,
+    requestBody: { photoBytes: photo },
+  });
+}
+
+export async function deleteContactPhoto(auth: OAuth2Client, resourceName: string): Promise<void> {
+  const people = peopleApi({ version: "v1", auth });
+  await people.people.deleteContactPhoto({ resourceName });
+}
+
+/** The contact's current photo, or null when it has none (or only Google's default). */
+export async function downloadContactPhoto(contact: SimpleContact): Promise<Base64 | null> {
+  if (!contact.hasPhoto || !contact.photoUrl) return null;
+  const response = await fetch(contact.photoUrl);
+  if (!response.ok) return null;
+  const bytes = Buffer.from(await response.arrayBuffer());
+  return bytes.length ? bytes.toString("base64") : null;
 }
 
 /** The signed-in account and the size of its address book. */

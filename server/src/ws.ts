@@ -16,7 +16,7 @@ export function sendEvent(
   ws.send(JSON.stringify(event));
 }
 
-export function sendMessageAndWait(ws: WebSocket, eventToSend: EventType, eventToWaitFor: EventType, message: any): Promise<any> {
+export function sendMessageAndWait(ws: WebSocket, eventToSend: EventType, eventToWaitFor: EventType, message: any, timeout = 30000): Promise<any> {
   return new Promise((resolve, reject) => {
     const handleMessage = (data: any) => {
       try {
@@ -38,6 +38,6 @@ export function sendMessageAndWait(ws: WebSocket, eventToSend: EventType, eventT
     setTimeout(() => {
       ws.off('message', handleMessage);
       reject(new Error(`Timeout waiting for WS response for "${eventToWaitFor}" event after sending "${eventToSend}"`));
-    }, 30000);
+    }, timeout);
   });
 }
