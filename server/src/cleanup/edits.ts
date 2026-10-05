@@ -1,7 +1,7 @@
 import { CountryCode, parsePhoneNumberFromString } from "libphonenumber-js";
 
 import { restorable } from "./merge";
-import { ContactsApi, Person } from "./people";
+import { ContactsApi, Person, updateHeader } from "./people";
 import { hasCountryCode, toE164 } from "./scan";
 
 /*
@@ -63,7 +63,7 @@ export async function editNumbers(
   options.save(backup);
   for (const { person, numbers } of changes) {
     await options.beforeWrite?.();
-    await api.update(person.resourceName!, { etag: person.etag, phoneNumbers: restorable({ phoneNumbers: numbers }).phoneNumbers }, ["phoneNumbers"]);
+    await api.update(person.resourceName!, { ...updateHeader(person), phoneNumbers: restorable({ phoneNumbers: numbers }).phoneNumbers }, ["phoneNumbers"]);
     backup.updated.push(person.resourceName!);
     options.save(backup);
   }
@@ -80,7 +80,7 @@ export async function undoEdits(
     const before = backup.people.find((p) => p.resourceName === id)!;
     const current = await api.get(id);
     await options.beforeWrite?.();
-    await api.update(id, { etag: current.etag, phoneNumbers: restorable(before).phoneNumbers }, ["phoneNumbers"]);
+    await api.update(id, { ...updateHeader(current), phoneNumbers: restorable(before).phoneNumbers }, ["phoneNumbers"]);
     backup.updated = backup.updated.filter((u) => u !== id);
     options.save(backup);
   }

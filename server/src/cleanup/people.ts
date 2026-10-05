@@ -16,6 +16,16 @@ export const personFields = "names,emailAddresses,phoneNumbers,photos,organizati
 /** Fields a merge or an undo writes with updateContact. */
 export const writableFields = ["names", "emailAddresses", "phoneNumbers", "organizations", "birthdays", "addresses", "memberships"] as const;
 
+/**
+ * What updateContact needs besides the changed fields: the contact's etag
+ * and its contact sources with their etags (Google refuses the update with
+ * a 400 without them, and with failedPrecondition when they are stale).
+ */
+export function updateHeader(person: Person): Person {
+  const sources = (person.metadata?.sources ?? []).filter((s) => s.type === "CONTACT").map(({ type, id, etag }) => ({ type, id, etag }));
+  return { etag: person.etag, metadata: { sources } };
+}
+
 export interface ContactsApi {
   list(): Promise<Person[]>;
   get(resourceName: string): Promise<Person>;

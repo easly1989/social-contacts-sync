@@ -7,7 +7,7 @@ import AppShell from "../../components/AppShell.vue";
 import ContactAvatar from "../../components/ContactAvatar.vue";
 import MergePanel from "../../components/cleanup/MergePanel.vue";
 import SharedNumberCard from "../../components/cleanup/SharedNumberCard.vue";
-import { api } from "../../api";
+import { api, withGoogleDetail } from "../../api";
 import { browserRegion, cleanupSummary } from "../../cleanupState";
 import { number, relativeTime } from "../../format";
 import { CleanupScan, DuplicateGroup, MissingCountryCode } from "../../../../interfaces/api";
@@ -78,8 +78,8 @@ async function act(run: () => Promise<void>): Promise<void> {
   actionError.value = undefined;
   try {
     await run();
-  } catch {
-    actionError.value = t("cleanup.actionError");
+  } catch (e) {
+    actionError.value = withGoogleDetail(t("cleanup.actionError"), e);
   }
   busy.value = false;
   syncSummary();

@@ -4,7 +4,7 @@ import { useI18n } from "vue-i18n";
 import { GitMerge, ShieldCheck } from "lucide-vue-next";
 
 import ContactAvatar from "../ContactAvatar.vue";
-import { api, ApiError } from "../../api";
+import { api, ApiError, withGoogleDetail } from "../../api";
 import { birthday, relativeTime } from "../../format";
 import { CleanupContact, DuplicateGroup, MergeRequest } from "../../../../interfaces/api";
 
@@ -84,7 +84,7 @@ async function merge(): Promise<void> {
     const { actionId } = await api.merge(request);
     emit("merged", actionId);
   } catch (e) {
-    error.value = e instanceof ApiError && e.code === "changed_since_scan" ? t("cleanup.changed") : t("cleanup.mergeError");
+    error.value = e instanceof ApiError && e.code === "changed_since_scan" ? t("cleanup.changed") : withGoogleDetail(t("cleanup.mergeError"), e);
   }
   busy.value = false;
 }

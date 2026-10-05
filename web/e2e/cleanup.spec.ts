@@ -83,6 +83,14 @@ test("not duplicates, skip, and a contact that changed since the scan", async ({
   backend.mergeError = "changed_since_scan";
   await panel.getByRole("button", { name: "Merge into one" }).click();
   await expect(panel.getByRole("alert")).toHaveText("One of these contacts changed since the scan. Scan again before merging.");
+
+  // Google refused the change: its own words are shown too.
+  backend.mergeError = undefined;
+  backend.cleanupFailure = { status: 502, json: { error: "google_unavailable", detail: "Request must set person.metadata.sources." } };
+  await panel.getByRole("button", { name: "Merge into one" }).click();
+  await expect(panel.getByRole("alert")).toHaveText(
+    "The merge didn't complete. What changed can be undone from History. (Google: Request must set person.metadata.sources.)"
+  );
 });
 
 test("shared numbers: keep on one, merge, mark as shared and unmark", async ({ page }) => {
@@ -140,6 +148,10 @@ test("missing country codes: fix the selected numbers", async ({ page }) => {
   await expect(page.getByRole("button", { name: "Nothing selected" })).toBeDisabled();
   await page.getByRole("checkbox", { name: "Select all" }).check();
   await expect(page.getByRole("button", { name: "Add country code to 1 number" })).toBeEnabled();
+
+  backend.cleanupFailure = { status: 502, json: { error: "google_unavailable", detail: "Invalid phone number." } };
+  await page.getByRole("button", { name: "Add country code to 1 number" }).click();
+  await expect(page.getByRole("alert")).toHaveText("That didn't work. Please try again. (Google: Invalid phone number.)");
 });
 
 test("dashboard and history after a merge", async ({ page }) => {
