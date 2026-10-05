@@ -35,6 +35,13 @@ export function cleanupRouter(contactsApi: (auth: OAuth2Client) => ContactsApi =
     return own ?? asked;
   }
 
+  /** Google's own words for a failed change, to show next to ours. */
+  function googleDetail(e: unknown): string | undefined {
+    const error = e as { response?: { data?: { error?: { message?: unknown } } }; message?: unknown };
+    const message = error?.response?.data?.error?.message ?? error?.message;
+    return typeof message === "string" && message ? message.slice(0, 300) : undefined;
+  }
+
   function actionId(kind: string): string {
     return `${new Date().toISOString().replace(/[:.]/g, "-")}-${kind}`;
   }
@@ -145,7 +152,7 @@ export function cleanupRouter(contactsApi: (auth: OAuth2Client) => ContactsApi =
         action.incomplete = true;
         save(action.backup);
       }
-      res.status(502).send({ error: "google_unavailable", actionId: action.backup.steps.updated ? action.id : undefined });
+      res.status(502).send({ error: "google_unavailable", detail: googleDetail(e), actionId: action.backup.steps.updated ? action.id : undefined });
     } finally {
       deleteFromCache(sessionId, "cleanup_busy");
     }
@@ -184,7 +191,7 @@ export function cleanupRouter(contactsApi: (auth: OAuth2Client) => ContactsApi =
     } catch (e) {
       console.error("Removing a shared number failed:", e);
       if (action.backup.updated.length) saveAction(sessionId, { ...action, incomplete: true });
-      res.status(502).send({ error: "google_unavailable" });
+      res.status(502).send({ error: "google_unavailable", detail: googleDetail(e) });
     } finally {
       deleteFromCache(sessionId, "cleanup_busy");
     }
@@ -257,7 +264,7 @@ export function cleanupRouter(contactsApi: (auth: OAuth2Client) => ContactsApi =
     } catch (e) {
       console.error("Adding country codes failed:", e);
       if (action.backup.updated.length) saveAction(sessionId, { ...action, incomplete: true });
-      res.status(502).send({ error: "google_unavailable" });
+      res.status(502).send({ error: "google_unavailable", detail: googleDetail(e) });
     } finally {
       deleteFromCache(sessionId, "cleanup_busy");
     }
@@ -291,7 +298,7 @@ export function cleanupRouter(contactsApi: (auth: OAuth2Client) => ContactsApi =
       res.send({ ok: true });
     } catch (e) {
       console.error(`Undoing ${action.id} failed:`, e);
-      res.status(502).send({ error: "google_unavailable" });
+      res.status(502).send({ error: "google_unavailable", detail: googleDetail(e) });
     }
   });
 

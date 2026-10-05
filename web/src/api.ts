@@ -10,9 +10,20 @@ async function get<T>(url: string): Promise<T> {
 
 /** A failed request, with the server's error code when it sent one. */
 export class ApiError extends Error {
-  constructor(public status: number, public code?: string) {
+  /** `detail`: what Google answered, when a change it refused failed. */
+  constructor(public status: number, public code?: string, public detail?: string) {
     super(`HTTP ${status}${code ? ` ${code}` : ""}`);
   }
+}
+
+/** `message`, followed by Google's own explanation when the server passed one on. */
+export function withGoogleDetail(message: string, e: unknown): string {
+  return e instanceof ApiError && e.detail ? `${message} (Google: ${e.detail})` : message;
+}
+
+async function apiError(response: Response): Promise<ApiError> {
+  const body = await response.json().catch(() => undefined);
+  return new ApiError(response.status, body?.error, typeof body?.detail === "string" ? body.detail : undefined);
 }
 
 export async function post<T = unknown>(url: string, body: unknown = {}): Promise<T> {
@@ -22,7 +33,7 @@ export async function post<T = unknown>(url: string, body: unknown = {}): Promis
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
   });
-  if (!response.ok) throw new ApiError(response.status, await response.json().then((b) => b?.error).catch(() => undefined));
+  if (!response.ok) throw await apiError(response);
   return response.json();
 }
 

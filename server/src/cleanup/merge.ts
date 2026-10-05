@@ -2,7 +2,7 @@ import { CountryCode } from "libphonenumber-js";
 
 import { MergeRequest } from "../../../interfaces/api";
 import { Base64 } from "../types";
-import { ContactsApi, Person, toCleanupContact, writableFields } from "./people";
+import { ContactsApi, Person, toCleanupContact, updateHeader, writableFields } from "./people";
 import { normalizeEmail, toE164 } from "./scan";
 
 /*
@@ -11,11 +11,25 @@ import { normalizeEmail, toE164 } from "./scan";
   in the group is backed up for undo.
 */
 
+type Entry = { metadata?: { source?: { type?: string | null } | null } | null };
+
 /** A field entry without Google's read-only metadata (sources, primary flags). */
-function writable<T extends { metadata?: unknown }>(entry: T): T {
+function writable<T extends Entry>(entry: T): T {
   const { metadata: _metadata, ...rest } = entry;
   return rest as T;
 }
+
+/**
+ * The entries saved on the contact itself. A contact linked to a Google
+ * profile also lists the profile's name, numbers and so on; writing those
+ * back would copy them into the contact (and a second name is refused).
+ */
+export function contactEntries<T extends Entry>(entries: T[] | null | undefined): T[] {
+  return (entries ?? []).filter((e) => !e.metadata?.source?.type || e.metadata.source.type === "CONTACT");
+}
+
+/** Fields Google allows only once on a contact. */
+const singletons = new Set<string>(["names", "birthdays"]);
 
 function dedupe<T>(items: T[], key: (item: T) => string): T[] {
   const seen = new Set<string>();
@@ -46,22 +60,31 @@ export interface MergePlan {
 export function restorable(person: Person): Person {
   const body: Record<string, unknown> = {};
   for (const field of writableFields) {
-    const entries = ((person[field] ?? []) as { metadata?: unknown }[]).map(writable);
+    const entries = contactEntries(person[field] as Entry[]).map(writable);
     body[field] =
       field === "memberships"
         ? // Only the group is writable; its ID is output only.
-          (entries as Membership[]).filter(isLabel).map((m) => ({ contactGroupMembership: { contactGroupResourceName: m.contactGroupMembership!.contactGroupResourceName } }))
-        : entries;
+          (entries as Membership[]).filter(isWritableGroup).map((m) => ({ contactGroupMembership: { contactGroupResourceName: m.contactGroupMembership!.contactGroupResourceName } }))
+        : singletons.has(field)
+          ? entries.slice(0, 1)
+          : entries;
   }
   return body as Person;
 }
 
 type Membership = NonNullable<Person["memberships"]>[number];
 
-/** A user label (contact group); "My Contacts" is implied and can't be set. */
-function isLabel(m: Membership): boolean {
+const myContacts = "contactGroups/myContacts";
+
+/**
+ * A group a contact can be put in: the user's labels, My Contacts and
+ * Starred. Google's other system groups are read-only.
+ */
+function isWritableGroup(m: Membership): boolean {
   const group = m.contactGroupMembership?.contactGroupResourceName;
-  return Boolean(group) && group !== "contactGroups/myContacts";
+  if (!group) return false;
+  const system = /^contactGroups\/(myContacts|starred|friends|family|coworkers|chatBuddies|all|blocked)$/.exec(group);
+  return !system || system[1] === "myContacts" || system[1] === "starred";
 }
 
 export function planMerge(people: Person[], request: MergeRequest, region?: CountryCode): MergePlan {
@@ -78,25 +101,26 @@ export function planMerge(people: Person[], request: MergeRequest, region?: Coun
   const ordered = (chosen: string[]) => [request.keepId, ...ids.filter((id) => id !== request.keepId)].filter((id) => chosen.includes(id)).map((id) => byId.get(id)!);
 
   const update: Person = {
-    etag: kept.etag,
-    names: (from(request.name ?? request.keepId)?.names ?? []).slice(0, 1).map(writable),
-    organizations: (from(request.company)?.organizations ?? []).map(writable),
-    birthdays: (from(request.birthday)?.birthdays ?? []).slice(0, 1).map(writable),
+    ...updateHeader(kept),
+    names: contactEntries(from(request.name ?? request.keepId)?.names).slice(0, 1).map(writable),
+    organizations: contactEntries(from(request.company)?.organizations).map(writable),
+    birthdays: contactEntries(from(request.birthday)?.birthdays).slice(0, 1).map(writable),
     phoneNumbers: dedupe(
-      ordered(request.phones).flatMap((p) => (p.phoneNumbers ?? []).map(writable)),
+      ordered(request.phones).flatMap((p) => contactEntries(p.phoneNumbers).map(writable)),
       (n) => toE164(n.value ?? "", region) ?? (n.value ?? "").replace(/\D/g, "")
     ),
     emailAddresses: dedupe(
-      ordered(request.emails).flatMap((p) => (p.emailAddresses ?? []).map(writable)),
+      ordered(request.emails).flatMap((p) => contactEntries(p.emailAddresses).map(writable)),
       (e) => normalizeEmail(e.value ?? "")
     ),
     addresses: dedupe(
-      ordered(request.addresses).flatMap((p) => (p.addresses ?? []).map(writable)),
+      ordered(request.addresses).flatMap((p) => contactEntries(p.addresses).map(writable)),
       (a) => (a.formattedValue ?? JSON.stringify(a)).toLowerCase().replace(/\s+/g, " ")
     ),
-    // Labels of every contact in the group.
+    // Labels of every contact in the group. Google refuses an update that
+    // leaves a contact in no group, and connections are in My Contacts.
     memberships: dedupe(
-      people.flatMap((p) => restorable(p).memberships ?? []),
+      [...people.flatMap((p) => restorable(p).memberships ?? []), { contactGroupMembership: { contactGroupResourceName: myContacts } }],
       (m) => m.contactGroupMembership!.contactGroupResourceName!
     ),
   };
@@ -164,13 +188,18 @@ export async function executeMerge(
   return backup;
 }
 
+/** Google refuses to update memberships to none; contacts are at least in My Contacts. */
+function withGroup(person: Person): Person {
+  return person.memberships?.length ? person : { ...person, memberships: [{ contactGroupMembership: { contactGroupResourceName: myContacts } }] };
+}
+
 /** Puts the kept contact back as it was and re-creates the deleted ones. */
 export async function undoMerge(api: ContactsApi, backup: MergeBackup, save: (backup: MergeBackup) => void): Promise<void> {
   const index = (id: string) => backup.people.findIndex((p) => p.resourceName === id);
   const keptIndex = index(backup.keptId);
   if (backup.steps.updated) {
     const current = await api.get(backup.keptId);
-    await api.update(backup.keptId, { ...restorable(backup.people[keptIndex]), etag: current.etag }, writableFields);
+    await api.update(backup.keptId, withGroup({ ...restorable(backup.people[keptIndex]), ...updateHeader(current) }), writableFields);
     backup.steps.updated = false;
     save(backup);
   }

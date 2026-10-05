@@ -1,5 +1,10 @@
 import { ContactsApi, Person } from "./people";
 
+/** A People API error, shaped like googleapis' GaxiosError. */
+function googleError(code: number, message: string): Error {
+  return Object.assign(new Error(message), { code, response: { status: code, data: { error: { code, message } } } });
+}
+
 /** An in-memory address book with the People API's behaviour that matters here (tests only). */
 export class FakeContacts implements ContactsApi {
   people = new Map<string, Person>();
@@ -13,9 +18,16 @@ export class FakeContacts implements ContactsApi {
     for (const [id, photo] of Object.entries(photos)) this.photos.set(id, photo);
   }
 
+  /** As Google returns it: with the photo, and the contact source carrying the etag. */
   private withPhoto(person: Person): Person {
     const id = person.resourceName!;
-    return { ...structuredClone(person), photos: this.photos.has(id) ? [{ url: `https://photos.example/${id}`, default: false }] : [{ url: "https://photos.example/default", default: true }] };
+    const [first, ...others] = person.metadata?.sources ?? [];
+    const contactSource = { type: "CONTACT", id: id.replace("people/", ""), ...first, etag: person.etag };
+    return {
+      ...structuredClone(person),
+      metadata: { ...person.metadata, sources: [contactSource, ...others] },
+      photos: this.photos.has(id) ? [{ url: `https://photos.example/${id}`, default: false }] : [{ url: "https://photos.example/default", default: true }],
+    };
   }
 
   async list() {
@@ -30,7 +42,14 @@ export class FakeContacts implements ContactsApi {
   async update(id: string, body: Person, fields: readonly string[]) {
     this.calls.push(`update ${id}`);
     const person = this.people.get(id)!;
-    if (body.etag !== person.etag) throw Object.assign(new Error("etag mismatch"), { code: 400 });
+    // The rules in updateContact's documentation.
+    const source = body.metadata?.sources?.find((s) => s.type === "CONTACT");
+    if (!source) throw googleError(400, "Request must set person.metadata.sources for the contact source being updated.");
+    if (source.etag !== person.etag) throw googleError(400, "failedPrecondition: the contact changed since it was read.");
+    if (fields.includes("memberships") && !body.memberships?.some((m) => m.contactGroupMembership?.contactGroupResourceName))
+      throw googleError(400, "A contact must have at least one contact group membership.");
+    for (const singleton of ["names", "birthdays"] as const)
+      if (fields.includes(singleton) && (body[singleton]?.length ?? 0) > 1) throw googleError(400, `Only one ${singleton} entry is allowed.`);
     for (const field of fields) (person as Record<string, unknown>)[field] = structuredClone((body as Record<string, unknown>)[field]);
     person.etag = `e${this.next++}`;
     person.metadata = { sources: [{ updateTime: new Date(Date.UTC(2026, 9, 3, 12, 0, this.next % 60)).toISOString() }] };
@@ -39,6 +58,8 @@ export class FakeContacts implements ContactsApi {
   async create(body: Person) {
     const id = `people/new${++this.created}`;
     this.calls.push(`create ${id}`);
+    for (const singleton of ["names", "birthdays"] as const)
+      if ((body[singleton]?.length ?? 0) > 1) throw googleError(400, `Only one ${singleton} entry is allowed.`);
     this.people.set(id, { ...structuredClone(body), resourceName: id, etag: "e0" });
     return this.withPhoto(this.people.get(id)!);
   }

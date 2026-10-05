@@ -44,6 +44,8 @@ export class FakeBackend {
   cleanupRequests: { route: string; body: any }[] = [];
   /** Error code the next merge fails with. */
   mergeError?: string;
+  /** Makes clean-up's Google changes (merge, numbers) fail like the server does. */
+  cleanupFailure?: { status: number; json: object };
   /** Telegram sign-in: the account state and what the next answers are. */
   telegram: TelegramState = { available: true, connected: false };
   telegramPassword?: string;
@@ -194,6 +196,7 @@ export class FakeBackend {
     if (pathname === "/api/cleanup/merge") {
       this.mergeRequests.push(body);
       if (this.mergeError) return route.fulfill({ status: 409, json: { error: this.mergeError } });
+      if (this.cleanupFailure) return route.fulfill(this.cleanupFailure);
       const group = this.cleanupScan!.duplicates.find((g) => g.id === body.groupId)!;
       this.cleanupScan!.duplicates = this.cleanupScan!.duplicates.filter((g) => g !== group);
       const id = `merge-${this.cleanupActions.length + 1}`;
@@ -204,6 +207,7 @@ export class FakeBackend {
     if (numbers) {
       const scan = this.cleanupScan!;
       this.cleanupRequests.push({ route: numbers[1], body });
+      if (this.cleanupFailure && numbers[1] !== "mark_shared" && numbers[1] !== "group") return route.fulfill(this.cleanupFailure);
       const shared = scan.sharedNumbers.find((n) => n.e164 === body.e164);
       scan.sharedNumbers = scan.sharedNumbers.filter((n) => n !== shared || numbers[1] === "fix_country_codes" || (numbers[1] === "mark_shared" && body.shared === false));
       if (numbers[1] === "mark_shared") {

@@ -16,7 +16,8 @@ const marcoA: Person = {
   phoneNumbers: [{ value: "+39 333 812 5517", type: "mobile", metadata: { primary: true } }],
   emailAddresses: [{ value: "marco.rossi@example.com" }],
   birthdays: [{ date: { month: 3, day: 12 } }],
-  memberships: [label("contactGroups/myContacts"), label("contactGroups/friends")],
+  // A user label, and a read-only system group that can't be written back.
+  memberships: [label("contactGroups/myContacts"), label("contactGroups/1a2b"), label("contactGroups/chatBuddies")],
 };
 const marcoB: Person = {
   resourceName: "people/b",
@@ -26,21 +27,23 @@ const marcoB: Person = {
   phoneNumbers: [{ value: "333 8125517" }, { value: "+39 02 4455 6677", type: "work" }],
   emailAddresses: [{ value: "m.rossi@studio.example" }],
   organizations: [{ name: "Studio Rossi" }],
-  memberships: [label("contactGroups/work")],
+  memberships: [label("contactGroups/3c4d")],
 };
 
 const request = { groupId: "g", keepId: "people/a", phones: ["people/a", "people/b"], emails: ["people/a", "people/b"], addresses: [] };
 
 test("the plan combines lists, picks single values and keeps every label", () => {
   const plan = planMerge([marcoA, marcoB], { ...request, company: "people/b" }, "IT");
+  // What updateContact needs to accept the change.
   assert.equal(plan.update.etag, "ea");
+  assert.deepEqual(plan.update.metadata, { sources: [{ type: "CONTACT", id: "x", etag: undefined }] });
   assert.deepEqual(plan.update.names, [{ displayName: "Marco Rossi", givenName: "Marco", familyName: "Rossi" }]);
   // "333 8125517" is the same number as "+39 333 812 5517" in Italy.
   assert.deepEqual(plan.update.phoneNumbers!.map((p) => p.value), ["+39 333 812 5517", "+39 02 4455 6677"]);
   assert.deepEqual(plan.update.emailAddresses!.map((e) => e.value), ["marco.rossi@example.com", "m.rossi@studio.example"]);
   assert.deepEqual(plan.update.organizations, [{ name: "Studio Rossi" }]);
   assert.deepEqual(plan.update.birthdays, [{ date: { month: 3, day: 12 } }]);
-  assert.deepEqual(plan.update.memberships!.map((m) => m.contactGroupMembership!.contactGroupResourceName), ["contactGroups/friends", "contactGroups/work"]);
+  assert.deepEqual(plan.update.memberships!.map((m) => m.contactGroupMembership!.contactGroupResourceName), ["contactGroups/myContacts", "contactGroups/1a2b", "contactGroups/3c4d"]);
   assert.deepEqual(plan.deleteIds, ["people/b"]);
   assert.deepEqual(plan.photo, { action: "keep" });
 });
@@ -52,6 +55,26 @@ test("the plan drops what isn't chosen", () => {
   assert.deepEqual(plan.update.organizations, []);
   assert.deepEqual(plan.update.phoneNumbers!.map((p) => p.value), ["333 8125517", "+39 02 4455 6677"]);
   assert.deepEqual(plan.update.emailAddresses, []);
+});
+
+test("the plan writes only what is saved on the contact, never its Google profile", () => {
+  const profile = { metadata: { source: { type: "PROFILE", id: "p1" } } };
+  const contact = { metadata: { source: { type: "CONTACT", id: "x" } } };
+  const linked: Person = {
+    ...marcoA,
+    names: [{ ...contact, displayName: "Marco Rossi" }, { ...profile, displayName: "Marco R. (profile)" }],
+    phoneNumbers: [{ ...contact, value: "+39 333 812 5517" }, { ...profile, value: "+39 345 000 0000" }],
+    birthdays: [{ ...profile, date: { month: 1, day: 1 } }],
+  };
+  const plan = planMerge([linked, marcoB], { ...request, phones: ["people/a"] }, "IT");
+  assert.deepEqual(plan.update.names, [{ displayName: "Marco Rossi" }]);
+  assert.deepEqual(plan.update.phoneNumbers, [{ value: "+39 333 812 5517" }]);
+  assert.deepEqual(plan.update.birthdays, []);
+});
+
+test("a contact without labels stays in My Contacts", () => {
+  const plan = planMerge([{ ...marcoA, memberships: [] }, { ...marcoB, memberships: [] }], request, "IT");
+  assert.deepEqual(plan.update.memberships, [{ contactGroupMembership: { contactGroupResourceName: "contactGroups/myContacts" } }]);
 });
 
 test("the plan refuses contacts outside the group", () => {
@@ -82,7 +105,7 @@ test("merge: backup first, then update, photo, delete; undo puts everything back
   assert.deepEqual(google.calls, ["update people/a", "deletePhoto people/a", "create people/new1", "setPhoto people/new1"]);
   const a = await google.get("people/a");
   assert.deepEqual(a.phoneNumbers!.map((p) => p.value), ["+39 333 812 5517"]);
-  assert.deepEqual(a.memberships!.map((m) => m.contactGroupMembership!.contactGroupResourceName), ["contactGroups/friends"]);
+  assert.deepEqual(a.memberships!.map((m) => m.contactGroupMembership!.contactGroupResourceName), ["contactGroups/myContacts", "contactGroups/1a2b"]);
   const restored = await google.get(backup.restored!["people/b"]);
   assert.equal(toCleanupContact(restored).name, "Marco R.");
   assert.equal(toCleanupContact(restored).company, "Studio Rossi");
