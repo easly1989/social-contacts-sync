@@ -2,9 +2,10 @@
 import { computed, onMounted, onUnmounted, ref } from "vue";
 import { useRoute } from "vue-router";
 import { useI18n } from "vue-i18n";
-import { ArrowLeft, ArrowRight, Check, CircleAlert, FileDown, Image, ImagePlus, Replace, Search, Undo2 } from "lucide-vue-next";
+import { ArrowLeft, Check, CircleAlert, FileDown, Image, ImagePlus, Replace, Search, Undo2 } from "lucide-vue-next";
 
 import AppShell from "../../components/AppShell.vue";
+import PhotoCompare from "../../components/PhotoCompare.vue";
 import SourceBadge from "../../components/SourceBadge.vue";
 import StatTile from "../../components/StatTile.vue";
 import { api } from "../../api";
@@ -160,12 +161,14 @@ onUnmounted(() => window.clearInterval(poll));
                 <td class="text-base-content/60">{{ result.matchedBy ?? (result.error ? result.error : "—") }}</td>
                 <td><SourceBadge v-if="result.source" :source="result.source" /></td>
                 <td>
-                  <div v-if="changed(result)" class="flex items-center gap-2">
-                    <img v-if="result.hasPrevious" :src="api.photoUrl(run.id, index, 'previous')" alt="" class="size-7 rounded-full object-cover" />
-                    <span v-else class="grid size-7 place-items-center rounded-full bg-base-300 text-xs font-semibold text-base-content/50">{{ (result.name ?? "?")[0] }}</span>
-                    <ArrowRight class="size-3.5 text-base-content/40" />
-                    <img v-if="result.hasPhoto" :src="api.photoUrl(run.id, index, 'photo')" alt="" class="size-7 rounded-full object-cover" />
-                  </div>
+                  <PhotoCompare
+                    v-if="changed(result)"
+                    :name="result.name"
+                    :source="result.source"
+                    :matched-by="result.matchedBy"
+                    :before="result.hasPrevious ? api.photoUrl(run.id, index, 'previous') : undefined"
+                    :after="result.hasPhoto ? api.photoUrl(run.id, index, 'photo') : undefined"
+                  />
                   <span v-else class="text-xs text-base-content/50">{{ $t(`outcomes.${result.outcome === "error" ? "errors" : result.outcome}`) }}</span>
                 </td>
                 <td class="text-right">

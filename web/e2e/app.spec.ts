@@ -117,6 +117,37 @@ test("report: tabs, search, undo and CSV export", async ({ page }) => {
   expect(file.suggestedFilename()).toBe(`social-contacts-sync-${run.id}.csv`);
 });
 
+test("report: the photos open larger, before and after (issue #44)", async ({ page }) => {
+  const run = backend.runs[0];
+  await page.goto(`/app/history/${run.id}`);
+  const preview = page.getByTestId("photo-compare");
+
+  // Replaced: the old photo next to the new one.
+  await page.getByRole("button", { name: "Compare photos of Martina Marino" }).hover();
+  await expect(preview).toBeVisible();
+  await expect(preview).toContainText("Martina Marino");
+  await expect(preview).toContainText("Matched by +39 340 555 0166");
+  await expect(preview.getByRole("img", { name: "Before" })).toHaveAttribute("src", `/api/runs/${run.id}/photos/6/previous`);
+  await expect(preview.getByRole("img", { name: "After" })).toHaveAttribute("src", `/api/runs/${run.id}/photos/6/photo`);
+  await expect.poll(() => preview.getByRole("img", { name: "After" }).evaluate((img: HTMLImageElement) => img.getBoundingClientRect().width)).toBe(144);
+  await screenshot(page, "25b-report-preview");
+  await page.mouse.move(0, 0);
+  await expect(preview).toBeHidden();
+
+  // Added: Google's letter, then the new photo. Keyboard focus opens it, Escape closes it.
+  await page.getByRole("button", { name: "Compare photos of Sofia Esposito" }).focus();
+  await expect(preview).toContainText("Sofia Esposito");
+  await expect(preview.getByRole("img", { name: "Before" })).toHaveCount(0);
+  await expect(preview).toContainText("S");
+  await page.keyboard.press("Escape");
+  await expect(preview).toBeHidden();
+
+  await page.emulateMedia({ colorScheme: "dark" });
+  await page.getByRole("button", { name: "Compare photos of Martina Marino" }).hover();
+  await expect(preview).toBeVisible();
+  await screenshot(page, "25c-report-preview-dark");
+});
+
 test("a run that is no longer in the history", async ({ page }) => {
   await page.goto("/app/history/missing-run");
   await expect(page.getByText("This sync isn't in the history any more.")).toBeVisible();
