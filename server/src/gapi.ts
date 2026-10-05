@@ -31,11 +31,13 @@ export async function getOAuth2ClientFromCode(
   code: string,
   redirectUri: string
 ): Promise<OAuth2Client> {
-  const oauth2Client = new googleAuth.OAuth2(
-    process.env.GOOGLE_CLIENT_ID,
-    process.env.GOOGLE_CLIENT_SECRET,
-    redirectUri
-  );
+  const oauth2Client = new googleAuth.OAuth2({
+    clientId: process.env.GOOGLE_CLIENT_ID,
+    clientSecret: process.env.GOOGLE_CLIENT_SECRET,
+    redirectUri,
+    // Tests stand in for Google's token endpoint.
+    ...(process.env.SCS_GOOGLE_TOKEN_ENDPOINT && { endpoints: { oauth2TokenUrl: process.env.SCS_GOOGLE_TOKEN_ENDPOINT } }),
+  });
   const { tokens } = await oauth2Client.getToken(code);
   oauth2Client.setCredentials(tokens);
   return oauth2Client;

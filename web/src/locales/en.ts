@@ -301,6 +301,7 @@ export default {
       openSource: "Open-source dependencies",
     },
   },
+  start: { loading: "Opening Social Contacts Sync…" },
   common: {
     cancel: "Cancel",
     back: "Back",
@@ -405,8 +406,13 @@ export default {
       api: { title: "Enable the People API", text: "This is the API that reads and updates your contacts.", cta: "Open the API page" },
       consent: {
         title: "Set up the consent screen",
-        text: "Choose External and add your own email as a test user. Then, under Audience, press Publish app so you stay signed in: test apps are signed out every 7 days.",
+        text: "Press Get started: any app name, your email as support and contact email, and Audience External.",
         cta: "Open the consent screen",
+      },
+      testUser: {
+        title: "Add yourself as a test user",
+        text: "Under Test users press Add users and enter the Google account whose contacts you'll update. Without it, Google blocks the sign-in with “Access blocked”. Optional: press Publish app on the same page, or Google signs you out every 7 days.",
+        cta: "Open Audience",
       },
       client: { title: "Create an OAuth client ID", text: "Application type: Desktop app. Then press Download JSON.", cta: "Open the clients page" },
       drop: "Drop the downloaded JSON here",

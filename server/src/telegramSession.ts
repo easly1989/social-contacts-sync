@@ -38,6 +38,11 @@ export function telegramState(sessionId: string): TelegramState {
   };
 }
 
+/** A sign-in saved by the desktop app, which reconnects with it at start. */
+export function hasSavedTelegram(): boolean {
+  return desktopMode && secretStoreAvailable() && Boolean(readSecret<{ session?: string }>(sessionFile)?.session);
+}
+
 function save(connection: TelegramConnection): void {
   if (desktopMode && secretStoreAvailable() && rememberSignIns()) writeSecret(sessionFile, { session: connection.session() });
 }

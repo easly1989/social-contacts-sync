@@ -60,8 +60,9 @@ test("desktop mode", async (t) => {
       headers: { "Sec-Fetch-Site": "cross-site" },
       redirect: "manual",
     });
-    assert.equal(response.status, 302);
-    assert.equal(response.headers.get("location"), "/?error=invalid_state");
+    // The browser gets a page, never the app.
+    assert.equal(response.status, 200);
+    assert.match(await response.text(), /Google sign-in didn't complete/);
   });
 
   await t.test("credentials must be sent as JSON", async () => {
@@ -217,4 +218,33 @@ test("desktop mode: with Remember sign-ins off nothing is restored", async (t) =
   assert.equal(status.whatsappSaved, false);
   assert.equal(fs.existsSync(path.join(dataDir, "google-token.enc")), false);
   assert.equal(fs.existsSync(path.join(dataDir, "whatsapp")), false);
+});
+
+test("desktop sign-in finishes in the app window, not in the browser", async (t) => {
+  // Google's token endpoint, answering the code exchange.
+  const google = http.createServer((_req, res) => {
+    res.writeHead(200, { "Content-Type": "application/json" });
+    res.end(JSON.stringify({ access_token: "access", refresh_token: "refresh", expires_in: 3600, token_type: "Bearer" }));
+  });
+  await new Promise<void>((resolve) => google.listen(0, "127.0.0.1", resolve));
+  const { base, child } = await startDesktopServer({
+    GOOGLE_CLIENT_ID: "1-abc.apps.googleusercontent.com",
+    GOOGLE_CLIENT_SECRET: "secret",
+    SCS_GOOGLE_TOKEN_ENDPOINT: `http://127.0.0.1:${(google.address() as AddressInfo).port}/token`,
+  });
+  t.after(() => {
+    child.kill();
+    google.close();
+  });
+
+  const start = await fetch(`${base}/google_auth_start?return=${encodeURIComponent("/setup/signin?connected=1")}`, { redirect: "manual" });
+  const state = new URL(start.headers.get("location")!).searchParams.get("state");
+  // The system browser shares the app's only session, which used to send the
+  // browser on to the setup wizard instead of the app window.
+  const callback = await fetch(`${base}/google_callback?code=the-code&state=${state}`, { headers: { "Sec-Fetch-Site": "cross-site" }, redirect: "manual" });
+  assert.equal(callback.status, 200);
+  assert.match(await callback.text(), /Signed in to Google/);
+
+  const status = (await (await fetch(`${base}/status`)).json()) as { googleConnected: boolean };
+  assert.equal(status.googleConnected, true);
 });
