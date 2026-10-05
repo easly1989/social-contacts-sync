@@ -54,6 +54,8 @@ export class FakeBackend {
   updateCheck: Omit<UpdateCheck, "checkedAt"> = { status: "current" };
   /** Bodies posted to /api/desktop/* Settings actions, by route. */
   desktopActions: { route: string; body: unknown }[] = [];
+  /** /api/status waits for this, to show what the page looks like while it loads. */
+  statusGate?: Promise<void>;
   /** When false, Google sign-in "opens in the system browser" and nothing happens here. */
   signInCompletes = true;
   received: { type: string; data: any }[] = [];
@@ -74,7 +76,10 @@ export class FakeBackend {
       this.requests.push(request);
       const { pathname } = new URL(request.url());
 
-      if (pathname === "/api/status") return route.fulfill({ json: this.status });
+      if (pathname === "/api/status") {
+        await this.statusGate;
+        return route.fulfill({ json: this.status });
+      }
       // Stands in for the whole Google consent round trip, which ends with the
       // backend's callback redirecting to /options.
       if (pathname === "/api/google_auth_start") {

@@ -303,6 +303,7 @@ const it: typeof en = {
       openSource: "Dipendenze open source",
     },
   },
+  start: { loading: "Apertura di Social Contacts Sync…" },
   common: {
     cancel: "Annulla",
     back: "Indietro",
@@ -407,8 +408,13 @@ const it: typeof en = {
       api: { title: "Attiva la People API", text: "È l'API che legge e aggiorna i tuoi contatti.", cta: "Apri la pagina dell'API" },
       consent: {
         title: "Configura la schermata di consenso",
-        text: "Scegli Esterno e aggiungi la tua email come utente di test. Poi, in Pubblico, premi Pubblica app per restare connesso: le app di test vengono disconnesse ogni 7 giorni.",
+        text: "Premi Inizia: un nome qualsiasi per l'app, la tua email come email di assistenza e di contatto, e Pubblico Esterno.",
         cta: "Apri la schermata di consenso",
+      },
+      testUser: {
+        title: "Aggiungiti come utente di test",
+        text: "In Utenti di test premi Aggiungi utenti e inserisci l'account Google di cui aggiornerai i contatti. Senza questo passaggio Google blocca l'accesso con “Accesso bloccato”. Facoltativo: premi Pubblica app nella stessa pagina, altrimenti Google ti disconnette ogni 7 giorni.",
+        cta: "Apri Pubblico",
       },
       client: { title: "Crea un ID client OAuth", text: "Tipo di applicazione: App desktop. Poi premi Scarica JSON.", cta: "Apri la pagina dei client" },
       drop: "Trascina qui il JSON scaricato",

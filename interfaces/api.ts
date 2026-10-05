@@ -107,6 +107,8 @@ export interface SessionStatus {
   /** Telegram app credentials are set (built in, config.env or environment). */
   telegramAvailable?: boolean;
   telegramConnected?: boolean;
+  /** The desktop app has a saved Telegram sign-in, restored at start. */
+  telegramSaved?: boolean;
 }
 
 export interface GoogleStats {

@@ -14,10 +14,10 @@ import { deleteFromCache, getFromCache, setInCache } from "../src/cache";
 import { enforcePayments } from "../src/config";
 import { checkPurchase } from "../src/payments";
 import { consumeOAuthState, createOAuthState } from "../src/oauthState";
-import { desktopMode, safeReturnPath } from "../src/desktop";
+import { askDesktop, desktopMode, safeReturnPath } from "../src/desktop";
 import { hasSavedWhatsAppSession, persistGoogleAuth } from "../src/desktopSession";
 import { sendEvent } from "../src/ws";
-import { telegramState } from "../src/telegramSession";
+import { hasSavedTelegram, telegramState } from "../src/telegramSession";
 
 // Based on https://github.com/HenningM/express-ws/issues/86
 const router = express.Router({ mergeParams: true });
@@ -48,12 +48,26 @@ function cleanup(sessionID: string) {
   setInCache(sessionID, "cleanup", timeout);
 }
 
-const signedInPage = `<!doctype html><html><head><meta charset="utf-8"><title>Social Contacts Sync</title>
+/** A page for the system browser, which the desktop app's sign-in leaves on the local server. */
+function browserPage(title: string, text: string, italian: string): string {
+  return `<!doctype html><html><head><meta charset="utf-8"><title>Social Contacts Sync</title>
 <meta name="viewport" content="width=device-width, initial-scale=1"></head>
 <body style="font-family:system-ui,sans-serif;display:grid;place-items:center;height:100vh;margin:0;background:#f5f5fa;color:#1c1d26">
-<main style="text-align:center;max-width:28rem;padding:2rem"><h1 style="font-size:1.5rem">Signed in to Google</h1>
-<p>You can close this tab and go back to Social Contacts Sync.</p>
-<p lang="it" style="color:#6b6c78">Accesso effettuato: puoi chiudere questa scheda e tornare a Social Contacts Sync.</p></main></body></html>`;
+<main style="text-align:center;max-width:28rem;padding:2rem"><h1 style="font-size:1.5rem">${title}</h1>
+<p>${text}</p>
+<p lang="it" style="color:#6b6c78">${italian}</p></main></body></html>`;
+}
+
+const signedInPage = browserPage(
+  "Signed in to Google",
+  "You can close this tab and go back to Social Contacts Sync.",
+  "Accesso effettuato: puoi chiudere questa scheda e tornare a Social Contacts Sync."
+);
+const signInFailedPage = browserPage(
+  "Google sign-in didn't complete",
+  "Close this tab, go back to Social Contacts Sync and press Sign in with Google again.",
+  "L'accesso non è stato completato: chiudi questa scheda, torna a Social Contacts Sync e premi di nuovo Accedi con Google."
+);
 
 router.get("/", (req: Request, res: Response) => {
   res.send("{}");
@@ -89,6 +103,7 @@ router.get("/status", async (req: Request, res: Response) => {
     googleConfigured: Boolean(process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET),
     telegramAvailable: telegramState(req.sessionID).available,
     telegramConnected: telegramState(req.sessionID).connected,
+    telegramSaved: hasSavedTelegram(),
     purchased: enforcePayments
       ? getFromCache(req.sessionID, "purchased")
       : true,
@@ -127,17 +142,16 @@ router.get("/google_auth_start", (req: Request, res: Response) => {
 
 router.get("/google_callback", async (req: Request, res: Response) => {
   const { code, state, error } = req.query;
+  // The desktop app signs in from the system browser: the app itself stays
+  // in its window, so the browser only gets a page saying what happened.
+  const failed = (reason: string) => (desktopMode ? res.send(signInFailedPage) : res.redirect(`/?error=${reason}`));
 
-  if (error) {
-    return res.redirect("/?error=google_auth_denied");
-  }
+  if (error) return failed("google_auth_denied");
 
   // The session that started the sign-in. In the desktop app the consent page
   // runs in the system browser, so this may not be the session of `req`.
   const signIn = consumeOAuthState(state);
-  if (!signIn) {
-    return res.redirect("/?error=invalid_state");
-  }
+  if (!signIn) return failed("invalid_state");
 
   const redirectUri = `${req.protocol}://${req.get("host")}/api/google_callback`;
   try {
@@ -145,14 +159,17 @@ router.get("/google_callback", async (req: Request, res: Response) => {
     const { sessionId: sessionID, returnTo = "/options" } = signIn;
     setInCache(sessionID, "gauth", gAuth);
     persistGoogleAuth(gAuth);
-    if (sessionID === req.sessionID) return res.redirect(returnTo);
+    // The desktop app has one session for the window and the browser, so
+    // the session alone can't tell them apart.
+    if (sessionID === req.sessionID && !desktopMode) return res.redirect(returnTo);
 
-    // Signed in from another browser: move the app window on and tell the
-    // user they can go back to it.
+    // Signed in from another browser: move the app window on, bring it to the
+    // front, and tell the user they can go back to it.
     sendEvent(getFromCache(sessionID, "ws"), EventType.Redirect, returnTo);
+    if (desktopMode) askDesktop("focus").catch(() => undefined);
     res.send(signedInPage);
   } catch (e) {
-    res.redirect("/?error=google_token_exchange_failed");
+    failed("google_token_exchange_failed");
   }
 });
 

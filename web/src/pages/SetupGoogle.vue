@@ -12,6 +12,8 @@ const steps = [
   { key: "project", url: "https://console.cloud.google.com/projectcreate" },
   { key: "api", url: "https://console.cloud.google.com/apis/library/people.googleapis.com" },
   { key: "consent", url: "https://console.cloud.google.com/auth/branding" },
+  // Without it Google blocks the sign-in ("Access blocked") while the app is in Testing.
+  { key: "testUser", url: "https://console.cloud.google.com/auth/audience" },
   { key: "client", url: "https://console.cloud.google.com/auth/clients/create" },
 ] as const;
 type StepKey = (typeof steps)[number]["key"];

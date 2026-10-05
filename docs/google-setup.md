@@ -25,9 +25,11 @@ each page for you.
    and press **Get started** if asked.
 2. App name: anything, for example *Social Contacts Sync*; support email: yours.
 3. Audience: **External**. Contact information: your email. Accept the policy and **Create**.
-4. Under [Audience](https://console.cloud.google.com/auth/audience), add your
-   own Google account (the one whose contacts you want to update) to **Test users**.
-5. Still under Audience, press **Publish app** and confirm.
+4. **Required:** under [Audience](https://console.cloud.google.com/auth/audience),
+   in **Test users**, press **Add users** and add your own Google account (the
+   one whose contacts you want to update). Without it Google blocks the
+   sign-in with *Access blocked*.
+5. Optional, still under Audience: press **Publish app** and confirm.
 
    Apps left in *Testing* are signed out every 7 days. Publishing does not
    make anything public: only accounts that sign in to *your* copy of the app

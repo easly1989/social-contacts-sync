@@ -121,6 +121,12 @@ async function answer({ id, request, payload = {} }: ServerMessage): Promise<voi
       case "delete-data":
         reply();
         return void deleteDataAndRestart();
+      case "focus":
+        // After signing in from the system browser: back to the app.
+        if (mainWindow?.isMinimized()) mainWindow.restore();
+        mainWindow?.show();
+        mainWindow?.focus();
+        return reply();
       default:
         return reply(undefined, `Unknown request: ${request}`);
     }
@@ -214,7 +220,8 @@ async function start(): Promise<void> {
     });
     const origin = `http://127.0.0.1:${port}`;
     keepLinksOutside(win, origin);
-    await win.loadURL(origin);
+    // /start opens the app once set up, otherwise the welcome page.
+    await win.loadURL(`${origin}/start`);
     void checkForUpdates();
   } catch (error) {
     await showStatus(win, `${productName} could not start`, error instanceof Error ? error.message : String(error));

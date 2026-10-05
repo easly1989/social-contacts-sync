@@ -12,8 +12,14 @@ export const setupPaths = ["/setup/google", "/setup/signin", "/setup/sources"];
 export function nextDesktopStep(status: SessionStatus): string {
   if (!status.googleConfigured) return "/setup/google";
   if (!status.googleConnected) return "/setup/signin";
-  if (!status.whatsappConnected && !status.whatsappSaved && !status.telegramConnected) return "/setup/sources";
+  // Saved links count: they reconnect by themselves a few seconds after start.
+  if (!status.whatsappConnected && !status.whatsappSaved && !status.telegramConnected && !status.telegramSaved) return "/setup/sources";
   return "/app";
+}
+
+/** Where the desktop app opens: the app once set up, otherwise the welcome page. */
+export function desktopStart(status: SessionStatus): string {
+  return status.desktop && nextDesktopStep(status) === "/app" ? "/app" : "/";
 }
 
 /** Where to send a desktop user who asked for `path`, or undefined to allow it. */

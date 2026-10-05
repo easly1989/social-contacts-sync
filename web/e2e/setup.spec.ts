@@ -34,6 +34,13 @@ test("the checklist opens Google Cloud pages and remembers finished steps", asyn
   await expect(page.getByRole("link", { name: "Open the API page" })).toBeVisible();
   await page.reload();
   await expect(page.getByRole("link", { name: "Open the API page" })).toBeVisible();
+
+  // Adding yourself as a test user is a step of its own: without it Google blocks the sign-in.
+  await page.getByRole("button", { name: "I've done this" }).click();
+  await page.getByRole("button", { name: "I've done this" }).click();
+  await expect(page.getByText("Add yourself as a test user")).toBeVisible();
+  await expect(page.getByRole("link", { name: "Open Audience" })).toHaveAttribute("href", "https://console.cloud.google.com/auth/audience");
+  await screenshot(page, "11b-setup-test-user");
 });
 
 test("a Web application client file is refused with an explanation", async ({ page }) => {
@@ -96,6 +103,33 @@ test("linking WhatsApp finishes the setup", async ({ page }) => {
   await expect(page.getByText("Connected", { exact: true })).toBeVisible({ timeout: 10_000 });
   await page.getByRole("button", { name: "Finish setup" }).click();
   await expect(page).toHaveURL(/\/app$/);
+});
+
+test.describe("desktop start", () => {
+  test("a finished setup opens the dashboard after a short loading screen", async ({ page }) => {
+    Object.assign(backend.status, { googleConfigured: true, googleConnected: true, whatsappSaved: true });
+    let release!: () => void;
+    backend.statusGate = new Promise((resolve) => (release = resolve));
+    await page.goto("/start");
+    await expect(page.getByRole("status")).toHaveText("Opening Social Contacts Sync…");
+    await screenshot(page, "18-desktop-start");
+    release();
+    await expect(page).toHaveURL(/\/app$/);
+    await expect(page.getByRole("heading", { name: "Dashboard" })).toBeVisible();
+  });
+
+  test("a saved Telegram sign-in counts as a source, while it reconnects", async ({ page }) => {
+    Object.assign(backend.status, { googleConfigured: true, googleConnected: true, telegramSaved: true });
+    await page.goto("/start");
+    await expect(page).toHaveURL(/\/app$/);
+  });
+
+  test("an unfinished setup opens the welcome page", async ({ page }) => {
+    backend.status.googleConfigured = true;
+    await page.goto("/start");
+    await expect(page).toHaveURL(/\/$/);
+    await expect(page.getByRole("heading", { name: "Give every contact a face." })).toBeVisible();
+  });
 });
 
 test.describe("desktop guards", () => {

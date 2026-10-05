@@ -20,6 +20,8 @@ import { desktopRedirect } from "./desktopFlow";
 
 const routes: RouteRecordRaw[] = [
   { path: "/", component: () => import("./pages/Home.vue") },
+  // The desktop app's first page: checks the setup, then opens the app or the welcome page.
+  { path: "/start", component: () => import("./pages/Start.vue") },
   { path: "/privacy", component: () => import("./pages/Privacy.vue") },
   { path: "/contribute", component: () => import("./pages/Contribute.vue") },
   { path: "/whatsapp", component: () => import("./pages/WhatsApp.vue") },
@@ -64,7 +66,7 @@ router.beforeEach(
     // Don't make any checks for serving the index page.
     // This is done so the user can access it even if the backend is down.
     // Additionally, bots are allowed to access any page they want.
-    if (to.path == "/" || isbot(navigator.userAgent)) return;
+    if (to.path == "/" || to.path == "/start" || isbot(navigator.userAgent)) return;
 
     const response = await fetch("/api/status", { credentials: "include" });
     const status: SessionStatus = await response.json();
