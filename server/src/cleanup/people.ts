@@ -3,6 +3,7 @@ import { people as peopleApi, people_v1 } from "@googleapis/people";
 import { CleanupContact } from "../../../interfaces/api";
 import { OAuth2Client } from "../gapi";
 import { Base64 } from "../types";
+import { withGoogleRetry } from "../googleRetry";
 
 /*
   The Google People API calls clean-up needs, behind a small interface so
@@ -93,10 +94,10 @@ export function peopleContactsApi(auth: OAuth2Client): ContactsApi {
       await people.deleteContact({ resourceName });
     },
     async setPhoto(resourceName, photo) {
-      await people.updateContactPhoto({ resourceName, requestBody: { photoBytes: photo } });
+      await withGoogleRetry(() => people.updateContactPhoto({ resourceName, requestBody: { photoBytes: photo } }));
     },
     async deletePhoto(resourceName) {
-      await people.deleteContactPhoto({ resourceName });
+      await withGoogleRetry(() => people.deleteContactPhoto({ resourceName }));
     },
     async photo(person) {
       const url = ownPhotoUrl(person);

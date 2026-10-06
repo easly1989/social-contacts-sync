@@ -152,6 +152,9 @@ onUnmounted(() => window.clearInterval(poll));
         <StatTile :label="$t('outcomes.noMatch')" :value="number(run.counters.noMatch, locale)" :icon="Search" />
         <StatTile :label="$t('outcomes.errors')" :value="number(run.counters.errors, locale)" :icon="CircleAlert" tone="text-error" />
       </div>
+      <p v-if="run.mode !== 'fill' && run.counters.alreadyHadPhoto" class="-mt-2 flex items-center gap-1.5 text-sm text-base-content/60" data-testid="count-kept-google">
+        <Image class="size-4" />{{ $t("outcomes.keptGoogle") }}: {{ number(run.counters.alreadyHadPhoto, locale) }}
+      </p>
 
       <section class="rounded-box border border-base-300 bg-base-100 px-4 pt-4 sm:px-6">
         <div class="flex flex-wrap items-center gap-3">
@@ -188,7 +191,10 @@ onUnmounted(() => window.clearInterval(poll));
               <template v-for="{ result, index } in rows" :key="index">
               <tr :class="{ 'opacity-60': result.undone }">
                 <td class="font-medium">{{ result.name ?? "—" }}</td>
-                <td class="text-base-content/60">{{ result.matchedBy ?? (result.error ? result.error : "—") }}</td>
+                <td class="text-base-content/60">
+                  <span v-if="!result.matchedBy && result.error" class="line-clamp-2 max-w-[36rem] break-words text-error/80" :title="result.error">{{ result.error }}</span>
+                  <template v-else>{{ result.matchedBy ?? "—" }}</template>
+                </td>
                 <td><SourceBadge v-if="result.source" :source="result.source" /></td>
                 <td>
                   <PhotoCompare

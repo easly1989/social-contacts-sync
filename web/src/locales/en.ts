@@ -85,6 +85,7 @@ export default {
     replaced: "Photos replaced",
     kept: "Kept as they were",
     alreadyHadPhoto: "Already had a photo",
+    keptGoogle: "Nothing new found, kept the photo they have in Google",
     noMatch: "No photo found",
     errors: "Errors",
   },

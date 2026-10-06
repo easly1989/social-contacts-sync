@@ -89,6 +89,26 @@ test("replace mode overwrites existing photos and keeps the previous one", async
   assert.deepEqual(photos[1], { photo: "wa-Bob", previous: "old-Bob" });
 });
 
+test("replace and review: a contact keeping its Google photo isn't counted as without a photo", async () => {
+  for (const mode of ["replace", "review"] as const) {
+    const { target, writes } = fakeTarget();
+    const { run } = await runSync(target, [gravatar], mode, callbacks({ review: async () => null }).callbacks, { shuffle: false });
+    assert.deepEqual(
+      run.results.map((r) => [r.contactId, r.outcome]),
+      [
+        ["c/ada", mode === "replace" ? "added" : "kept"],
+        ["c/bob", "alreadyHadPhoto"],
+        ["c/cy", mode === "replace" ? "added" : "kept"],
+        ["c/dee", "noMatch"],
+      ],
+      mode
+    );
+    assert.equal(run.counters.alreadyHadPhoto, 1);
+    assert.equal(run.counters.noMatch, 1);
+    assert.equal(writes.length, mode === "replace" ? 2 : 0);
+  }
+});
+
 test("review mode offers every source's photo and applies the choice", async () => {
   const { target, writes } = fakeTarget();
   const offered: string[][] = [];
