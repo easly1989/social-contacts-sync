@@ -118,6 +118,22 @@ test("report: tabs, search, undo and CSV export", async ({ page }) => {
   expect(file.suggestedFilename()).toBe(`social-contacts-sync-${run.id}.csv`);
 });
 
+test("report: kept Google photos aren't 'no photo found', and an error stays one line", async ({ page }) => {
+  const run = backend.runs[0];
+  // A contact that kept its Google photo, and a long error.
+  run.results[8] = { ...run.results[8], outcome: "alreadyHadPhoto" };
+  run.results[9] = { ...run.results[9], error: "Google had a temporary problem (502) and nothing was changed. Try again later. ".repeat(4) };
+  Object.assign(run.counters, { noMatch: 1, alreadyHadPhoto: 1 });
+  await page.goto(`/app/history/${run.id}`);
+  await expect(page.getByTestId("count-kept-google")).toHaveText("Nothing new found, kept the photo they have in Google: 1");
+  await expect(page.getByRole("tab", { name: "No photo found (1)" })).toBeVisible();
+  await page.getByRole("tab", { name: "Errors (1)" }).click();
+  const error = page.getByRole("row").nth(1).locator(".line-clamp-2");
+  await expect(error).toContainText("Google had a temporary problem (502)");
+  expect(await error.evaluate((el) => el.getBoundingClientRect().height)).toBeLessThan(50);
+  await screenshot(page, "25d-report-kept-and-error");
+});
+
 test("report: the photos open larger, before and after (issue #44)", async ({ page }) => {
   const run = backend.runs[0];
   await page.goto(`/app/history/${run.id}`);

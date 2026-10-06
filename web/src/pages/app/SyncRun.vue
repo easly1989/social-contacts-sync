@@ -228,6 +228,7 @@ onUnmounted(() => {
         <StatTile :label="$t('outcomes.noMatch')" :value="number(counters.noMatch, locale)" :icon="Search" data-testid="count-nomatch" />
         <StatTile :label="$t('outcomes.errors')" :value="number(counters.errors, locale)" :icon="CircleAlert" tone="text-error" data-testid="count-errors" />
       </div>
+      <p v-if="mode !== 'fill' && counters.alreadyHadPhoto" class="flex items-center gap-1.5 text-sm text-base-content/60" data-testid="count-kept-google"><Image class="size-4" />{{ $t("outcomes.keptGoogle") }}: {{ number(counters.alreadyHadPhoto, locale) }}</p>
       <p v-if="mode === 'review' && counters.kept" class="flex items-center gap-1.5 text-sm text-base-content/60"><Undo2 class="size-4" />{{ $t("outcomes.kept") }}: {{ counters.kept }}</p>
 
       <section v-if="latest.length" class="rounded-box border border-base-300 bg-base-100 p-6">

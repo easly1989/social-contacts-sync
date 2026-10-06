@@ -87,6 +87,7 @@ const it: typeof en = {
     replaced: "Foto sostituite",
     kept: "Lasciate com'erano",
     alreadyHadPhoto: "Avevano già una foto",
+    keptGoogle: "Niente di nuovo, tenuta la foto che hanno su Google",
     noMatch: "Nessuna foto trovata",
     errors: "Errori",
   },

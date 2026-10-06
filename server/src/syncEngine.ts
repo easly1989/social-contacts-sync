@@ -4,6 +4,7 @@ import { ContactResult, ReviewCandidate, RunRecord, SourceId, SyncCounters, Sync
 import { SimpleContact } from "./interfaces";
 import { FoundPhoto, PhotoSource } from "./sources/types";
 import { Base64 } from "./types";
+import { googleErrorMessage } from "./googleRetry";
 
 /*
   The photo sync, independent of WhatsApp, Google and the WebSocket: they
@@ -146,10 +147,13 @@ export async function runSync(
           image = found.photo;
         }
       }
+      // Nothing new, but the contact keeps the photo it has in Google: it
+      // isn't one of the contacts without a photo.
+      if (result.outcome === "noMatch" && contact.hasPhoto) result.outcome = "alreadyHadPhoto";
     } catch (e) {
       // One contact's failure must not end the whole run.
       result.outcome = "error";
-      result.error = e instanceof Error ? e.message : String(e);
+      result.error = googleErrorMessage(e);
       console.error(`Error syncing contact ${contact.id}:`, e);
     }
 

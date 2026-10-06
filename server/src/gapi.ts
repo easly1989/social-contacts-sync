@@ -7,6 +7,7 @@ export type OAuth2Client = InstanceType<typeof googleAuth.OAuth2>;
 import { SimpleContact } from "./interfaces";
 import { GoogleAccount } from "../../interfaces/api";
 import { Base64 } from "./types";
+import { withGoogleRetry } from "./googleRetry";
 
 const pageSize: number = 250;
 
@@ -103,15 +104,17 @@ export async function updateContactPhoto(
   const people: people_v1.People = peopleApi({ version: "v1", auth });
 
   // Errors propagate so the sync can count them per contact.
-  await people.people.updateContactPhoto({
-    resourceName: resourceName,
-    requestBody: { photoBytes: photo },
-  });
+  await withGoogleRetry(() =>
+    people.people.updateContactPhoto({
+      resourceName: resourceName,
+      requestBody: { photoBytes: photo },
+    })
+  );
 }
 
 export async function deleteContactPhoto(auth: OAuth2Client, resourceName: string): Promise<void> {
   const people = peopleApi({ version: "v1", auth });
-  await people.people.deleteContactPhoto({ resourceName });
+  await withGoogleRetry(() => people.people.deleteContactPhoto({ resourceName }));
 }
 
 /** The contact's current photo, or null when it has none (or only Google's default). */

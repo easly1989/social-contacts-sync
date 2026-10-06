@@ -109,6 +109,9 @@ export async function loadContacts(
     contactsMap.set(contact.id.user, contact.id._serialized);
     const normalized = toE164Digits("+" + contact.id.user);
     if (normalized) contactsMap.set(normalized, contact.id._serialized);
+    // A contact known by its private id (…@lid) can still carry its number.
+    const number = contact.number && contact.number !== contact.id.user ? toE164Digits("+" + contact.number) : undefined;
+    if (number && !contactsMap.has(number)) contactsMap.set(number, contact.id._serialized);
   });
 
   return contactsMap;
