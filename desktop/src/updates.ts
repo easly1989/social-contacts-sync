@@ -81,6 +81,17 @@ export function pickUpdate(releases: GitHubRelease[], current: string): Release 
   return best;
 }
 
+/**
+ * Where electron-updater finds a release's files (latest.yml and the
+ * packages). Pointing it at the release we picked keeps its own choice out
+ * of it: with the GitHub provider it reads "beta2" in 0.1.0-beta2 as a
+ * channel and only offers releases of that same "channel", so a beta never
+ * saw the next one.
+ */
+export function updateFeed(version: string): { provider: "generic"; url: string } {
+  return { provider: "generic", url: `https://github.com/${releasesRepo}/releases/download/v${version}` };
+}
+
 export async function findUpdate(current: string, fetchImpl: typeof fetch = fetch): Promise<Release | undefined> {
   const response = await fetchImpl(`https://api.github.com/repos/${releasesRepo}/releases?per_page=20`, {
     headers: { Accept: "application/vnd.github+json", "User-Agent": "social-contacts-sync" },
