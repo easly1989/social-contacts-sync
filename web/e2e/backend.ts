@@ -2,7 +2,7 @@ import { mkdirSync } from "fs";
 import path from "path";
 import { Page, Request, Route, WebSocketRoute, expect } from "@playwright/test";
 
-import { TelegramState, CleanupActionSummary, CleanupScan, DesktopInfo, EventType, MergeRequest, GoogleAccount, GoogleStats, RunRecord, SessionStatus, UpdateCheck } from "../../interfaces/api";
+import { Contact, ContactLabel, TelegramState, CleanupActionSummary, CleanupScan, DesktopInfo, EventType, MergeRequest, GoogleAccount, GoogleStats, RunRecord, SessionStatus, UpdateCheck } from "../../interfaces/api";
 import { avatars } from "./avatars";
 
 /**
@@ -57,6 +57,10 @@ export class FakeBackend {
   /** Profile links (issue #51): lookups and saves sent, and lookups made to fail, by URL. */
   linkRequests: { route: string; body: any }[] = [];
   linkFailures: Record<string, { status: number; json: object }> = {};
+  /** The Contacts page (issue #55): the address book, its labels and every change sent. */
+  contacts: Contact[] = [];
+  labels: ContactLabel[] = [];
+  contactRequests: { method: string; route: string; body?: any; bytes?: number }[] = [];
   /** /api/status waits for this, to show what the page looks like while it loads. */
   statusGate?: Promise<void>;
   /** When false, Google sign-in "opens in the system browser" and nothing happens here. */
@@ -156,6 +160,7 @@ export class FakeBackend {
         const avatar = avatars[Number(pathname.split("/").pop()) % avatars.length];
         return route.fulfill({ contentType: "image/jpeg", body: Buffer.from(avatar, "base64") });
       }
+      if (pathname.startsWith("/api/contacts")) return this.contactsRoute(route, pathname, request);
       if (pathname.startsWith("/api/cleanup")) return this.cleanup(route, pathname, request);
       if (pathname.startsWith("/api/telegram")) return this.telegramRoute(route, pathname, request);
       if (pathname === "/api/check_purchase")
@@ -262,6 +267,68 @@ export class FakeBackend {
       return route.fulfill({ json: { ok: true } });
     }
     return route.fulfill({ status: 404, json: { error: "not_found" } });
+  }
+
+  private contactsRoute(route: Route, pathname: string, request: Request) {
+    const method = request.method();
+    const json = () => (request.postData() ? request.postDataJSON() : undefined);
+    const body = request.headers()["content-type"]?.startsWith("image/") ? undefined : json();
+    const bytes = request.postDataBuffer()?.length;
+    this.contactRequests.push({ method, route: pathname.replace("/api/contacts", "") || "/", body, ...(body === undefined && bytes ? { bytes } : {}) });
+    const find = (id: string) => this.contacts.find((c) => c.id === `people/${id}`);
+    const now = () => new Date(Date.UTC(2026, 9, 6, 12, 0, this.contactRequests.length)).toISOString();
+    if (pathname === "/api/contacts" && method === "GET") return route.fulfill({ json: { contacts: this.contacts, labels: this.labels } });
+    if (pathname === "/api/contacts" && method === "POST") {
+      const c = body.contact;
+      if (!(c.givenName || c.familyName || c.company || c.phones.length || c.emails.length)) return route.fulfill({ status: 400, json: { error: "empty_contact" } });
+      const contact: Contact = { ...body.contact, id: `people/new${this.contactRequests.length}`, name: [body.contact.givenName, body.contact.familyName].filter(Boolean).join(" "), hasPhoto: false, updatedAt: now() };
+      this.contacts.push(contact);
+      return route.fulfill({ json: contact });
+    }
+    if (pathname === "/api/contacts/delete") {
+      const first = this.contacts.find((c) => c.id === body.contactIds[0]);
+      this.contacts = this.contacts.filter((c) => !body.contactIds.includes(c.id));
+      const id = `delete-${this.cleanupActions.length + 1}`;
+      this.cleanupActions.unshift({ id, kind: "delete", at: new Date().toISOString(), title: body.contactIds.length === 1 ? (first?.name ?? "") : "", contacts: body.contactIds.length });
+      return route.fulfill({ json: { actionId: id, deleted: body.contactIds } });
+    }
+    if (pathname === "/api/contacts/merge") {
+      const kept = this.contacts.find((c) => c.id === body.request.keepId)!;
+      const others = this.contacts.filter((c) => body.contactIds.includes(c.id) && c !== kept);
+      kept.urls = [...kept.urls, ...others.flatMap((o) => o.urls)];
+      this.contacts = this.contacts.filter((c) => !others.includes(c));
+      const id = `merge-${this.cleanupActions.length + 1}`;
+      this.cleanupActions.unshift({ id, kind: "merge", at: new Date().toISOString(), title: kept.name ?? "", contacts: body.contactIds.length });
+      return route.fulfill({ json: { actionId: id, contact: kept, deleted: others.map((o) => o.id) } });
+    }
+    if (pathname === "/api/contacts/labels") {
+      const label = { id: `contactGroups/new${this.labels.length}`, name: body.name };
+      this.labels.push(label);
+      return route.fulfill({ json: label });
+    }
+    if (pathname === "/api/contacts/labels/apply") {
+      const changed = this.contacts.filter((c) => body.contactIds.includes(c.id));
+      for (const c of changed) c.labels = body.add ? [...new Set([...c.labels, body.label])] : c.labels.filter((l) => l !== body.label);
+      return route.fulfill({ json: { contacts: changed } });
+    }
+    const one = /^\/api\/contacts\/([\w-]+)(?:\/(duplicate|photo|photo_from_link))?$/.exec(pathname);
+    const contact = one && find(one[1]);
+    if (!one || !contact) return route.fulfill({ status: 404, json: { error: "not_found" } });
+    if (one[2] === "duplicate") {
+      const copy = { ...structuredClone(contact), id: `people/copy${this.contactRequests.length}`, updatedAt: now() };
+      this.contacts.push(copy);
+      return route.fulfill({ json: copy });
+    }
+    if (one[2] === "photo" && method === "PUT") Object.assign(contact, { hasPhoto: true, placeholder: true, photoUrl: `/api/e2e-photos/${this.contactRequests.length}`, updatedAt: now() });
+    else if (one[2] === "photo") Object.assign(contact, { hasPhoto: false, placeholder: undefined, photoUrl: undefined, updatedAt: now() });
+    else if (one[2] === "photo_from_link") {
+      Object.assign(contact, { hasPhoto: true, placeholder: undefined, photoUrl: "/api/e2e-photos/3", updatedAt: now() });
+      if (!contact.urls.some((u) => u.value === "https://instagram.com/elena.conti.ph")) contact.urls.push({ value: "https://instagram.com/elena.conti.ph", type: "profile" });
+    } else if (method === "PUT") {
+      if (body.updatedAt !== contact.updatedAt) return route.fulfill({ status: 409, json: { error: "changed", contact } });
+      Object.assign(contact, body.contact, { name: [body.contact.givenName, body.contact.familyName].filter(Boolean).join(" "), updatedAt: now() });
+    }
+    return route.fulfill({ json: contact });
   }
 
   /** Sends a server event to the page once its WebSocket is connected. */

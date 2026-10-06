@@ -40,6 +40,11 @@
   review each one with the keyboard.
 - **Nothing changes without a way back.** Every sync has a report and can be
   undone, as a whole or one contact at a time.
+- **Contacts.** Every Google contact in one list, with the ones still without a
+  photo one click away: edit every field, add, duplicate, delete, merge and
+  label them, add a profile link to anyone, and upload photos by hand, one at a
+  time or many at once. A photo uploaded by hand is a placeholder: the next sync
+  replaces it as soon as a source has a real one.
 - **Clean up.** Find duplicate contacts and merge them field by field, find
   numbers saved on different people, and add missing country codes. Every
   change is backed up and can be undone from History.
@@ -255,6 +260,7 @@ The app stays signed in between launches, unless you turn off
 | `history/` | past syncs with the photos they changed, for reports and undo (kept 90 days) |
 | `history/cleanup/` | backups of merged contacts (all their fields and photos), for undo (kept 90 days) |
 | `cleanup.json` | clean-up choices, such as groups marked *Not duplicates* |
+| `placeholders.json` | which contacts have a photo uploaded by hand on the Contacts page, so a sync can replace it |
 | `logs/` | server logs |
 
 **Settings** shows these folders and lets you sign out of Google, unlink

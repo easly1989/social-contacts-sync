@@ -114,7 +114,8 @@ export async function runSync(
     const kept: RunPhotos = {};
     let image: Base64 | undefined;
     try {
-      if (mode === "fill" && contact.hasPhoto) {
+      // A placeholder uploaded by hand counts as no photo: a real one replaces it.
+      if (mode === "fill" && contact.hasPhoto && !contact.placeholder) {
         result.outcome = "alreadyHadPhoto";
       } else if (mode === "review") {
         const candidates = await allMatches(sources, contact);

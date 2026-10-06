@@ -1,4 +1,4 @@
-import { ContactsApi, Person } from "./people";
+import { ContactsApi, Group, Person } from "./people";
 
 /** A People API error, shaped like googleapis' GaxiosError. */
 function googleError(code: number, message: string): Error {
@@ -10,6 +10,9 @@ export class FakeContacts implements ContactsApi {
   people = new Map<string, Person>();
   photos = new Map<string, string>();
   calls: string[] = [];
+  labels: Group[] = [];
+  /** Google gives every new photo a new address. */
+  private photoVersions = new Map<string, number>();
   private next = 100;
   private created = 0;
 
@@ -26,7 +29,7 @@ export class FakeContacts implements ContactsApi {
     return {
       ...structuredClone(person),
       metadata: { ...person.metadata, sources: [contactSource, ...others] },
-      photos: this.photos.has(id) ? [{ url: `https://photos.example/${id}`, default: false }] : [{ url: "https://photos.example/default", default: true }],
+      photos: this.photos.has(id) ? [{ url: `https://photos.example/${id}/v${this.photoVersions.get(id) ?? 0}=s100`, default: false }] : [{ url: "https://photos.example/default", default: true }],
     };
   }
 
@@ -48,7 +51,7 @@ export class FakeContacts implements ContactsApi {
     if (source.etag !== person.etag) throw googleError(400, "failedPrecondition: the contact changed since it was read.");
     if (fields.includes("memberships") && !body.memberships?.some((m) => m.contactGroupMembership?.contactGroupResourceName))
       throw googleError(400, "A contact must have at least one contact group membership.");
-    for (const singleton of ["names", "birthdays"] as const)
+    for (const singleton of ["names", "birthdays", "biographies"] as const)
       if (fields.includes(singleton) && (body[singleton]?.length ?? 0) > 1) throw googleError(400, `Only one ${singleton} entry is allowed.`);
     for (const field of fields) (person as Record<string, unknown>)[field] = structuredClone((body as Record<string, unknown>)[field]);
     person.etag = `e${this.next++}`;
@@ -58,7 +61,7 @@ export class FakeContacts implements ContactsApi {
   async create(body: Person) {
     const id = `people/new${++this.created}`;
     this.calls.push(`create ${id}`);
-    for (const singleton of ["names", "birthdays"] as const)
+    for (const singleton of ["names", "birthdays", "biographies"] as const)
       if ((body[singleton]?.length ?? 0) > 1) throw googleError(400, `Only one ${singleton} entry is allowed.`);
     this.people.set(id, { ...structuredClone(body), resourceName: id, etag: "e0" });
     return this.withPhoto(this.people.get(id)!);
@@ -71,6 +74,7 @@ export class FakeContacts implements ContactsApi {
   async setPhoto(id: string, photo: string) {
     this.calls.push(`setPhoto ${id}`);
     this.photos.set(id, photo);
+    this.photoVersions.set(id, (this.photoVersions.get(id) ?? 0) + 1);
   }
   async deletePhoto(id: string) {
     this.calls.push(`deletePhoto ${id}`);
@@ -78,5 +82,14 @@ export class FakeContacts implements ContactsApi {
   }
   async photo(person: Person) {
     return this.photos.get(person.resourceName!) ?? null;
+  }
+  async groups() {
+    return structuredClone(this.labels);
+  }
+  async createGroup(name: string) {
+    const group = { id: `contactGroups/label${this.labels.length + 1}`, name };
+    this.calls.push(`createGroup ${name}`);
+    this.labels.push(group);
+    return group;
   }
 }

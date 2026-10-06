@@ -2,7 +2,7 @@ import { CountryCode } from "libphonenumber-js";
 
 import { MergeRequest } from "../../../interfaces/api";
 import { Base64 } from "../types";
-import { ContactsApi, Person, toCleanupContact, updateHeader, writableFields } from "./people";
+import { ContactsApi, legacyWritableFields, Person, toCleanupContact, updateHeader, writableFields } from "./people";
 import { normalizeEmail, toE164 } from "./scan";
 
 /*
@@ -29,7 +29,7 @@ export function contactEntries<T extends Entry>(entries: T[] | null | undefined)
 }
 
 /** Fields Google allows only once on a contact. */
-const singletons = new Set<string>(["names", "birthdays"]);
+const singletons = new Set<string>(["names", "birthdays", "biographies"]);
 
 function dedupe<T>(items: T[], key: (item: T) => string): T[] {
   const seen = new Set<string>();
@@ -122,6 +122,14 @@ export function planMerge(people: Person[], request: MergeRequest, region?: Coun
       people.flatMap((p) => contactEntries(p.urls).map(writable)),
       (u) => (u.value ?? "").toLowerCase().replace(/^https?:\/\/(www\.)?/, "").replace(/\/$/, "")
     ),
+    // Every contact's notes, one after the other (Google keeps one note).
+    biographies: (() => {
+      const notes = dedupe(
+        people.flatMap((p) => contactEntries(p.biographies).map((b) => (b.value ?? "").trim())).filter(Boolean),
+        (n) => n
+      );
+      return notes.length ? [{ value: notes.join("\n\n"), contentType: "TEXT_PLAIN" }] : [];
+    })(),
     // Labels of every contact in the group. Google refuses an update that
     // leaves a contact in no group, and connections are in My Contacts.
     memberships: dedupe(
@@ -146,6 +154,8 @@ export interface MergeBackup {
   photos: (Base64 | null)[];
   keptId: string;
   steps: { updated: boolean; photo: boolean; deleted: string[] };
+  /** The fields `people` were read with; backups without it predate notes. */
+  fields?: readonly string[];
   /** Undo: new IDs of the re-created contacts. */
   restored?: Record<string, string>;
 }
@@ -167,7 +177,7 @@ export async function executeMerge(
   const plan = planMerge(people, request, options.region);
 
   const photos = await Promise.all(people.map((p) => api.photo(p)));
-  const backup: MergeBackup = { people, photos, keptId: plan.keepId, steps: { updated: false, photo: false, deleted: [] } };
+  const backup: MergeBackup = { people, photos, keptId: plan.keepId, steps: { updated: false, photo: false, deleted: [] }, fields: writableFields };
   options.save(backup);
 
   await api.update(plan.keepId, plan.update, writableFields);
@@ -204,7 +214,7 @@ export async function undoMerge(api: ContactsApi, backup: MergeBackup, save: (ba
   const keptIndex = index(backup.keptId);
   if (backup.steps.updated) {
     const current = await api.get(backup.keptId);
-    await api.update(backup.keptId, withGroup({ ...restorable(backup.people[keptIndex]), ...updateHeader(current) }), writableFields);
+    await api.update(backup.keptId, withGroup({ ...restorable(backup.people[keptIndex]), ...updateHeader(current) }), backup.fields ?? legacyWritableFields);
     backup.steps.updated = false;
     save(backup);
   }

@@ -283,7 +283,8 @@ export function cleanupRouter(contactsApi: (auth: OAuth2Client) => ContactsApi =
     if (action.undone) return res.send({ ok: true });
     const sessionId = req.sessionID;
     try {
-      if (action.kind === "merge") await undoMerge(api, action.backup, (backup) => saveAction(sessionId, { ...action, backup }));
+      // A deletion is undone like the deleting half of a merge.
+      if (action.kind === "merge" || action.kind === "delete") await undoMerge(api, action.backup, (backup) => saveAction(sessionId, { ...action, backup }));
       else {
         const limiter = googleRateLimiter();
         await undoEdits(api, action.backup, {

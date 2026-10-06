@@ -19,6 +19,7 @@ const memoryActionsPerSession = 20;
 
 export type CleanupAction =
   | (CleanupActionSummary & { kind: "merge"; backup: MergeBackup })
+  | (CleanupActionSummary & { kind: "delete"; backup: MergeBackup })
   | (CleanupActionSummary & { kind: "keepNumber" | "countryCodes"; backup: EditBackup });
 
 export interface CleanupPrefs {
@@ -80,7 +81,7 @@ export function saveAction(sessionId: string, action: CleanupAction): void {
   const actionDir = path.join(dir, action.id);
   fs.mkdirSync(actionDir, { recursive: true });
   let stored: unknown = action;
-  if (action.kind === "merge") {
+  if (action.kind === "merge" || action.kind === "delete") {
     action.backup.photos.forEach((photo, i) => {
       const file = path.join(actionDir, `photo-${i}.jpg`);
       if (photo && !fs.existsSync(file)) fs.writeFileSync(file, Buffer.from(photo, "base64"));
@@ -97,7 +98,7 @@ export function getAction(sessionId: string, id: string): CleanupAction | undefi
   if (!/^[\w.-]+$/.test(id)) return undefined;
   try {
     const stored = JSON.parse(fs.readFileSync(path.join(dir, id, "action.json"), "utf8"));
-    if (stored.kind !== "merge") return stored;
+    if (stored.kind !== "merge" && stored.kind !== "delete") return stored;
     stored.backup.photos = stored.backup.photos.map((has: boolean | null, i: number): Base64 | null =>
       has ? fs.readFileSync(path.join(dir, id, `photo-${i}.jpg`)).toString("base64") : null
     );
