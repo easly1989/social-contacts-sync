@@ -72,6 +72,15 @@ test("the plan writes only what is saved on the contact, never its Google profil
   assert.deepEqual(plan.update.birthdays, []);
 });
 
+test("a merge keeps every profile link of the group, once", () => {
+  const plan = planMerge(
+    [{ ...marcoA, urls: [{ value: "https://www.instagram.com/marco/" }] }, { ...marcoB, urls: [{ value: "https://instagram.com/marco" }, { value: "https://x.com/marco" }] }],
+    request,
+    "IT"
+  );
+  assert.deepEqual(plan.update.urls, [{ value: "https://www.instagram.com/marco/" }, { value: "https://x.com/marco" }]);
+});
+
 test("a contact without labels stays in My Contacts", () => {
   const plan = planMerge([{ ...marcoA, memberships: [] }, { ...marcoB, memberships: [] }], request, "IT");
   assert.deepEqual(plan.update.memberships, [{ contactGroupMembership: { contactGroupResourceName: "contactGroups/myContacts" } }]);

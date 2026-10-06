@@ -2,15 +2,17 @@
 import { computed, onMounted, onUnmounted, ref } from "vue";
 import { useRoute } from "vue-router";
 import { useI18n } from "vue-i18n";
-import { ArrowRight, Check, CircleAlert, CircleCheck, Image, ImagePlus, Keyboard, Replace, Search, Square, Undo2 } from "lucide-vue-next";
+import { ArrowRight, Check, CircleAlert, CircleCheck, Image, ImagePlus, Keyboard, Link, Replace, Search, Square, Undo2 } from "lucide-vue-next";
 
 import AppShell from "../../components/AppShell.vue";
+import ProfileLinkLookup from "../../components/ProfileLinkLookup.vue";
 import SourceBadge from "../../components/SourceBadge.vue";
 import StatTile from "../../components/StatTile.vue";
 import { addHandler, sendEvent } from "../../services/ws";
 import { api } from "../../api";
 import { number } from "../../format";
-import { EventType, ReviewRequest, SourceId, SyncCounters, SyncProgress } from "../../../../interfaces/api";
+import { bestEffortLinks } from "../../profileLinks";
+import { EventType, LinkLookup, ReviewAnswer, ReviewRequest, SourceId, SyncCounters, SyncProgress } from "../../../../interfaces/api";
 
 // Mockups 3.2 (progress) and 3.3 (review) in issue #8.
 const route = useRoute();
@@ -31,6 +33,10 @@ const lastEventAt = ref<number>();
 const disconnected = ref(false);
 const review = ref<ReviewRequest>();
 const choice = ref(0);
+/** Candidates looked up from a profile link, by index: their lookup token (issue #51). */
+const linkTokens = ref<Record<number, string>>({});
+/** Starts the link field afresh for each contact. */
+const reviewKey = ref(0);
 const waitingForNext = ref(false);
 let timer: number | undefined;
 
@@ -64,18 +70,31 @@ function onProgress(update: SyncProgress): void {
 function onReview(request: ReviewRequest): void {
   review.value = request;
   choice.value = 0;
+  linkTokens.value = {};
+  reviewKey.value++;
   waitingForNext.value = false;
+}
+
+// "None of these?": the photo behind a profile link becomes one more candidate.
+function onLinkFound(lookup: LinkLookup): void {
+  if (!review.value) return;
+  review.value.candidates.push({ photo: lookup.photo, source: "links", matchedBy: lookup.url.replace(/^https:\/\//, "") });
+  choice.value = review.value.candidates.length - 1;
+  linkTokens.value[choice.value] = lookup.token;
 }
 
 function answer(accept: boolean): void {
   if (!review.value) return;
-  sendEvent(EventType.SyncPhotoConfirm, { accept, choice: choice.value });
+  const token = linkTokens.value[choice.value];
+  const reply: ReviewAnswer = accept && token ? { accept, link: token } : { accept, choice: choice.value };
+  sendEvent(EventType.SyncPhotoConfirm, reply);
   review.value = undefined;
   waitingForNext.value = true;
 }
 
 function onKey(event: KeyboardEvent): void {
-  if (!review.value) return;
+  // Typing a profile link isn't a shortcut.
+  if (!review.value || event.target instanceof HTMLInputElement) return;
   const n = Number(event.key);
   if (n >= 1 && n <= review.value.candidates.length) choice.value = n - 1;
   else if (event.key === "ArrowLeft" || event.key.toLowerCase() === "s") answer(false);
@@ -99,6 +118,7 @@ onMounted(() => {
     manual_sync: String(mode.value === "review"),
     overwrite_photos: String(mode.value === "replace"),
     sources: String(route.query.sources ?? "whatsapp"),
+    links_best_effort: String(bestEffortLinks.value),
   });
   fetch(`/api/init_sync?${params}`, { credentials: "include" });
   timer = window.setInterval(() => {
@@ -176,6 +196,7 @@ onUnmounted(() => {
                   <span v-if="choice === index" class="absolute -right-1 -top-1 grid size-7 place-items-center rounded-full bg-primary text-primary-content"><Check class="size-4" /></span>
                 </span>
                 <span class="mt-2 flex items-center justify-center gap-1.5"><kbd class="kbd kbd-xs">{{ index + 1 }}</kbd><SourceBadge :source="candidate.source" /></span>
+                <span v-if="candidate.source === 'links'" class="mt-1 block max-w-44 truncate text-[11px] text-base-content/50">{{ candidate.matchedBy }}</span>
               </button>
             </div>
             <div class="mt-4 text-center"><button type="button" class="btn btn-primary btn-sm" @click="answer(true)">{{ $t("sync.review.use") }} <kbd class="kbd kbd-xs">Enter</kbd></button></div>
@@ -187,6 +208,13 @@ onUnmounted(() => {
           <span><kbd class="kbd kbd-xs">Enter</kbd> {{ $t("sync.review.use") }}</span>
           <span><kbd class="kbd kbd-xs">1</kbd>–<kbd class="kbd kbd-xs">3</kbd> {{ $t("syncRun.pick") }}</span>
           <span><kbd class="kbd kbd-xs">S</kbd> {{ $t("syncRun.skip") }}</span>
+        </div>
+        <div class="mt-6 border-t border-base-300 pt-5" data-testid="review-link">
+          <div class="flex flex-wrap items-start gap-3">
+            <span class="flex items-center gap-1.5 pt-1.5 text-sm text-base-content/70"><Link class="size-4" />{{ $t("links.reviewPrompt") }}</span>
+            <ProfileLinkLookup :key="reviewKey" @found="onLinkFound" />
+          </div>
+          <p class="mt-2 text-xs text-base-content/50">{{ $t("links.reviewHint") }}</p>
         </div>
       </section>
       <div v-else-if="waitingForNext && !done" class="flex items-center justify-center gap-3 py-6 text-base-content/70">

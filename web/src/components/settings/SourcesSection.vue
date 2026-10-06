@@ -1,12 +1,13 @@
 <script setup lang="ts">
 import { onMounted, ref } from "vue";
-import { Info } from "lucide-vue-next";
+import { Check, FlaskConical, Info } from "lucide-vue-next";
 
 import SettingsCard from "./SettingsCard.vue";
 import SourceMark from "../SourceMark.vue";
 import TelegramLink from "../TelegramLink.vue";
 import { api } from "../../api";
 import { isDesktop } from "../../settings";
+import { bestEffortLinks, bestEffortNetworks, stableNetworks } from "../../profileLinks";
 import { SessionStatus } from "../../../../interfaces/api";
 
 const status = ref<SessionStatus>();
@@ -54,6 +55,33 @@ onMounted(async () => {
         <div class="text-sm text-base-content/60">{{ $t("setup.sources.byPhone") }}</div>
       </div>
       <div class="w-full sm:w-80"><TelegramLink /></div>
+    </div>
+    <!-- Profile links (issue #51) -->
+    <div class="py-4" data-testid="settings-source-links">
+      <div class="flex flex-wrap items-center gap-3">
+        <SourceMark source="links" />
+        <div class="min-w-[10rem] flex-1">
+          <div class="font-medium">{{ $t("links.name") }}</div>
+          <div class="text-sm text-base-content/60">{{ $t("links.byLink") }} · {{ $t("dashboard.noSignIn") }}</div>
+        </div>
+        <span class="badge badge-soft badge-success badge-sm">{{ $t("dashboard.ready") }}</span>
+      </div>
+      <div class="mt-3 space-y-3 sm:ml-12">
+        <ul class="flex flex-wrap gap-1.5" :aria-label="$t('links.networks')">
+          <li v-for="n in stableNetworks" :key="n" class="inline-flex items-center gap-1 rounded-full border border-base-300 px-2 py-0.5 text-xs"><Check class="size-3 text-success" />{{ n }}</li>
+        </ul>
+        <label class="flex cursor-pointer items-start gap-3 rounded-xl border border-base-300 p-3">
+          <input v-model="bestEffortLinks" type="checkbox" class="toggle toggle-primary toggle-sm mt-0.5" />
+          <span class="flex-1">
+            <span class="flex flex-wrap items-center gap-2 text-sm font-medium">{{ $t("links.bestEffort") }}<span class="badge badge-warning badge-soft badge-xs">{{ $t("links.unofficial") }}</span></span>
+            <span class="mt-1 block text-xs text-base-content/60">{{ $t("links.bestEffortText") }}</span>
+            <span class="mt-2 flex flex-wrap gap-1.5">
+              <span v-for="n in bestEffortNetworks" :key="n" class="inline-flex items-center gap-1 rounded-full border border-base-300 px-2 py-0.5 text-xs text-base-content/60"><FlaskConical class="size-3" />{{ n }}</span>
+            </span>
+          </span>
+        </label>
+        <p class="flex gap-1.5 text-xs text-base-content/50"><Info class="mt-px size-3.5 shrink-0" />{{ $t("links.settingsHint") }}</p>
+      </div>
     </div>
     <p class="flex items-start gap-1.5 pt-4 text-xs text-base-content/50"><Info class="mt-px size-3.5 shrink-0" />{{ $t("setup.sources.unavailable") }}</p>
   </SettingsCard>

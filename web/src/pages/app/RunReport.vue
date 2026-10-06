@@ -2,15 +2,16 @@
 import { computed, onMounted, onUnmounted, ref } from "vue";
 import { useRoute } from "vue-router";
 import { useI18n } from "vue-i18n";
-import { ArrowLeft, Check, CircleAlert, FileDown, Image, ImagePlus, Replace, Search, Undo2 } from "lucide-vue-next";
+import { ArrowLeft, ArrowRight, Check, CircleAlert, FileDown, Image, ImagePlus, Link, Replace, Search, Undo2 } from "lucide-vue-next";
 
 import AppShell from "../../components/AppShell.vue";
 import PhotoCompare from "../../components/PhotoCompare.vue";
+import ProfileLinkLookup from "../../components/ProfileLinkLookup.vue";
 import SourceBadge from "../../components/SourceBadge.vue";
 import StatTile from "../../components/StatTile.vue";
-import { api } from "../../api";
+import { api, withGoogleDetail } from "../../api";
 import { dateTime, duration, number } from "../../format";
-import { ContactResult, RunRecord } from "../../../../interfaces/api";
+import { ContactResult, LinkLookup, RunRecord } from "../../../../interfaces/api";
 
 // Mockup 3.4 in issue #8.
 const route = useRoute();
@@ -72,6 +73,33 @@ async function undoAll(): Promise<void> {
 async function undoOne(index: number): Promise<void> {
   await api.undo(runId, [index]);
   watchUndo([index]);
+}
+
+// "No photo found" → add a profile link (issue #51).
+const linking = ref<number>();
+const found = ref<LinkLookup>();
+const saving = ref(false);
+const saveError = ref<string>();
+
+function startLink(index: number): void {
+  linking.value = index;
+  found.value = undefined;
+  saveError.value = undefined;
+}
+
+async function saveLink(index: number): Promise<void> {
+  if (!found.value || !run.value) return;
+  saving.value = true;
+  saveError.value = undefined;
+  try {
+    const { result, counters } = await api.saveRunLink(run.value.id, index, found.value.token);
+    run.value.results[index] = result;
+    run.value.counters = counters;
+    linking.value = undefined;
+  } catch (e) {
+    saveError.value = withGoogleDetail(t("links.saveError"), e);
+  }
+  saving.value = false;
 }
 
 function exportCsv(): void {
@@ -145,6 +173,7 @@ onUnmounted(() => window.clearInterval(poll));
           <label class="input input-sm w-56"><Search class="size-4 opacity-50" /><input v-model="search" :placeholder="$t('report.search')" :aria-label="$t('report.search')" /></label>
         </div>
         <div class="overflow-x-auto">
+          <p v-if="tab === 'noMatch' && rows.length" class="mt-3 flex gap-1.5 text-xs text-base-content/60"><Link class="mt-px size-3.5 shrink-0" />{{ $t("links.reportHint") }}</p>
           <table v-if="rows.length" class="table table-sm mt-2">
             <thead>
               <tr>
@@ -156,7 +185,8 @@ onUnmounted(() => window.clearInterval(poll));
               </tr>
             </thead>
             <tbody>
-              <tr v-for="{ result, index } in rows" :key="index" :class="{ 'opacity-60': result.undone }">
+              <template v-for="{ result, index } in rows" :key="index">
+              <tr :class="{ 'opacity-60': result.undone }">
                 <td class="font-medium">{{ result.name ?? "—" }}</td>
                 <td class="text-base-content/60">{{ result.matchedBy ?? (result.error ? result.error : "—") }}</td>
                 <td><SourceBadge v-if="result.source" :source="result.source" /></td>
@@ -174,8 +204,33 @@ onUnmounted(() => window.clearInterval(poll));
                 <td class="text-right">
                   <span v-if="result.undone" class="badge badge-ghost badge-sm">{{ $t("report.undone") }}</span>
                   <button v-else-if="changed(result)" type="button" class="btn btn-ghost btn-xs" :disabled="undoing" @click="undoOne(index)"><Undo2 class="size-3.5" />{{ $t("report.undo") }}</button>
+                  <button v-else-if="result.outcome === 'noMatch' && linking !== index" type="button" class="btn btn-ghost btn-xs" @click="startLink(index)">
+                    <Link class="size-3.5" />{{ $t("links.add") }}
+                  </button>
                 </td>
               </tr>
+              <tr v-if="linking === index" class="bg-base-200/60" :data-testid="`link-row-${index}`">
+                <td colspan="5">
+                  <div class="flex items-start gap-3">
+                    <ProfileLinkLookup :label="$t('links.fieldFor', { name: result.name ?? '—' })" autofocus @found="(lookup) => (found = lookup)" />
+                    <button type="button" class="btn btn-ghost btn-sm" @click="linking = undefined">{{ $t("common.cancel") }}</button>
+                  </div>
+                  <div v-if="found" class="mt-3 flex flex-wrap items-center gap-4 rounded-xl border border-base-300 bg-base-100 p-3">
+                    <span class="grid size-12 place-items-center rounded-full bg-base-300 text-base font-semibold text-base-content/50">{{ (result.name ?? "?")[0] }}</span>
+                    <ArrowRight class="size-4 text-base-content/40" />
+                    <img :src="`data:image/jpeg;base64,${found.photo}`" :alt="$t('links.foundOn', { network: found.network })" class="size-12 rounded-full object-cover" />
+                    <div class="min-w-[12rem] flex-1">
+                      <div class="text-sm font-medium">{{ $t("links.foundOn", { network: found.network }) }}</div>
+                      <div class="text-xs text-base-content/60">{{ $t("links.saveHint") }}</div>
+                    </div>
+                    <button type="button" class="btn btn-primary btn-sm" :disabled="saving" @click="saveLink(index)">
+                      <span v-if="saving" class="loading loading-spinner loading-xs"></span><Check v-else class="size-4" />{{ $t("links.save") }}
+                    </button>
+                    <p v-if="saveError" class="w-full text-xs text-error" role="alert">{{ saveError }}</p>
+                  </div>
+                </td>
+              </tr>
+              </template>
             </tbody>
           </table>
           <p v-else class="py-8 text-center text-sm text-base-content/50">{{ $t("report.empty") }}</p>

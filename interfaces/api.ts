@@ -13,7 +13,7 @@ export interface Event {
   data: any;
 }
 
-export type SourceId = "whatsapp" | "telegram" | "gravatar";
+export type SourceId = "whatsapp" | "telegram" | "gravatar" | "links";
 
 /** What happened to one contact during a sync. */
 export type SyncOutcome = "added" | "replaced" | "kept" | "alreadyHadPhoto" | "noMatch" | "error";
@@ -73,6 +73,8 @@ export interface ContactResult {
   undone?: boolean;
   hasPrevious?: boolean;
   hasPhoto?: boolean;
+  /** A profile link this run saved on the contact; undo removes it. */
+  addedLink?: string;
 }
 
 export interface RunSummary {
@@ -128,6 +130,27 @@ export interface SyncOptions {
   overwrite_photos?: string; // "true" or "false" (since converted to string via query params)
   manual_sync?: string; // "true" or "false" (since converted to string via query params)
   sources?: string; // comma-separated SourceId list in priority order; default "whatsapp"
+  links_best_effort?: string; // "true": profile links also try Instagram, Facebook and LinkedIn
+}
+
+/** A profile picture looked up from a link (report and review, issue #51). */
+export interface LinkLookup {
+  /** Refers to the looked-up photo on the server, to save it. */
+  token: string;
+  photo: string;
+  /** "Instagram", "X"… */
+  network: string;
+  /** The normalized link, e.g. "https://instagram.com/name". */
+  url: string;
+}
+
+/** Answer to a review request (EventType.SyncPhotoConfirm). */
+export interface ReviewAnswer {
+  accept: boolean;
+  /** Index in the request's candidates. */
+  choice?: number;
+  /** Use a photo looked up from a profile link instead (LinkLookup.token). */
+  link?: string;
 }
 
 /** Result of the desktop app's latest update check. */

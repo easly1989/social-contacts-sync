@@ -106,6 +106,28 @@ test("review mode offers every source's photo and applies the choice", async () 
   assert.deepEqual(run.counters, { added: 1, replaced: 0, kept: 2, alreadyHadPhoto: 0, noMatch: 1, errors: 0 });
 });
 
+test("review: a photo looked up from a profile link is used and its link saved", async () => {
+  const { target, writes } = fakeTarget();
+  const links: [string, string][] = [];
+  target.addLink = async (id, url) => void links.push([id, url]);
+  const answers = [{ photo: "link-Ada", source: "links" as const, matchedBy: "instagram.com/ada", newLink: "https://instagram.com/ada" }, null, null];
+  const { callbacks: cb } = callbacks({ review: async () => answers.shift() ?? null });
+  const { run } = await runSync(target, [whatsapp, gravatar], "review", cb, { shuffle: false });
+
+  assert.deepEqual(writes, [["c/ada", "link-Ada"]]);
+  assert.deepEqual(links, [["c/ada", "https://instagram.com/ada"]]);
+  assert.deepEqual(run.results[0], {
+    contactId: "c/ada",
+    name: "Ada",
+    outcome: "added",
+    source: "links",
+    matchedBy: "instagram.com/ada",
+    addedLink: "https://instagram.com/ada",
+    hasPhoto: true,
+    hasPrevious: false,
+  });
+});
+
 test("an error on one contact is counted and the run continues", async () => {
   const { target, writes } = fakeTarget(["c/ada"]);
   const { run } = await runSync(target, [whatsapp, gravatar], "fill", callbacks().callbacks, { shuffle: false });

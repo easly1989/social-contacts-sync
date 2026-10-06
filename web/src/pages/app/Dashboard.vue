@@ -138,6 +138,11 @@ onMounted(() => load());
             <div class="flex-1"><div class="text-sm font-semibold">Gravatar</div><div class="text-xs text-base-content/60">{{ $t("dashboard.noSignIn") }}</div></div>
             <span class="badge badge-soft badge-success badge-sm">{{ $t("dashboard.ready") }}</span>
           </li>
+          <li class="flex items-center gap-3 py-3">
+            <SourceMark source="links" />
+            <div class="flex-1"><div class="text-sm font-semibold">{{ $t("links.name") }}</div><div class="text-xs text-base-content/60">{{ $t("dashboard.noSignIn") }}</div></div>
+            <span class="badge badge-soft badge-success badge-sm">{{ $t("dashboard.ready") }}</span>
+          </li>
         </ul>
       </section>
 

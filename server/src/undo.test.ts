@@ -64,3 +64,13 @@ test("writes wait for the rate limiter", async () => {
   await undoRun(run(), () => "old", target().target, { beforeWrite: async () => void waits++ });
   assert.equal(waits, 2);
 });
+
+test("undo also removes a profile link the run saved", async () => {
+  const r = run();
+  r.results[0].addedLink = "https://instagram.com/ada";
+  const { calls, target: t } = target();
+  const removed: string[] = [];
+  await undoRun(r, () => undefined, { ...t, removeLink: async (id, url) => void removed.push(`${id} ${url}`) }, { indexes: [0] });
+  assert.deepEqual(calls, ["delete c/added"]);
+  assert.deepEqual(removed, ["c/added https://instagram.com/ada"]);
+});

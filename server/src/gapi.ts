@@ -55,15 +55,16 @@ export async function listContacts(
     const res = await people.people.connections.list({
       resourceName: "people/me",
       pageSize: pageSize,
-      personFields: "names,emailAddresses,phoneNumbers,photos",
+      personFields: "names,emailAddresses,phoneNumbers,photos,urls",
       pageToken: nextPageToken,
     });
 
     nextPageToken = res.data.nextPageToken!;
     const connections = res.data.connections;
 
-    const contacts = connections!
-      .filter((connection) => connection.phoneNumbers)
+    // Contacts with something to match on: a number, an email or a link.
+    const contacts = (connections ?? [])
+      .filter((connection) => connection.phoneNumbers || connection.emailAddresses || connection.urls)
       .map(
         (connection) =>
           <SimpleContact>{
@@ -73,8 +74,7 @@ export async function listContacts(
             // otherwise fall back to the raw `value` so numbers saved in a local
             // format (no +CC) are normalized later against the user's region
             // instead of being silently dropped.
-            numbers: connection
-              .phoneNumbers!.map(
+            numbers: (connection.phoneNumbers ?? []).map(
                 (phoneNumber) => phoneNumber.canonicalForm ?? phoneNumber.value
               )
               .filter((number): number is string => Boolean(number)),
@@ -85,6 +85,7 @@ export async function listContacts(
               ?.map((photo) => photo.default)
               .every((v) => v === true),
             photoUrl: connection.photos?.find((photo) => photo.metadata?.primary)?.url,
+            urls: (connection.urls ?? []).map((u) => u.value).filter((u): u is string => Boolean(u)),
           }
       );
 

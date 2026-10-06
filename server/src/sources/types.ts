@@ -7,6 +7,8 @@ export interface FoundPhoto {
   source: SourceId;
   /** The phone number or email that matched, for the report. */
   matchedBy: string;
+  /** A profile link to save on the contact when this photo is used. */
+  newLink?: string;
 }
 
 /** Somewhere profile photos can be looked up for a Google contact. */

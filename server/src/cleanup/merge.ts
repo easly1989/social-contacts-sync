@@ -14,7 +14,7 @@ import { normalizeEmail, toE164 } from "./scan";
 type Entry = { metadata?: { source?: { type?: string | null } | null } | null };
 
 /** A field entry without Google's read-only metadata (sources, primary flags). */
-function writable<T extends Entry>(entry: T): T {
+export function writable<T extends Entry>(entry: T): T {
   const { metadata: _metadata, ...rest } = entry;
   return rest as T;
 }
@@ -116,6 +116,11 @@ export function planMerge(people: Person[], request: MergeRequest, region?: Coun
     addresses: dedupe(
       ordered(request.addresses).flatMap((p) => contactEntries(p.addresses).map(writable)),
       (a) => (a.formattedValue ?? JSON.stringify(a)).toLowerCase().replace(/\s+/g, " ")
+    ),
+    // Every link of the group: profile links are photo sources (issue #51).
+    urls: dedupe(
+      people.flatMap((p) => contactEntries(p.urls).map(writable)),
+      (u) => (u.value ?? "").toLowerCase().replace(/^https?:\/\/(www\.)?/, "").replace(/\/$/, "")
     ),
     // Labels of every contact in the group. Google refuses an update that
     // leaves a contact in no group, and connections are in My Contacts.

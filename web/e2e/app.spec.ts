@@ -61,6 +61,7 @@ test("sync setup: sources can be reordered and switched off", async ({ page }) =
   await page.goto("/app/sync");
   await page.getByRole("checkbox", { name: "Gravatar" }).uncheck();
   await page.getByRole("checkbox", { name: "WhatsApp" }).uncheck();
+  await page.getByRole("checkbox", { name: "Profile links" }).uncheck();
   await expect(page.getByText("Choose at least one source.")).toBeVisible();
   await expect(page.getByRole("button", { name: "Start sync" })).toBeDisabled();
 });
@@ -71,7 +72,7 @@ test("sync setup without WhatsApp offers to connect it", async ({ page }) => {
   await expect(page.getByTestId("source-whatsapp")).toContainText("Not connected");
   await expect(page.getByTestId("source-whatsapp").getByRole("link", { name: "Connect" })).toBeVisible();
   await page.getByRole("button", { name: "Start sync" }).click();
-  await expect(page).toHaveURL(/sources=gravatar$/);
+  await expect(page).toHaveURL(/sources=gravatar%2Clinks$/);
 });
 
 test("history lists every run with its result", async ({ page }) => {

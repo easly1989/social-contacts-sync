@@ -1,4 +1,4 @@
-import { TelegramState, CleanupActionSummary, CleanupScan, CleanupSummary, DesktopInfo, DuplicateGroup, GoogleAccount, MergeRequest, GoogleStats, RunRecord, RunSummary, SessionStatus, UpdateCheck } from "../../interfaces/api";
+import { ContactResult, LinkLookup, SyncCounters, TelegramState, CleanupActionSummary, CleanupScan, CleanupSummary, DesktopInfo, DuplicateGroup, GoogleAccount, MergeRequest, GoogleStats, RunRecord, RunSummary, SessionStatus, UpdateCheck } from "../../interfaces/api";
 
 // Small typed wrappers around the server API.
 
@@ -11,7 +11,7 @@ async function get<T>(url: string): Promise<T> {
 /** A failed request, with the server's error code when it sent one. */
 export class ApiError extends Error {
   /** `detail`: what Google answered, when a change it refused failed. */
-  constructor(public status: number, public code?: string, public detail?: string) {
+  constructor(public status: number, public code?: string, public detail?: string, public body?: Record<string, unknown>) {
     super(`HTTP ${status}${code ? ` ${code}` : ""}`);
   }
 }
@@ -23,7 +23,7 @@ export function withGoogleDetail(message: string, e: unknown): string {
 
 async function apiError(response: Response): Promise<ApiError> {
   const body = await response.json().catch(() => undefined);
-  return new ApiError(response.status, body?.error, typeof body?.detail === "string" ? body.detail : undefined);
+  return new ApiError(response.status, body?.error, typeof body?.detail === "string" ? body.detail : undefined, body ?? undefined);
 }
 
 export async function post<T = unknown>(url: string, body: unknown = {}): Promise<T> {
@@ -66,6 +66,10 @@ export const api = {
     post<{ actionId: string; fixed: number; summary: CleanupSummary }>("/api/cleanup/fix_country_codes", { items }),
   cleanupActions: () => get<CleanupActionSummary[]>("/api/cleanup/actions"),
   undoCleanup: (id: string) => post(`/api/cleanup/actions/${encodeURIComponent(id)}/undo`),
+  // Profile links (issue #51).
+  linkLookup: (url: string) => post<LinkLookup>("/api/links/lookup", { url }),
+  saveRunLink: (runId: string, index: number, token: string) =>
+    post<{ result: ContactResult; counters: SyncCounters }>(`/api/runs/${encodeURIComponent(runId)}/results/${index}/link`, { token }),
   // Telegram sign-in (issue #36).
   telegram: () => get<TelegramState>("/api/telegram"),
   telegramSendCode: (phone: string) => post<TelegramState>("/api/telegram/send_code", { phone }),
