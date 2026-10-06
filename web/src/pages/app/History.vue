@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { onMounted, ref } from "vue";
 import { useI18n } from "vue-i18n";
-import { Globe, GitMerge, Phone, RefreshCw } from "lucide-vue-next";
+import { Globe, GitMerge, Phone, RefreshCw, Trash2 } from "lucide-vue-next";
 
 import AppShell from "../../components/AppShell.vue";
 import SourceBadge from "../../components/SourceBadge.vue";
@@ -16,7 +16,12 @@ const actions = ref<CleanupActionSummary[]>([]);
 const undoing = ref<string>();
 
 async function undo(action: CleanupActionSummary): Promise<void> {
-  const question = action.kind === "merge" ? t("history.undoMergeConfirm", { name: action.title }) : t("history.undoNumbersConfirm");
+  const question =
+    action.kind === "merge"
+      ? t("history.undoMergeConfirm", { name: action.title })
+      : action.kind === "delete"
+        ? t("history.undoDeleteConfirm", action.contacts)
+        : t("history.undoNumbersConfirm");
   if (!window.confirm(question)) return;
   undoing.value = action.id;
   try {
@@ -82,11 +87,12 @@ onMounted(async () => {
             <td>
               <div class="flex items-center gap-3">
                 <span class="grid size-8 place-items-center rounded-lg bg-base-200 text-secondary">
-                  <GitMerge v-if="action.kind === 'merge'" class="size-4" /><Phone v-else-if="action.kind === 'keepNumber'" class="size-4" /><Globe v-else class="size-4" />
+                  <GitMerge v-if="action.kind === 'merge'" class="size-4" /><Phone v-else-if="action.kind === 'keepNumber'" class="size-4" /><Trash2 v-else-if="action.kind === 'delete'" class="size-4" /><Globe v-else class="size-4" />
                 </span>
                 <div>
                   <div class="font-medium">
                     <template v-if="action.kind === 'merge'">{{ $t("history.merge", { name: action.title }) }}</template>
+                    <template v-else-if="action.kind === 'delete'">{{ action.title ? $t("history.deleted", { name: action.title }) : $t("history.deletedMany", { count: action.contacts }) }}</template>
                     <template v-else-if="action.kind === 'keepNumber'">{{ $t("history.keepNumber", { number: action.number, name: action.title }) }}</template>
                     <template v-else>{{ $t("history.countryCodes", Number(action.title)) }}</template>
                   </div>

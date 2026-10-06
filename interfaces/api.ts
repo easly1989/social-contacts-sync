@@ -255,10 +255,10 @@ export interface MergeRequest {
 
 export interface CleanupActionSummary {
   id: string;
-  /** Merge duplicates, keep a shared number on one contact, add country codes. */
-  kind: "merge" | "keepNumber" | "countryCodes";
+  /** Merge duplicates, keep a shared number on one contact, add country codes, delete contacts. */
+  kind: "merge" | "keepNumber" | "countryCodes" | "delete";
   at: string;
-  /** The merged contact's name, the kept number's owner, or the number of fixed numbers. */
+  /** The merged contact's name, the kept number's owner, the number of fixed numbers, the deleted contact's name. */
   title: string;
   contacts: number;
   /** keepNumber: the number. */
@@ -276,4 +276,69 @@ export interface TelegramState {
   step?: "code" | "password";
   phone?: string;
   name?: string;
+}
+
+/* The Contacts page (issue #55). */
+
+export interface ContactField {
+  value: string;
+  /** Google's type: "mobile", "work", "home", "profile"…, or a custom label. */
+  type?: string;
+}
+
+export interface ContactAddress {
+  street?: string;
+  extended?: string;
+  poBox?: string;
+  postalCode?: string;
+  city?: string;
+  region?: string;
+  country?: string;
+  countryCode?: string;
+  type?: string;
+}
+
+export interface ContactBirthday {
+  year?: number;
+  month: number;
+  day: number;
+}
+
+/** A Google contact, with what the Contacts page shows and edits. */
+export interface Contact {
+  id: string;
+  /** Google's display name. */
+  name?: string;
+  givenName?: string;
+  familyName?: string;
+  company?: string;
+  jobTitle?: string;
+  phones: ContactField[];
+  emails: ContactField[];
+  /** Websites, profile links among them. */
+  urls: ContactField[];
+  addresses: ContactAddress[];
+  birthday?: ContactBirthday;
+  notes?: string;
+  /** Contact groups the user created (labels), by resource name. */
+  labels: string[];
+  hasPhoto: boolean;
+  photoUrl?: string;
+  /** The photo was uploaded by hand: a sync replaces it when a source has one. */
+  placeholder?: boolean;
+  updatedAt?: string;
+}
+
+/** What the editor sends for a new or changed contact. */
+export type ContactInput = Omit<Contact, "id" | "name" | "hasPhoto" | "photoUrl" | "placeholder" | "updatedAt">;
+
+export interface ContactLabel {
+  id: string;
+  name: string;
+}
+
+/** GET /api/contacts */
+export interface ContactsList {
+  contacts: Contact[];
+  labels: ContactLabel[];
 }

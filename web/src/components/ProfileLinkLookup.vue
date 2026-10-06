@@ -3,7 +3,8 @@ import { ref } from "vue";
 import { useI18n } from "vue-i18n";
 import { Link } from "lucide-vue-next";
 
-import { api, ApiError } from "../api";
+import { api } from "../api";
+import { lookupError } from "../profileLinks";
 import { LinkLookup } from "../../../interfaces/api";
 
 // Looks up the profile picture behind a pasted link (issue #51), for the
@@ -23,11 +24,7 @@ async function find(): Promise<void> {
   try {
     emit("found", await api.linkLookup(url.value.trim()));
   } catch (e) {
-    const code = e instanceof ApiError ? e.code : undefined;
-    const network = e instanceof ApiError ? String(e.body?.network ?? "") : "";
-    error.value = ["unsupported_link", "no_photo", "signin_required", "unreachable"].includes(code ?? "")
-      ? t(`links.errors.${code}`, { network })
-      : t("links.errors.unknown");
+    error.value = lookupError(e, t);
   }
   busy.value = false;
 }

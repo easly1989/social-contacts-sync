@@ -21,6 +21,7 @@ import { desktopSessionId, rememberSignIns, restoreDesktopSession } from "./src/
 import { forgetSavedTelegram, restoreTelegram } from "./src/telegramSession";
 import telegramRouter from "./routes/telegram";
 import linksRouter from "./routes/links";
+import contactsRouter from "./routes/contacts";
 import { initWhatsApp } from "./src/whatsapp";
 
 let ews = expressWs(express());
@@ -110,6 +111,7 @@ app.use(routePrefix, runsRouter);
 app.use(routePrefix, cleanupRouter);
 app.use(routePrefix, telegramRouter);
 app.use(routePrefix, linksRouter);
+app.use(routePrefix, contactsRouter);
 
 // The production image puts Vite's built files in `server/public`. Serving
 // them from the same Express process keeps the API, WebSocket and browser on

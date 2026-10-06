@@ -21,6 +21,12 @@ import { telegramConnection } from "./telegramSession";
 import { getPrefs } from "./cleanup/store";
 import { inferRegion, toE164Digits } from "./phone";
 import { SimpleContact } from "./interfaces";
+import { getPlaceholders, isPlaceholder } from "./contacts/placeholders";
+
+/** Marks the contacts whose photo is a placeholder from the Contacts page. */
+export function withPlaceholders(contacts: SimpleContact[], placeholders: Record<string, string>): SimpleContact[] {
+  return contacts.map((c) => (isPlaceholder(placeholders, c.id, c.photoUrl) ? { ...c, placeholder: true } : c));
+}
 
 const knownSources: SourceId[] = ["whatsapp", "telegram", "gravatar", "links"];
 
@@ -70,7 +76,10 @@ export async function initSync(id: string, syncOptions: SyncOptions) {
     const result = await runSync(
       {
         listContacts: async () =>
-          withoutSharedNumbers(await listContacts(gAuth), getPrefs(id).sharedNumbers, inferRegion(whatsappClient?.info?.wid?.user)),
+          withPlaceholders(
+            withoutSharedNumbers(await listContacts(gAuth), getPrefs(id).sharedNumbers, inferRegion(whatsappClient?.info?.wid?.user)),
+            getPlaceholders(id)
+          ),
         currentPhoto: downloadContactPhoto,
         setPhoto: (contactId, photo) => updateContactPhoto(gAuth, contactId, photo),
         addLink: async (contactId, url) => void (await addContactLink(peopleContactsApi(gAuth), contactId, url)),

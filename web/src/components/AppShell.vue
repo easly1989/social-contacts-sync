@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted } from "vue";
 import { useRoute } from "vue-router";
-import { ArrowUpCircle, CircleCheck, HandHeart, History, LayoutDashboard, RefreshCw, Settings, Sparkles } from "lucide-vue-next";
+import { ArrowUpCircle, CircleCheck, ContactRound, HandHeart, History, LayoutDashboard, RefreshCw, Settings, Sparkles } from "lucide-vue-next";
 
 import BrandLogo from "./BrandLogo.vue";
 import PreferencesMenu from "./PreferencesMenu.vue";
@@ -23,6 +23,7 @@ onMounted(() => {
 
 const items = [
   { to: "/app", key: "dashboard", icon: LayoutDashboard, exact: true },
+  { to: "/app/contacts", key: "contacts", icon: ContactRound },
   { to: "/app/sync", key: "sync", icon: RefreshCw },
   { to: "/app/cleanup", key: "cleanup", icon: Sparkles },
   { to: "/app/history", key: "history", icon: History },
@@ -80,7 +81,7 @@ const active = computed(() => (item: (typeof items)[number]) =>
       <main class="flex-1 px-4 pb-8 sm:px-8"><slot /></main>
     </div>
 
-    <nav class="fixed inset-x-0 bottom-0 z-10 grid grid-cols-5 border-t border-base-300 bg-base-100 text-[11px] font-medium lg:hidden" :aria-label="$t('app.navigation')">
+    <nav class="fixed inset-x-0 bottom-0 z-10 grid grid-cols-6 border-t border-base-300 bg-base-100 text-[11px] font-medium lg:hidden" :aria-label="$t('app.navigation')">
       <router-link
         v-for="item in items"
         :key="item.key"

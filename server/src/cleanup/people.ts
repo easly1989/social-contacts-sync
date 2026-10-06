@@ -13,9 +13,17 @@ import { withGoogleRetry } from "../googleRetry";
 export type Person = people_v1.Schema$Person;
 
 /** Fields clean-up reads, merges, backs up and restores. */
-export const personFields = "names,emailAddresses,phoneNumbers,photos,organizations,birthdays,addresses,urls,memberships,metadata";
+export const personFields = "names,emailAddresses,phoneNumbers,photos,organizations,birthdays,addresses,urls,memberships,biographies,metadata";
 /** Fields a merge or an undo writes with updateContact. */
-export const writableFields = ["names", "emailAddresses", "phoneNumbers", "organizations", "birthdays", "addresses", "urls", "memberships"] as const;
+export const writableFields = ["names", "emailAddresses", "phoneNumbers", "organizations", "birthdays", "addresses", "urls", "memberships", "biographies"] as const;
+/** What backups taken before notes were read hold (an undo must not clear notes it never saw). */
+export const legacyWritableFields = writableFields.filter((f) => f !== "biographies");
+
+/** A label: a contact group the user created. */
+export interface Group {
+  id: string;
+  name: string;
+}
 
 /**
  * What updateContact needs besides the changed fields: the contact's etag
@@ -37,6 +45,9 @@ export interface ContactsApi {
   deletePhoto(resourceName: string): Promise<void>;
   /** The contact's own photo (not Google's default letter), or null. */
   photo(person: Person): Promise<Base64 | null>;
+  /** The user's labels. */
+  groups(): Promise<Group[]>;
+  createGroup(name: string): Promise<Group>;
 }
 
 export function ownPhotoUrl(person: Person): string | undefined {
@@ -69,7 +80,8 @@ export function toCleanupContact(person: Person): CleanupContact {
 }
 
 export function peopleContactsApi(auth: OAuth2Client): ContactsApi {
-  const people = peopleApi({ version: "v1", auth }).people;
+  const client = peopleApi({ version: "v1", auth });
+  const people = client.people;
   return {
     async list() {
       const all: Person[] = [];
@@ -107,6 +119,20 @@ export function peopleContactsApi(auth: OAuth2Client): ContactsApi {
       if (!response.ok) return null;
       const bytes = Buffer.from(await response.arrayBuffer());
       return bytes.length ? bytes.toString("base64") : null;
+    },
+    async groups() {
+      const groups: Group[] = [];
+      let pageToken: string | undefined;
+      do {
+        const res = await client.contactGroups.list({ pageSize: 1000, groupFields: "name,groupType", pageToken });
+        for (const g of res.data.contactGroups ?? []) if (g.groupType === "USER_CONTACT_GROUP" && g.resourceName && g.name) groups.push({ id: g.resourceName, name: g.name });
+        pageToken = res.data.nextPageToken ?? undefined;
+      } while (pageToken);
+      return groups;
+    },
+    async createGroup(name) {
+      const group = (await client.contactGroups.create({ requestBody: { contactGroup: { name } } })).data;
+      return { id: group.resourceName!, name: group.name ?? name };
     },
   };
 }

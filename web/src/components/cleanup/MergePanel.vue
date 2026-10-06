@@ -10,7 +10,9 @@ import { CleanupContact, DuplicateGroup, MergeRequest } from "../../../../interf
 
 // The merge table of mockup 4 in issue #8: one column per contact, one
 // value per row (radio) or combined lists (checkboxes).
-const props = defineProps<{ group: DuplicateGroup; contacts: Record<string, CleanupContact> }>();
+// The Contacts page (issue #55) merges contacts the user picked: `mergeWith`
+// sends the request there, and `intro` replaces the "why they match" line.
+const props = defineProps<{ group: DuplicateGroup; contacts: Record<string, CleanupContact>; mergeWith?: (request: MergeRequest) => Promise<string>; intro?: string }>();
 const emit = defineEmits<{ merged: [actionId: string]; notDuplicates: []; skip: [] }>();
 const { locale, t } = useI18n();
 
@@ -54,6 +56,7 @@ function toggle(row: Multi, id: string, on: boolean): void {
 
 // What the group shares, for the explanation under the name.
 const shared = computed(() => {
+  if (props.intro) return props.intro;
   const [first, ...rest] = people.value;
   if (props.group.reasons.includes("phone")) {
     const number = first.phones.find((p) => p.e164 && rest.every((c) => c.phones.some((q) => q.e164 === p.e164)));
@@ -81,10 +84,10 @@ async function merge(): Promise<void> {
     ...multi.value,
   };
   try {
-    const { actionId } = await api.merge(request);
-    emit("merged", actionId);
+    emit("merged", props.mergeWith ? await props.mergeWith(request) : (await api.merge(request)).actionId);
   } catch (e) {
-    error.value = e instanceof ApiError && e.code === "changed_since_scan" ? t("cleanup.changed") : withGoogleDetail(t("cleanup.mergeError"), e);
+    const changed = props.mergeWith ? t("contacts.errors.mergeChanged") : t("cleanup.changed");
+    error.value = e instanceof ApiError && e.code === "changed_since_scan" ? changed : withGoogleDetail(t("cleanup.mergeError"), e);
   }
   busy.value = false;
 }
@@ -97,7 +100,7 @@ async function merge(): Promise<void> {
         <h2 class="text-xl font-bold">{{ contacts[keepId]?.name ?? $t("cleanup.noName") }}</h2>
         <p class="mt-1 text-sm text-base-content/60">{{ shared }} {{ $t("cleanup.pick") }}</p>
       </div>
-      <span class="badge badge-soft" :class="likely ? 'badge-warning' : 'badge-ghost'">{{ $t(likely ? "cleanup.likely" : "cleanup.possible") }}</span>
+      <span v-if="!mergeWith" class="badge badge-soft" :class="likely ? 'badge-warning' : 'badge-ghost'">{{ $t(likely ? "cleanup.likely" : "cleanup.possible") }}</span>
     </div>
 
     <div class="mt-5 overflow-x-auto">
@@ -168,8 +171,8 @@ async function merge(): Promise<void> {
     <p v-if="error" class="mt-4 text-sm text-error" role="alert">{{ error }}</p>
     <div class="mt-5 flex flex-wrap items-center gap-2 border-t border-base-300 pt-5">
       <p class="flex min-w-[14rem] flex-1 items-start gap-2 text-xs text-base-content/60"><ShieldCheck class="size-4 shrink-0 text-success" />{{ $t("cleanup.backupNote") }}</p>
-      <button type="button" class="btn btn-ghost btn-sm" :disabled="busy" @click="emit('notDuplicates')">{{ $t("cleanup.notDuplicates") }}</button>
-      <button type="button" class="btn btn-ghost btn-sm" :disabled="busy" @click="emit('skip')">{{ $t("cleanup.skip") }}</button>
+      <button v-if="!mergeWith" type="button" class="btn btn-ghost btn-sm" :disabled="busy" @click="emit('notDuplicates')">{{ $t("cleanup.notDuplicates") }}</button>
+      <button type="button" class="btn btn-ghost btn-sm" :disabled="busy" @click="emit('skip')">{{ mergeWith ? $t("common.cancel") : $t("cleanup.skip") }}</button>
       <button type="button" class="btn btn-secondary btn-sm" :disabled="busy" @click="merge">
         <span v-if="busy" class="loading loading-spinner loading-xs"></span><GitMerge v-else class="size-4" />{{ busy ? $t("cleanup.merging") : $t("cleanup.merge") }}
       </button>

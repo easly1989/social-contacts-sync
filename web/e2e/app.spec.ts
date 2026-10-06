@@ -41,7 +41,7 @@ test("dashboard on a phone uses bottom tabs", async ({ page }) => {
   await page.goto("/app");
   await expect(page.getByTestId("coverage")).toContainText("62%");
   const tabs = page.getByRole("navigation", { name: "Main navigation" }).last();
-  await expect(tabs.getByRole("link")).toHaveCount(5);
+  await expect(tabs.getByRole("link")).toHaveCount(6);
   // The tab bar is fixed to the viewport, so capture what a phone shows.
   await screenshot(page, "22-dashboard-mobile", { fullPage: false });
 });

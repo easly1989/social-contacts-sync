@@ -1,4 +1,4 @@
-import { CleanupContact, CleanupScan, RunRecord } from "../../interfaces/api";
+import { CleanupContact, CleanupScan, Contact, ContactLabel, RunRecord } from "../../interfaces/api";
 
 const names = [
   "Giulia Bianchi", "Marco Rossi", "Sofia Esposito", "Luca Romano", "Chiara Colombo",
@@ -77,4 +77,41 @@ export function sampleScan(): CleanupScan {
       { contactId: "people/n2", value: "12", suggestion: undefined },
     ],
   };
+}
+
+export const sampleLabels: ContactLabel[] = [
+  { id: "contactGroups/ice", name: "ICE" },
+  { id: "contactGroups/volley", name: "Volley" },
+  { id: "contactGroups/work", name: "Work" },
+];
+
+/** The Contacts page's address book, shaped like the mockups of issue #55. */
+export function sampleContacts(): Contact[] {
+  const c = (id: string, name: string, extra: Partial<Contact> = {}): Contact => {
+    const [givenName, ...rest] = name.split(" ");
+    return { id: `people/${id}`, name, givenName, familyName: rest.join(" ") || undefined, phones: [], emails: [], urls: [], addresses: [], labels: [], hasPhoto: false, updatedAt: "2026-09-01T10:00:00Z", ...extra };
+  };
+  const photo = (i: number) => ({ hasPhoto: true, photoUrl: `/api/e2e-photos/${i}` });
+  return [
+    c("dg", "Davide Gallo", { phones: [{ value: "+39 338 555 0412", type: "mobile" }] }),
+    c("ec", "Elena Conti", { ...photo(4), placeholder: true, phones: [{ value: "+39 347 100 2000", type: "mobile" }], urls: [{ value: "https://instagram.com/elena.conti.ph", type: "profile" }], labels: ["contactGroups/volley"] }),
+    c("fg", "Francesco Greco", { phones: [{ value: "+39 335 210 4471", type: "mobile" }], emails: [{ value: "francesco.greco@example.com", type: "home" }], updatedAt: "2026-09-30T10:00:00Z" }),
+    c("fg2", "Francesco G.", { givenName: "Francesco G.", familyName: undefined, phones: [{ value: "+39 335 210 4471" }], urls: [{ value: "https://instagram.com/fra.greco" }], updatedAt: "2019-05-01T10:00:00Z" }),
+    c("gb", "Giulia Bianchi", { ...photo(1), emails: [{ value: "giulia.bianchi@example.com", type: "home" }], urls: [{ value: "https://x.com/giulia", type: "profile" }, { value: "https://github.com/giulia", type: "profile" }] }),
+    c("lg", "Lorenzo Giordano", { phones: [{ value: "+39 340 111 2227", type: "mobile" }], labels: ["contactGroups/work", "contactGroups/ice"] }),
+    c("mr", "Marco Rossi", {
+      ...photo(2),
+      company: "Studio Rossi",
+      jobTitle: "Architect",
+      phones: [{ value: "+39 333 812 5517", type: "mobile" }, { value: "+39 02 4455 6677", type: "work" }],
+      emails: [{ value: "marco.rossi@example.com", type: "home" }],
+      urls: [{ value: "https://linkedin.com/in/marcorossi", type: "profile" }],
+      addresses: [{ street: "Via Roma 12", postalCode: "20121", city: "Milano", country: "Italy", type: "home" }],
+      birthday: { month: 3, day: 12 },
+      notes: "Met at the volley tournament in 2024.",
+      labels: ["contactGroups/work"],
+    }),
+    c("mm", "Martina Marino", { phones: [{ value: "+39 349 777 2227", type: "mobile" }], emails: [{ value: "martina@marino.example", type: "home" }], urls: [{ value: "https://t.me/martina", type: "profile" }] }),
+    c("md", "Matteo De Luca", { ...photo(3), phones: [{ value: "+39 328 309 7537", type: "mobile" }] }),
+  ];
 }

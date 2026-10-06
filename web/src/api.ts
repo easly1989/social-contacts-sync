@@ -1,4 +1,4 @@
-import { ContactResult, LinkLookup, SyncCounters, TelegramState, CleanupActionSummary, CleanupScan, CleanupSummary, DesktopInfo, DuplicateGroup, GoogleAccount, MergeRequest, GoogleStats, RunRecord, RunSummary, SessionStatus, UpdateCheck } from "../../interfaces/api";
+import { Contact, ContactInput, ContactLabel, ContactsList, ContactResult, LinkLookup, SyncCounters, TelegramState, CleanupActionSummary, CleanupScan, CleanupSummary, DesktopInfo, DuplicateGroup, GoogleAccount, MergeRequest, GoogleStats, RunRecord, RunSummary, SessionStatus, UpdateCheck } from "../../interfaces/api";
 
 // Small typed wrappers around the server API.
 
@@ -37,6 +37,14 @@ export async function post<T = unknown>(url: string, body: unknown = {}): Promis
   return response.json();
 }
 
+async function send<T>(method: string, url: string, body?: BodyInit, type = "application/json"): Promise<T> {
+  const response = await fetch(url, { method, credentials: "include", headers: body === undefined ? {} : { "Content-Type": type }, body });
+  if (!response.ok) throw await apiError(response);
+  return response.json();
+}
+
+const contactPath = (id: string) => `/api/contacts/${encodeURIComponent(id.replace(/^people\//, ""))}`;
+
 export const api = {
   status: () => get<SessionStatus>("/api/status"),
   account: () => get<GoogleAccount>("/api/google_account"),
@@ -70,6 +78,19 @@ export const api = {
   linkLookup: (url: string) => post<LinkLookup>("/api/links/lookup", { url }),
   saveRunLink: (runId: string, index: number, token: string) =>
     post<{ result: ContactResult; counters: SyncCounters }>(`/api/runs/${encodeURIComponent(runId)}/results/${index}/link`, { token }),
+  // The Contacts page (issue #55).
+  contacts: () => get<ContactsList>("/api/contacts"),
+  createContact: (contact: ContactInput) => post<Contact>("/api/contacts", { contact }),
+  saveContact: (id: string, contact: ContactInput, updatedAt?: string) => send<Contact>("PUT", contactPath(id), JSON.stringify({ contact, updatedAt })),
+  duplicateContact: (id: string) => post<Contact>(`${contactPath(id)}/duplicate`),
+  deleteContacts: (contactIds: string[]) => post<{ actionId: string; deleted: string[] }>("/api/contacts/delete", { contactIds }),
+  mergeContacts: (contactIds: string[], request: Omit<MergeRequest, "groupId">, updatedAt: Record<string, string | undefined>) =>
+    post<{ actionId: string; contact: Contact; deleted: string[] }>("/api/contacts/merge", { contactIds, request, updatedAt }),
+  uploadPhoto: (id: string, photo: Blob) => send<Contact>("PUT", `${contactPath(id)}/photo`, photo, photo.type || "image/jpeg"),
+  removePhoto: (id: string) => send<Contact>("DELETE", `${contactPath(id)}/photo`),
+  photoFromLink: (id: string, token: string) => post<Contact>(`${contactPath(id)}/photo_from_link`, { token }),
+  createLabel: (name: string) => post<ContactLabel>("/api/contacts/labels", { name }),
+  applyLabel: (contactIds: string[], label: string, add: boolean) => post<{ contacts: Contact[] }>("/api/contacts/labels/apply", { contactIds, label, add }),
   // Telegram sign-in (issue #36).
   telegram: () => get<TelegramState>("/api/telegram"),
   telegramSendCode: (phone: string) => post<TelegramState>("/api/telegram/send_code", { phone }),

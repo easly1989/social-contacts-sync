@@ -29,7 +29,7 @@ const userDataPolicy = "https://developers.google.com/terms/api-services-user-da
         <li><code>config.env</code>: le credenziali del tuo progetto Google e le preferenze;</li>
         <li>gli accessi a Google e Telegram, cifrati con il portachiavi del sistema operativo, e la sessione di WhatsApp come dispositivo collegato;</li>
         <li>la cronologia delle sincronizzazioni e i backup della pulizia (foto e dati dei contatti modificati), conservati per 90 giorni per poterli annullare;</li>
-        <li>le scelte della pulizia (per esempio i gruppi segnati come «non duplicati») e i log dell'app.</li>
+        <li>le scelte della pulizia (per esempio i gruppi segnati come «non duplicati»), quali contatti hanno una foto caricata a mano dalla pagina Contatti, e i log dell'app.</li>
       </ul>
       <p>L'app si collega solo a:</p>
       <ul>
@@ -89,7 +89,7 @@ const userDataPolicy = "https://developers.google.com/terms/api-services-user-da
         <li><code>config.env</code>: your own Google project's credentials and your preferences;</li>
         <li>your Google and Telegram sign-ins, encrypted with the operating system's keychain, and WhatsApp's linked-device session;</li>
         <li>sync history and clean-up backups (photos and data of the contacts that changed), kept for 90 days so they can be undone;</li>
-        <li>clean-up choices (such as groups marked "Not duplicates") and the app's logs.</li>
+        <li>clean-up choices (such as groups marked "Not duplicates"), which contacts have a photo you uploaded by hand on the Contacts page, and the app's logs.</li>
       </ul>
       <p>The app only connects to:</p>
       <ul>
