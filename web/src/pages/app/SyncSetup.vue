@@ -25,13 +25,15 @@ interface Prefs {
 }
 
 function readPrefs(): Prefs {
-  const defaults: Prefs = { order: ["whatsapp", "gravatar", "telegram"], enabled: ["whatsapp", "gravatar"], mode: "fill" };
+  const defaults: Prefs = { order: ["whatsapp", "gravatar", "telegram", "links"], enabled: ["whatsapp", "gravatar", "links"], mode: "fill" };
   try {
     const stored = JSON.parse(localStorage.getItem(prefsKey) ?? "{}");
     const order = Array.isArray(stored.order) ? stored.order.filter((s: SourceId) => defaults.order.includes(s)) : [];
+    // Sources added since the choice was saved start as they do for everyone.
+    const added = defaults.order.filter((s) => !order.includes(s));
     return {
-      order: [...order, ...defaults.order.filter((s) => !order.includes(s))],
-      enabled: Array.isArray(stored.enabled) ? stored.enabled : defaults.enabled,
+      order: [...order, ...added],
+      enabled: Array.isArray(stored.enabled) ? [...stored.enabled, ...added.filter((s) => defaults.enabled.includes(s))] : defaults.enabled,
       mode: modes.includes(stored.mode) ? stored.mode : defaults.mode,
     };
   } catch {
@@ -56,7 +58,7 @@ watch(prefs, (value) => {
 function available(source: SourceId): boolean {
   if (source === "whatsapp") return Boolean(status.value?.whatsappConnected);
   if (source === "telegram") return Boolean(status.value?.telegramConnected);
-  return source === "gravatar";
+  return source === "gravatar" || source === "links";
 }
 
 const selected = computed(() => prefs.value.order.filter((s) => available(s) && prefs.value.enabled.includes(s)));
@@ -113,7 +115,7 @@ onMounted(async () => {
                 <div class="text-xs text-base-content/60">
                   <template v-if="source === 'telegram' && status && !status.telegramAvailable">{{ $t("dashboard.unavailable") }}</template>
                   <template v-else-if="!available(source)">{{ $t("dashboard.notConnected") }}</template>
-                  <template v-else>{{ $t(sourceInfo[source].matchedBy === "phone" ? "setup.sources.byPhone" : "setup.sources.byEmail") }}</template>
+                  <template v-else>{{ $t({ phone: "setup.sources.byPhone", email: "setup.sources.byEmail", link: "links.byLink" }[sourceInfo[source].matchedBy]) }}</template>
                 </div>
               </div>
               <div class="join">

@@ -6,8 +6,9 @@
 
 <p align="center">
     <b>Give every contact a face.</b><br/>
-    Fill your Google Contacts with your contacts' profile photos from WhatsApp and Gravatar,
-    and tidy up duplicates on the way. Free, open source, and private: it runs on your computer.
+    Fill your Google Contacts with your contacts' profile photos from WhatsApp, Telegram, Gravatar
+    and their social profiles, and tidy up duplicates on the way. Free, open source, and private:
+    it runs on your computer.
 </p>
 
 <p align="center">
@@ -31,6 +32,10 @@
 - **Photos from your sources.** WhatsApp and Telegram (matched by phone number)
   and Gravatar (matched by email), in the priority order you choose. Only your
   existing Telegram contacts are read; nothing is added to your account.
+- **Profile links.** The X, Telegram, YouTube, Bluesky, Mastodon and GitHub
+  profiles saved on a contact give it their public picture, with no sign-in.
+  Instagram, Facebook and LinkedIn can be turned on too, unofficially. Add a
+  link right from a sync report's "No photo found" list, or while reviewing.
 - **You stay in control.** Fill in only missing photos, replace them all, or
   review each one with the keyboard.
 - **Nothing changes without a way back.** Every sync has a report and can be
@@ -84,7 +89,7 @@ The packages are not code-signed yet:
 3. **Sign in to Google** in your browser.
 4. **Link WhatsApp** by scanning a QR code, like WhatsApp Web, and/or **sign in
    to Telegram** with your phone number and the code Telegram sends you.
-   Gravatar needs no sign-in.
+   Gravatar and profile links need no sign-in.
 5. **Sync photos** from the dashboard, and look at **Clean up** for duplicates.
 
 Google allows about 40 photo updates per minute, so a large address book takes a

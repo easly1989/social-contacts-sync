@@ -67,7 +67,9 @@ test("full flow: WhatsApp QR, Google sign-in, sync setup, progress, done", async
   const query = new URL(backend.requested("/api/init_sync")!.url()).searchParams;
   expect(query.get("overwrite_photos")).toBe("true");
   expect(query.get("manual_sync")).toBe("false");
-  expect(query.get("sources")).toBe("whatsapp,gravatar");
+  expect(query.get("sources")).toBe("whatsapp,gravatar,links");
+  // Instagram, Facebook and LinkedIn stay off unless turned on in Settings.
+  expect(query.get("links_best_effort")).toBe("false");
 
   await expect(page.getByRole("heading", { name: "Syncing photos…" })).toBeVisible();
   await backend.send(EventType.SyncProgress, { progress: 0, syncCount: 0, totalContacts: 20, checked: 0, counters: counters({}) });

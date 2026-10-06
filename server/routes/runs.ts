@@ -2,6 +2,8 @@ import express, { Request, Response } from "express";
 
 import { getFromCache, setInCache } from "../src/cache";
 import { deleteContactPhoto, listContacts, OAuth2Client, updateContactPhoto } from "../src/gapi";
+import { removeContactLink } from "../src/contactLinks";
+import { peopleContactsApi } from "../src/cleanup/people";
 import { GoogleStats } from "../../interfaces/api";
 import { getRun, getRunPhoto, listRuns, updateRun } from "../src/runs";
 import { googleRateLimiter } from "../src/sync";
@@ -73,6 +75,7 @@ router.post("/runs/:id/undo", (req: Request, res: Response) => {
   undoRun(run, (index) => getRunPhoto(sessionId, run.id, index, "previous"), {
     setPhoto: (contactId, photo) => updateContactPhoto(gAuth, contactId, photo),
     deletePhoto: (contactId) => deleteContactPhoto(gAuth, contactId),
+    removeLink: (contactId, url) => removeContactLink(peopleContactsApi(gAuth), contactId, url),
   }, {
     indexes,
     beforeWrite: async () => void (await limiter.removeTokens(1)),

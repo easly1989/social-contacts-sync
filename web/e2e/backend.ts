@@ -54,6 +54,9 @@ export class FakeBackend {
   updateCheck: Omit<UpdateCheck, "checkedAt"> = { status: "current" };
   /** Bodies posted to /api/desktop/* Settings actions, by route. */
   desktopActions: { route: string; body: unknown }[] = [];
+  /** Profile links (issue #51): lookups and saves sent, and lookups made to fail, by URL. */
+  linkRequests: { route: string; body: any }[] = [];
+  linkFailures: Record<string, { status: number; json: object }> = {};
   /** /api/status waits for this, to show what the page looks like while it loads. */
   statusGate?: Promise<void>;
   /** When false, Google sign-in "opens in the system browser" and nothing happens here. */
@@ -95,6 +98,23 @@ export class FakeBackend {
       if (pathname === "/api/google_account") return route.fulfill({ json: this.account });
       if (pathname === "/api/google_stats") return route.fulfill({ json: this.stats });
       if (pathname === "/api/runs") return route.fulfill({ json: this.runs.map(({ results: _r, ...summary }) => summary) });
+      if (pathname === "/api/links/lookup") {
+        const body = request.postDataJSON();
+        this.linkRequests.push({ route: "lookup", body });
+        const failure = this.linkFailures[body.url];
+        if (failure) return route.fulfill(failure);
+        return route.fulfill({ json: { token: `token-${this.linkRequests.length}`, photo: avatars[3], network: "Instagram", url: "https://instagram.com/elena.conti.ph" } });
+      }
+      const linkSave = /^\/api\/runs\/([^/]+)\/results\/(\d+)\/link$/.exec(pathname);
+      if (linkSave) {
+        const run = this.runs.find((r) => r.id === decodeURIComponent(linkSave[1]))!;
+        const result = run.results[Number(linkSave[2])];
+        this.linkRequests.push({ route: "save", body: { index: Number(linkSave[2]), ...request.postDataJSON() } });
+        Object.assign(result, { outcome: "added", source: "links", matchedBy: "instagram.com/elena.conti.ph", hasPhoto: true, addedLink: "https://instagram.com/elena.conti.ph" });
+        run.counters.noMatch--;
+        run.counters.added++;
+        return route.fulfill({ json: { result, counters: run.counters } });
+      }
       const runMatch = /^\/api\/runs\/([^/]+)(?:\/(photos\/(\d+)\/(\w+)|undo))?$/.exec(pathname);
       if (runMatch) {
         const run = this.runs.find((r) => r.id === decodeURIComponent(runMatch[1]));

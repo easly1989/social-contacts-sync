@@ -17,12 +17,17 @@ export interface SyncTarget {
   listContacts(): Promise<SimpleContact[]>;
   currentPhoto(contact: SimpleContact): Promise<Base64 | null>;
   setPhoto(contactId: string, photo: Base64): Promise<void>;
+  /** Saves a profile link on the contact (a photo picked from a link in review). */
+  addLink?(contactId: string, url: string): Promise<void>;
 }
 
 export interface SyncCallbacks {
   progress(update: SyncProgress): void;
-  /** Review mode: which candidate to use, or null to keep the current photo. */
-  review?(request: { contact: SimpleContact; existingPhoto: Base64 | null; candidates: ReviewCandidate[] }): Promise<number | null>;
+  /**
+   * Review mode: which candidate to use, a photo the user looked up from a
+   * profile link, or null to keep the current photo.
+   */
+  review?(request: { contact: SimpleContact; existingPhoto: Base64 | null; candidates: ReviewCandidate[] }): Promise<number | FoundPhoto | null>;
   /** Checked before each contact; a true answer ends the run early. */
   cancelled(): boolean;
   /** Called before each write, e.g. to respect Google's rate limit. */
@@ -115,7 +120,7 @@ export async function runSync(
         if (candidates.length) {
           const existing = await target.currentPhoto(contact);
           const choice = await callbacks.review!({ contact, existingPhoto: existing, candidates });
-          const chosen = choice === null ? undefined : candidates[choice];
+          const chosen = typeof choice === "number" ? candidates[choice] : choice ?? undefined;
           if (!chosen) {
             result.outcome = "kept";
           } else {
@@ -124,6 +129,10 @@ export async function runSync(
             Object.assign(result, { outcome: existing ? "replaced" : "added", source: chosen.source, matchedBy: chosen.matchedBy });
             Object.assign(kept, { photo: chosen.photo, previous: existing ?? undefined });
             image = chosen.photo;
+            if (chosen.newLink && target.addLink) {
+              await target.addLink(contact.id, chosen.newLink);
+              result.addedLink = chosen.newLink;
+            }
           }
         }
       } else {

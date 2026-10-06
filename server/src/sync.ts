@@ -2,7 +2,7 @@ import WebSocket from "ws";
 import { RateLimiter } from "limiter";
 import { Client } from "whatsapp-web.js";
 
-import { EventType, ReviewRequest, SourceId, SyncOptions } from "../../interfaces/api";
+import { EventType, ReviewAnswer, ReviewRequest, SourceId, SyncOptions } from "../../interfaces/api";
 import { downloadContactPhoto, listContacts, OAuth2Client, updateContactPhoto } from "./gapi";
 import { sendEvent, sendMessageAndWait } from "./ws";
 import { deleteFromCache, getFromCache, setInCache } from "./cache";
@@ -12,13 +12,17 @@ import { PhotoSource } from "./sources/types";
 import { whatsappSource } from "./sources/whatsapp";
 import { gravatarSource } from "./sources/gravatar";
 import { telegramSource } from "./sources/telegram";
+import { linksSource, shortLink } from "./sources/links";
+import { getLookup } from "./linkLookups";
+import { addContactLink } from "./contactLinks";
+import { peopleContactsApi } from "./cleanup/people";
 import { TelegramConnection } from "./telegram";
 import { telegramConnection } from "./telegramSession";
 import { getPrefs } from "./cleanup/store";
 import { inferRegion, toE164Digits } from "./phone";
 import { SimpleContact } from "./interfaces";
 
-const knownSources: SourceId[] = ["whatsapp", "telegram", "gravatar"];
+const knownSources: SourceId[] = ["whatsapp", "telegram", "gravatar", "links"];
 
 // Google allows about 60 photo uploads per minute per user; stay below it.
 export function googleRateLimiter(): RateLimiter {
@@ -39,6 +43,7 @@ export function requestedSources(options: SyncOptions, whatsapp: Client | undefi
   return ids.flatMap((id) => {
     if (id === "whatsapp") return whatsapp ? [whatsappSource(whatsapp)] : [];
     if (id === "telegram") return telegram ? [telegramSource(telegram)] : [];
+    if (id === "links") return [linksSource({ bestEffort: options.links_best_effort === "true" })];
     return [gravatarSource()];
   });
 }
@@ -68,6 +73,7 @@ export async function initSync(id: string, syncOptions: SyncOptions) {
           withoutSharedNumbers(await listContacts(gAuth), getPrefs(id).sharedNumbers, inferRegion(whatsappClient?.info?.wid?.user)),
         currentPhoto: downloadContactPhoto,
         setPhoto: (contactId, photo) => updateContactPhoto(gAuth, contactId, photo),
+        addLink: async (contactId, url) => void (await addContactLink(peopleContactsApi(gAuth), contactId, url)),
       },
       requestedSources(syncOptions, whatsappClient, telegramConnection(id)),
       mode,
@@ -85,9 +91,12 @@ export async function initSync(id: string, syncOptions: SyncOptions) {
           };
           try {
             // A person decides here: give them time.
-            const answer = await sendMessageAndWait(ws, EventType.SyncConfirm, EventType.SyncPhotoConfirm, request, 10 * 60 * 1000);
+            const answer: ReviewAnswer | undefined = await sendMessageAndWait(ws, EventType.SyncConfirm, EventType.SyncPhotoConfirm, request, 10 * 60 * 1000);
             if (!answer?.accept) return null;
-            const choice = Number.isInteger(answer.choice) ? answer.choice : 0;
+            // A photo the user looked up from a profile link (issue #51).
+            const fromLink = answer.link ? getLookup(id, answer.link) : undefined;
+            if (fromLink) return { photo: fromLink.photo, source: "links", matchedBy: shortLink(fromLink.link), newLink: fromLink.link.url };
+            const choice = Number.isInteger(answer.choice) ? answer.choice! : 0;
             return choice >= 0 && choice < candidates.length ? choice : 0;
           } catch (e) {
             console.error("No answer for manual sync confirmation", e);

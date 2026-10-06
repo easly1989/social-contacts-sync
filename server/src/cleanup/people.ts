@@ -12,9 +12,9 @@ import { Base64 } from "../types";
 export type Person = people_v1.Schema$Person;
 
 /** Fields clean-up reads, merges, backs up and restores. */
-export const personFields = "names,emailAddresses,phoneNumbers,photos,organizations,birthdays,addresses,memberships,metadata";
+export const personFields = "names,emailAddresses,phoneNumbers,photos,organizations,birthdays,addresses,urls,memberships,metadata";
 /** Fields a merge or an undo writes with updateContact. */
-export const writableFields = ["names", "emailAddresses", "phoneNumbers", "organizations", "birthdays", "addresses", "memberships"] as const;
+export const writableFields = ["names", "emailAddresses", "phoneNumbers", "organizations", "birthdays", "addresses", "urls", "memberships"] as const;
 
 /**
  * What updateContact needs besides the changed fields: the contact's etag

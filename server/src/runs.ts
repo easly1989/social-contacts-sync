@@ -114,6 +114,19 @@ export function getRunPhoto(sessionId: string, id: string, index: number, kind: 
   }
 }
 
+/** Keeps a photo of one entry, written after the run (a profile link added from the report). */
+export function setRunPhoto(sessionId: string, id: string, index: number, kind: keyof RunPhotos, photo: Base64): void {
+  const dir = historyDir();
+  if (!dir) {
+    const run = memory.get(sessionId)?.find((r) => r.run.id === id);
+    if (run) run.photos[index] = { ...run.photos[index], [kind]: photo };
+    return;
+  }
+  if (!/^[\w.-]+$/.test(id) || !Number.isInteger(index)) return;
+  fs.mkdirSync(path.join(dir, id, "photos"), { recursive: true });
+  fs.writeFileSync(photoFile(path.join(dir, id), index, kind), Buffer.from(photo, "base64"));
+}
+
 /** Persists changes made to a run (e.g. entries marked as undone). */
 export function updateRun(run: RunRecord): void {
   writeRun(run);

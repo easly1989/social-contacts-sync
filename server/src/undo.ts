@@ -4,6 +4,8 @@ import { Base64 } from "./types";
 export interface UndoTarget {
   setPhoto(contactId: string, photo: Base64): Promise<void>;
   deletePhoto(contactId: string): Promise<void>;
+  /** Removes a profile link the run saved on the contact. */
+  removeLink?(contactId: string, url: string): Promise<void>;
 }
 
 /**
@@ -27,6 +29,7 @@ export async function undoRun(
     await options.beforeWrite?.();
     if (previous) await target.setPhoto(result.contactId, previous);
     else await target.deletePhoto(result.contactId);
+    if (result.addedLink) await target.removeLink?.(result.contactId, result.addedLink);
     result.undone = true;
     undone++;
     options.onUndone?.();

@@ -37,6 +37,7 @@ const userDataPolicy = "https://developers.google.com/terms/api-services-user-da
         <li><strong>WhatsApp Web</strong>, per leggere le foto profilo dei tuoi contatti;</li>
         <li><strong>Telegram</strong>, se accedi: legge solo i tuoi contatti Telegram esistenti e le loro foto, senza aggiungere nulla al tuo account;</li>
         <li><strong>Gravatar</strong>, se attivi questa sorgente: riceve l'hash SHA-256 degli indirizzi email dei contatti, non gli indirizzi;</li>
+        <li><strong>i siti dei link ai profili</strong> salvati nei tuoi contatti (per esempio X, Telegram, YouTube, Bluesky, Mastodon, GitHub e, solo se lo attivi, Instagram, Facebook e LinkedIn), se attivi questa sorgente: l'app apre la pagina pubblica del profilo, senza accesso e senza inviare altri dati dei contatti, per leggerne la foto;</li>
         <li><strong>GitHub</strong>, per controllare se c'è una nuova versione;</li>
         <li><strong>Google (Chrome for Testing)</strong>, una sola volta, per scaricare un browser se non ne trova uno installato.</li>
       </ul>
@@ -96,6 +97,7 @@ const userDataPolicy = "https://developers.google.com/terms/api-services-user-da
         <li><strong>WhatsApp Web</strong>, to read your contacts' profile photos;</li>
         <li><strong>Telegram</strong>, when you sign in: it reads only your existing Telegram contacts and their photos, and adds nothing to your account;</li>
         <li><strong>Gravatar</strong>, when you turn that source on: it receives the SHA-256 hash of your contacts' email addresses, not the addresses;</li>
+        <li><strong>the sites of the profile links</strong> saved on your contacts (for example X, Telegram, YouTube, Bluesky, Mastodon, GitHub and, only if you turn them on, Instagram, Facebook and LinkedIn), when you turn that source on: the app opens the profile's public page, without signing in and without sending any other contact data, to read its picture;</li>
         <li><strong>GitHub</strong>, to check for a new version;</li>
         <li><strong>Google (Chrome for Testing)</strong>, once, to download a browser if none is installed.</li>
       </ul>
