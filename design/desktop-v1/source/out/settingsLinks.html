@@ -1,0 +1,485 @@
+<!doctype html><html lang="en" data-theme="scs-light"><head><meta charset="utf-8"><title>Social Contacts Sync</title>
+  <link rel="stylesheet" href="app.css"></head><body class="antialiased"><div class="flex h-screen bg-base-200 text-base-content">
+    <aside class="w-60 bg-base-100 border-r border-base-300 flex flex-col p-4 gap-1">
+      <div class="flex items-center gap-2.5 px-2 pb-5 pt-1"><svg viewBox="0 0 40 40" class="size-8 shrink-0" aria-label="Social Contacts Sync">
+    <defs><linearGradient id="lg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#6d5dfc"/><stop offset="1" stop-color="#ec4899"/></linearGradient></defs>
+    <rect width="40" height="40" rx="11" fill="url(#lg)"/>
+    <circle cx="20" cy="16" r="6" fill="#fff"/>
+    <path d="M9.5 31c1.4-5.2 5.6-8 10.5-8s9.1 2.8 10.5 8" fill="#fff"/>
+    <circle cx="30" cy="10" r="5" fill="#fff"/>
+    <path d="M27.8 10.2l1.6 1.6 3-3.2" stroke="#6d5dfc" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+  </svg><div class="font-bold text-[15px] leading-tight">Social Contacts<br/>Sync</div></div>
+      <a class="flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium text-base-content/70 hover:bg-base-200">
+        <svg
+  class="size-[18px] shrink-0"
+  xmlns="http://www.w3.org/2000/svg"
+ 
+ 
+  viewBox="0 0 24 24"
+  fill="none"
+  stroke="currentColor"
+  stroke-width="2"
+  stroke-linecap="round"
+  stroke-linejoin="round"
+>
+  <rect width="7" height="9" x="3" y="3" rx="1" />
+  <rect width="7" height="5" x="14" y="3" rx="1" />
+  <rect width="7" height="9" x="14" y="12" rx="1" />
+  <rect width="7" height="5" x="3" y="16" rx="1" />
+</svg>
+<span class="flex-1">Dashboard</span>
+        
+      </a><a class="flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium text-base-content/70 hover:bg-base-200">
+        <svg
+  class="size-[18px] shrink-0"
+  xmlns="http://www.w3.org/2000/svg"
+ 
+ 
+  viewBox="0 0 24 24"
+  fill="none"
+  stroke="currentColor"
+  stroke-width="2"
+  stroke-linecap="round"
+  stroke-linejoin="round"
+>
+  <path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8" />
+  <path d="M21 3v5h-5" />
+  <path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16" />
+  <path d="M8 16H3v5" />
+</svg>
+<span class="flex-1">Sync photos</span>
+        
+      </a><a class="flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium text-base-content/70 hover:bg-base-200">
+        <svg
+  class="size-[18px] shrink-0"
+  xmlns="http://www.w3.org/2000/svg"
+ 
+ 
+  viewBox="0 0 24 24"
+  fill="none"
+  stroke="currentColor"
+  stroke-width="2"
+  stroke-linecap="round"
+  stroke-linejoin="round"
+>
+  <path d="M11.017 2.814a1 1 0 0 1 1.966 0l1.051 5.558a2 2 0 0 0 1.594 1.594l5.558 1.051a1 1 0 0 1 0 1.966l-5.558 1.051a2 2 0 0 0-1.594 1.594l-1.051 5.558a1 1 0 0 1-1.966 0l-1.051-5.558a2 2 0 0 0-1.594-1.594l-5.558-1.051a1 1 0 0 1 0-1.966l5.558-1.051a2 2 0 0 0 1.594-1.594z" />
+  <path d="M20 2v4" />
+  <path d="M22 4h-4" />
+  <circle cx="4" cy="20" r="2" />
+</svg>
+<span class="flex-1">Clean up</span>
+        
+      </a><a class="flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium text-base-content/70 hover:bg-base-200">
+        <svg
+  class="size-[18px] shrink-0"
+  xmlns="http://www.w3.org/2000/svg"
+ 
+ 
+  viewBox="0 0 24 24"
+  fill="none"
+  stroke="currentColor"
+  stroke-width="2"
+  stroke-linecap="round"
+  stroke-linejoin="round"
+>
+  <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
+  <path d="M3 3v5h5" />
+  <path d="M12 7v5l4 2" />
+</svg>
+<span class="flex-1">History</span>
+        
+      </a><a class="flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium bg-primary/10 text-primary">
+        <svg
+  class="size-[18px] shrink-0"
+  xmlns="http://www.w3.org/2000/svg"
+ 
+ 
+  viewBox="0 0 24 24"
+  fill="none"
+  stroke="currentColor"
+  stroke-width="2"
+  stroke-linecap="round"
+  stroke-linejoin="round"
+>
+  <path d="M9.671 4.136a2.34 2.34 0 0 1 4.659 0 2.34 2.34 0 0 0 3.319 1.915 2.34 2.34 0 0 1 2.33 4.033 2.34 2.34 0 0 0 0 3.831 2.34 2.34 0 0 1-2.33 4.033 2.34 2.34 0 0 0-3.319 1.915 2.34 2.34 0 0 1-4.659 0 2.34 2.34 0 0 0-3.32-1.915 2.34 2.34 0 0 1-2.33-4.033 2.34 2.34 0 0 0 0-3.831A2.34 2.34 0 0 1 6.35 6.051a2.34 2.34 0 0 0 3.319-1.915" />
+  <circle cx="12" cy="12" r="3" />
+</svg>
+<span class="flex-1">Settings</span>
+        
+      </a>
+      <div class="flex-1"></div>
+      <a class="flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium text-base-content/70"><svg
+  class="size-[18px] text-secondary shrink-0"
+  xmlns="http://www.w3.org/2000/svg"
+ 
+ 
+  viewBox="0 0 24 24"
+  fill="none"
+  stroke="currentColor"
+  stroke-width="2"
+  stroke-linecap="round"
+  stroke-linejoin="round"
+>
+  <path d="M11 14h2a2 2 0 0 0 0-4h-3c-.6 0-1.1.2-1.4.6L3 16" />
+  <path d="m14.45 13.39 5.05-4.694C20.196 8 21 6.85 21 5.75a2.75 2.75 0 0 0-4.797-1.837.276.276 0 0 1-.406 0A2.75 2.75 0 0 0 11 5.75c0 1.2.802 2.248 1.5 2.946L16 11.95" />
+  <path d="m2 15 6 6" />
+  <path d="m7 20 1.6-1.4c.3-.4.8-.6 1.4-.6h4c1.1 0 2.1-.4 2.8-1.2l4.6-4.4a1 1 0 0 0-2.75-2.91" />
+</svg>
+Support the project</a>
+      <div class="px-3 pt-3 mt-2 border-t border-base-300 text-xs text-base-content/50 flex justify-between"><span>v1.0.0</span><span class="flex items-center gap-1"><svg
+  class="size-3.5 text-success shrink-0"
+  xmlns="http://www.w3.org/2000/svg"
+ 
+ 
+  viewBox="0 0 24 24"
+  fill="none"
+  stroke="currentColor"
+  stroke-width="2"
+  stroke-linecap="round"
+  stroke-linejoin="round"
+>
+  <circle cx="12" cy="12" r="10" />
+  <path d="m16 9-5.5 5.5L8 12" />
+</svg>
+Up to date</span></div>
+    </aside>
+    <main class="flex-1 overflow-hidden flex flex-col">
+  <header class="px-8 pt-7 pb-5 flex items-end gap-4">
+    <div class="flex-1"><h1 class="text-2xl font-bold tracking-tight">Settings</h1></div>
+    
+  </header>
+  <div class="px-8 pb-8 flex gap-6">
+    <nav class="w-52 space-y-1 text-sm"><a class="flex items-center gap-2.5 px-3 py-2 rounded-lg text-base-content/70"><svg
+  class="size-4 shrink-0"
+  xmlns="http://www.w3.org/2000/svg"
+ 
+ 
+  viewBox="0 0 24 24"
+  fill="none"
+  stroke="currentColor"
+  stroke-width="2"
+  stroke-linecap="round"
+  stroke-linejoin="round"
+>
+  <path d="M9.671 4.136a2.34 2.34 0 0 1 4.659 0 2.34 2.34 0 0 0 3.319 1.915 2.34 2.34 0 0 1 2.33 4.033 2.34 2.34 0 0 0 0 3.831 2.34 2.34 0 0 1-2.33 4.033 2.34 2.34 0 0 0-3.319 1.915 2.34 2.34 0 0 1-4.659 0 2.34 2.34 0 0 0-3.32-1.915 2.34 2.34 0 0 1-2.33-4.033 2.34 2.34 0 0 0 0-3.831A2.34 2.34 0 0 1 6.35 6.051a2.34 2.34 0 0 0 3.319-1.915" />
+  <circle cx="12" cy="12" r="3" />
+</svg>
+General</a><a class="flex items-center gap-2.5 px-3 py-2 rounded-lg text-base-content/70"><svg
+  class="size-4 shrink-0"
+  xmlns="http://www.w3.org/2000/svg"
+ 
+ 
+  viewBox="0 0 24 24"
+  fill="none"
+  stroke="currentColor"
+  stroke-width="2"
+  stroke-linecap="round"
+  stroke-linejoin="round"
+>
+  <path d="M2.586 17.414A2 2 0 0 0 2 18.828V21a1 1 0 0 0 1 1h3a1 1 0 0 0 1-1v-1a1 1 0 0 1 1-1h1a1 1 0 0 0 1-1v-1a1 1 0 0 1 1-1h.172a2 2 0 0 0 1.414-.586l.814-.814a6.5 6.5 0 1 0-4-4z" />
+  <circle cx="16.5" cy="7.5" r=".5" fill="currentColor" />
+</svg>
+Google account</a><a class="flex items-center gap-2.5 px-3 py-2 rounded-lg bg-base-100 border border-base-300 font-semibold"><svg
+  class="size-4 shrink-0"
+  xmlns="http://www.w3.org/2000/svg"
+ 
+ 
+  viewBox="0 0 24 24"
+  fill="none"
+  stroke="currentColor"
+  stroke-width="2"
+  stroke-linecap="round"
+  stroke-linejoin="round"
+>
+  <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
+  <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
+</svg>
+Sources</a><a class="flex items-center gap-2.5 px-3 py-2 rounded-lg text-base-content/70"><svg
+  class="size-4 shrink-0"
+  xmlns="http://www.w3.org/2000/svg"
+ 
+ 
+  viewBox="0 0 24 24"
+  fill="none"
+  stroke="currentColor"
+  stroke-width="2"
+  stroke-linecap="round"
+  stroke-linejoin="round"
+>
+  <path d="M10 16h.01" />
+  <path d="M2.212 11.577a2 2 0 0 0-.212.896V18a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-5.527a2 2 0 0 0-.212-.896L18.55 5.11A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z" />
+  <path d="M21.946 12.013H2.054" />
+  <path d="M6 16h.01" />
+</svg>
+Data & privacy</a><a class="flex items-center gap-2.5 px-3 py-2 rounded-lg text-base-content/70"><svg
+  class="size-4 shrink-0"
+  xmlns="http://www.w3.org/2000/svg"
+ 
+ 
+  viewBox="0 0 24 24"
+  fill="none"
+  stroke="currentColor"
+  stroke-width="2"
+  stroke-linecap="round"
+  stroke-linejoin="round"
+>
+  <path d="M11 21.73a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73z" />
+  <path d="M12 22V12" />
+  <polyline points="3.29 7 12 12 20.71 7" />
+  <path d="m7.5 4.27 9 5.15" />
+</svg>
+Updates</a><a class="flex items-center gap-2.5 px-3 py-2 rounded-lg text-base-content/70"><svg
+  class="size-4 shrink-0"
+  xmlns="http://www.w3.org/2000/svg"
+ 
+ 
+  viewBox="0 0 24 24"
+  fill="none"
+  stroke="currentColor"
+  stroke-width="2"
+  stroke-linecap="round"
+  stroke-linejoin="round"
+>
+  <circle cx="12" cy="12" r="10" />
+  <path d="M12 16v-4" />
+  <path d="M12 8h.01" />
+</svg>
+About</a></nav>
+    <div class="flex-1">
+      <section class="bg-base-100 border border-base-300 rounded-box "><div class="px-6 py-2">
+        <div class="flex items-center gap-3 py-4 border-b border-base-300">
+  <div class="size-9 rounded-xl grid place-items-center text-white shrink-0" style="background:#25D366"><svg
+  class="size-5 shrink-0"
+  xmlns="http://www.w3.org/2000/svg"
+ 
+ 
+  viewBox="0 0 24 24"
+  fill="none"
+  stroke="currentColor"
+  stroke-width="2"
+  stroke-linecap="round"
+  stroke-linejoin="round"
+>
+  <path d="M13.832 16.568a1 1 0 0 0 1.213-.303l.355-.465A2 2 0 0 1 17 15h3a2 2 0 0 1 2 2v3a2 2 0 0 1-2 2A18 18 0 0 1 2 4a2 2 0 0 1 2-2h3a2 2 0 0 1 2 2v3a2 2 0 0 1-.8 1.6l-.468.351a1 1 0 0 0-.292 1.233 14 14 0 0 0 6.392 6.384" />
+</svg>
+</div><div class="flex-1"><div class="text-sm font-semibold">WhatsApp</div><div class="text-xs text-base-content/60">Matches by phone number</div></div><span class="badge badge-sm badge-soft badge-success">Connected</span></div>
+        <div class="flex items-center gap-3 py-4 border-b border-base-300">
+  <div class="size-9 rounded-xl grid place-items-center text-white shrink-0" style="background:#2AABEE"><svg
+  class="size-5 shrink-0"
+  xmlns="http://www.w3.org/2000/svg"
+ 
+ 
+  viewBox="0 0 24 24"
+  fill="none"
+  stroke="currentColor"
+  stroke-width="2"
+  stroke-linecap="round"
+  stroke-linejoin="round"
+>
+  <path d="M14.536 21.686a.5.5 0 0 0 .937-.024l6.5-19a.496.496 0 0 0-.635-.635l-19 6.5a.5.5 0 0 0-.024.937l7.93 3.18a2 2 0 0 1 1.112 1.11z" />
+  <path d="m21.854 2.147-10.94 10.939" />
+</svg>
+</div><div class="flex-1"><div class="text-sm font-semibold">Telegram</div><div class="text-xs text-base-content/60">Matches by phone number</div></div><span class="badge badge-sm badge-soft badge-success">Connected</span></div>
+        <div class="flex items-center gap-3 py-4 border-b border-base-300">
+  <div class="size-9 rounded-xl grid place-items-center text-white shrink-0" style="background:#1E6FD9"><svg
+  class="size-5 shrink-0"
+  xmlns="http://www.w3.org/2000/svg"
+ 
+ 
+  viewBox="0 0 24 24"
+  fill="none"
+  stroke="currentColor"
+  stroke-width="2"
+  stroke-linecap="round"
+  stroke-linejoin="round"
+>
+  <circle cx="12" cy="12" r="4" />
+  <path d="M16 8v5a3 3 0 0 0 6 0v-1a10 10 0 1 0-4 8" />
+</svg>
+</div><div class="flex-1"><div class="text-sm font-semibold">Gravatar</div><div class="text-xs text-base-content/60">Matches by email · No sign-in</div></div><span class="badge badge-sm badge-soft badge-success">Ready</span></div>
+        <div class="py-4">
+          <div class="flex items-center gap-3">
+            <div class="size-9 rounded-xl grid place-items-center text-white shrink-0" style="background:#F97316"><svg
+  class="size-5 shrink-0"
+  xmlns="http://www.w3.org/2000/svg"
+ 
+ 
+  viewBox="0 0 24 24"
+  fill="none"
+  stroke="currentColor"
+  stroke-width="2"
+  stroke-linecap="round"
+  stroke-linejoin="round"
+>
+  <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
+  <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
+</svg>
+</div>
+            <div class="flex-1"><div class="text-sm font-semibold">Profile links <span class="badge badge-xs badge-primary badge-soft ml-1">New</span></div><div class="text-xs text-base-content/60">Uses the profile links saved on your Google contacts · No sign-in</div></div>
+            <span class="badge badge-sm badge-soft badge-success">Ready</span>
+          </div>
+          <div class="ml-12 mt-3 space-y-3">
+            <div class="flex flex-wrap gap-1.5"><span class="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full border border-base-300 "><svg
+  class="size-3 text-success shrink-0"
+  xmlns="http://www.w3.org/2000/svg"
+ 
+ 
+  viewBox="0 0 24 24"
+  fill="none"
+  stroke="currentColor"
+  stroke-width="2"
+  stroke-linecap="round"
+  stroke-linejoin="round"
+>
+  <path d="M20 6 9 17l-5-5" />
+</svg>
+X</span><span class="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full border border-base-300 "><svg
+  class="size-3 text-success shrink-0"
+  xmlns="http://www.w3.org/2000/svg"
+ 
+ 
+  viewBox="0 0 24 24"
+  fill="none"
+  stroke="currentColor"
+  stroke-width="2"
+  stroke-linecap="round"
+  stroke-linejoin="round"
+>
+  <path d="M20 6 9 17l-5-5" />
+</svg>
+Telegram</span><span class="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full border border-base-300 "><svg
+  class="size-3 text-success shrink-0"
+  xmlns="http://www.w3.org/2000/svg"
+ 
+ 
+  viewBox="0 0 24 24"
+  fill="none"
+  stroke="currentColor"
+  stroke-width="2"
+  stroke-linecap="round"
+  stroke-linejoin="round"
+>
+  <path d="M20 6 9 17l-5-5" />
+</svg>
+YouTube</span><span class="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full border border-base-300 "><svg
+  class="size-3 text-success shrink-0"
+  xmlns="http://www.w3.org/2000/svg"
+ 
+ 
+  viewBox="0 0 24 24"
+  fill="none"
+  stroke="currentColor"
+  stroke-width="2"
+  stroke-linecap="round"
+  stroke-linejoin="round"
+>
+  <path d="M20 6 9 17l-5-5" />
+</svg>
+Bluesky</span><span class="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full border border-base-300 "><svg
+  class="size-3 text-success shrink-0"
+  xmlns="http://www.w3.org/2000/svg"
+ 
+ 
+  viewBox="0 0 24 24"
+  fill="none"
+  stroke="currentColor"
+  stroke-width="2"
+  stroke-linecap="round"
+  stroke-linejoin="round"
+>
+  <path d="M20 6 9 17l-5-5" />
+</svg>
+Mastodon</span><span class="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full border border-base-300 "><svg
+  class="size-3 text-success shrink-0"
+  xmlns="http://www.w3.org/2000/svg"
+ 
+ 
+  viewBox="0 0 24 24"
+  fill="none"
+  stroke="currentColor"
+  stroke-width="2"
+  stroke-linecap="round"
+  stroke-linejoin="round"
+>
+  <path d="M20 6 9 17l-5-5" />
+</svg>
+GitHub</span></div>
+            <label class="flex items-start gap-3 rounded-xl border border-base-300 p-3">
+              <input type="checkbox" class="toggle toggle-sm toggle-primary mt-0.5"/>
+              <span class="flex-1">
+                <span class="text-sm font-medium flex items-center gap-2">Also try Instagram, Facebook and LinkedIn <span class="badge badge-xs badge-warning badge-soft">Unofficial</span></span>
+                <span class="block text-xs text-base-content/60 mt-1">Their public profile picture is read the way a link preview is, never with your account. These sites often ask to sign in after a few profiles, so some contacts may be skipped, and their terms don't allow automated access: use it for your own address book, at a slow pace.</span>
+                <span class="flex flex-wrap gap-1.5 mt-2"><span class="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full border border-base-300 text-base-content/60"><svg
+  class="size-3  shrink-0"
+  xmlns="http://www.w3.org/2000/svg"
+ 
+ 
+  viewBox="0 0 24 24"
+  fill="none"
+  stroke="currentColor"
+  stroke-width="2"
+  stroke-linecap="round"
+  stroke-linejoin="round"
+>
+  <path d="M14 2v6a2 2 0 0 0 .245.96l5.51 10.08A2 2 0 0 1 18 22H6a2 2 0 0 1-1.755-2.96l5.51-10.08A2 2 0 0 0 10 8V2" />
+  <path d="M6.453 15h11.094" />
+  <path d="M8.5 2h7" />
+</svg>
+Instagram</span><span class="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full border border-base-300 text-base-content/60"><svg
+  class="size-3  shrink-0"
+  xmlns="http://www.w3.org/2000/svg"
+ 
+ 
+  viewBox="0 0 24 24"
+  fill="none"
+  stroke="currentColor"
+  stroke-width="2"
+  stroke-linecap="round"
+  stroke-linejoin="round"
+>
+  <path d="M14 2v6a2 2 0 0 0 .245.96l5.51 10.08A2 2 0 0 1 18 22H6a2 2 0 0 1-1.755-2.96l5.51-10.08A2 2 0 0 0 10 8V2" />
+  <path d="M6.453 15h11.094" />
+  <path d="M8.5 2h7" />
+</svg>
+Facebook</span><span class="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full border border-base-300 text-base-content/60"><svg
+  class="size-3  shrink-0"
+  xmlns="http://www.w3.org/2000/svg"
+ 
+ 
+  viewBox="0 0 24 24"
+  fill="none"
+  stroke="currentColor"
+  stroke-width="2"
+  stroke-linecap="round"
+  stroke-linejoin="round"
+>
+  <path d="M14 2v6a2 2 0 0 0 .245.96l5.51 10.08A2 2 0 0 1 18 22H6a2 2 0 0 1-1.755-2.96l5.51-10.08A2 2 0 0 0 10 8V2" />
+  <path d="M6.453 15h11.094" />
+  <path d="M8.5 2h7" />
+</svg>
+LinkedIn</span></span>
+              </span>
+            </label>
+            <p class="text-xs text-base-content/50 flex gap-1.5"><svg
+  class="size-3.5 shrink-0 mt-px shrink-0"
+  xmlns="http://www.w3.org/2000/svg"
+ 
+ 
+  viewBox="0 0 24 24"
+  fill="none"
+  stroke="currentColor"
+  stroke-width="2"
+  stroke-linecap="round"
+  stroke-linejoin="round"
+>
+  <circle cx="12" cy="12" r="10" />
+  <path d="M12 16v-4" />
+  <path d="M12 8h.01" />
+</svg>
+Add a link to a contact in Google Contacts, or from a sync report's “No photo found” list.</p>
+          </div>
+        </div>
+      </div></section>
+    </div>
+  </div></main>
+  </div></body></html>

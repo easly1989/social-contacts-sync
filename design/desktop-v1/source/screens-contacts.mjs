@@ -32,14 +32,14 @@ function shell(active, content) {
 const linkChip = (text) => `<span class="inline-flex items-center gap-1 rounded-full border border-base-300 px-1.5 py-px text-[11px] text-base-content/70">${icon("link", "size-3")}${text}</span>`;
 const placeholderBadge = `<span class="badge badge-xs badge-warning badge-soft" title="Replaced by the next sync that finds a photo">Placeholder</span>`;
 
-// [name, photo: "face" | "none" | "placeholder", detail, links, selected]
+// [name, photo: "face" | "none" | "placeholder", detail, links, selected, labels]
 const rows = [
   ["Davide Gallo", "none", "+39 338 •••• 412", [], false],
-  ["Elena Conti", "placeholder", "+39 347 •••• 200", ["instagram"], false],
+  ["Elena Conti", "placeholder", "+39 347 •••• 200", ["instagram"], false, ["Volley"]],
   ["Francesco Greco", "none", "+39 335 •••• 471 · francesco.greco@example.com", [], true],
   ["Francesco G.", "none", "+39 335 •••• 471", [], true],
   ["Giulia Bianchi", "face", "giulia.bianchi@example.com", ["x.com", "github"], false],
-  ["Lorenzo Giordano", "none", "+39 340 •••• 227", [], false],
+  ["Lorenzo Giordano", "none", "+39 340 •••• 227", [], false, ["Work", "ICE"]],
   ["Marco Rossi", "face", "+39 333 •••• 517", ["linkedin"], false],
   ["Martina Marino", "none", "martina@marino.example", ["t.me"], false],
   ["Matteo De Luca", "face", "+39 328 •••• 309", [], false],
@@ -48,7 +48,7 @@ const rows = [
 const avatar = (name, kind) => (kind === "face" ? face(name, "size-9") : initials(name, "size-9", "text-xs"));
 
 const listBody = ({ filter = "none", selection = true } = {}) => shell("contacts", `
-  ${pageHeader("Contacts", "Your Google contacts. Changes are saved to Google right away.", `<button class="btn btn-sm btn-primary">${icon("user-plus", "size-4")}New contact</button>`)}
+  ${pageHeader("Contacts", "Your Google contacts. Changes are saved to Google right away.", `<button class="btn btn-sm">${icon("images", "size-4")}Upload photos</button><button class="btn btn-sm btn-primary">${icon("user-plus", "size-4")}New contact</button>`)}
   <div class="px-8 pb-8 flex-1 flex flex-col gap-4 overflow-hidden">
     <div class="grid grid-cols-3 gap-4">
       ${[["users-round", "All contacts", "844", "all"], ["image-off", "Without a photo", "212", "none"], ["image-up", "With a placeholder photo", "18", "placeholder"]]
@@ -58,9 +58,11 @@ const listBody = ({ filter = "none", selection = true } = {}) => shell("contacts
     ${card(`<div class="px-5 pt-4">
       <div class="flex items-center gap-3">
         <label class="input input-sm w-72">${icon("search", "size-4 opacity-50")}<input placeholder="Search name, number, email or link"/></label>
+        <button class="btn btn-sm btn-ghost border-base-300">${icon("tag", "size-4")}All labels${icon("chevron-down", "size-3.5")}</button>
         <div class="flex-1"></div>
         ${selection ? `<div class="flex items-center gap-2 rounded-lg bg-primary/10 px-3 py-1 text-sm"><span class="font-medium text-primary">2 selected</span>
           <button class="btn btn-xs btn-primary">${icon("merge", "size-3.5")}Merge</button>
+          <button class="btn btn-xs btn-ghost">${icon("tag", "size-3.5")}Label</button>
           <button class="btn btn-xs btn-ghost">${icon("trash-2", "size-3.5")}Delete</button>
           <button class="btn btn-xs btn-ghost btn-square">${icon("x", "size-3.5")}</button></div>` : ""}
       </div>
@@ -69,9 +71,9 @@ const listBody = ({ filter = "none", selection = true } = {}) => shell("contacts
         <tbody>
           ${rows
             .filter((r) => filter === "all" || (filter === "none" ? r[1] !== "face" : r[1] === "placeholder"))
-            .map(([name, kind, detail, links, sel]) => `<tr class="${sel && selection ? "bg-primary/5" : ""}">
+            .map(([name, kind, detail, links, sel, labels = []]) => `<tr class="${sel && selection ? "bg-primary/5" : ""}">
               <td><input type="checkbox" class="checkbox checkbox-xs" ${sel && selection ? "checked" : ""}/></td>
-              <td><div class="flex items-center gap-3">${avatar(name, kind)}<div><div class="font-medium">${name}</div>${kind === "placeholder" ? placeholderBadge : kind === "none" ? `<div class="text-[11px] text-base-content/50">No photo</div>` : ""}</div></div></td>
+              <td><div class="flex items-center gap-3">${avatar(name, kind)}<div><div class="font-medium flex items-center gap-1.5">${name}${labels.map((l) => `<span class="badge badge-xs badge-ghost">${l}</span>`).join("")}</div>${kind === "placeholder" ? placeholderBadge : kind === "none" ? `<div class="text-[11px] text-base-content/50">No photo</div>` : ""}</div></div></td>
               <td class="text-base-content/60">${detail}</td>
               <td><div class="flex flex-wrap gap-1">${links.map(linkChip).join("") || `<span class="text-base-content/40">—</span>`}</div></td>
               <td class="text-right whitespace-nowrap">
@@ -87,15 +89,16 @@ const listBody = ({ filter = "none", selection = true } = {}) => shell("contacts
 export const contactsList = page(listBody());
 export const contactsListDark = page(listBody({ selection: false }), { theme: "scs-dark" });
 
-// Edit drawer over the list: photo, name, numbers, emails, profile links.
+// Edit drawer over the list: every field, photo first.
 const field = (label, value, ic) => `<div class="flex items-center gap-2"><label class="input input-sm flex-1">${icon(ic, "size-4 opacity-50")}<input value="${value}"/></label>
   <select class="select select-sm w-28"><option>${label}</option></select><button class="btn btn-sm btn-ghost btn-square">${icon("x", "size-4")}</button></div>`;
+const section = (title, ic, inner, add) => `<div><div class="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-base-content/50 mb-2">${icon(ic, "size-3.5")}${title}</div>${inner}${add ? `<button class="btn btn-xs btn-ghost mt-1">${icon("plus", "size-3.5")}${add}</button>` : ""}</div>`;
 
 const editBody = shell("contacts", `
   <div class="relative flex-1 overflow-hidden">
     <div class="absolute inset-0 opacity-40 pointer-events-none">${pageHeader("Contacts", "Your Google contacts. Changes are saved to Google right away.")}</div>
     <div class="absolute inset-0 bg-base-content/20"></div>
-    <aside class="absolute right-0 top-0 bottom-0 w-[30rem] bg-base-100 border-l border-base-300 shadow-xl flex flex-col">
+    <aside class="absolute right-0 top-0 bottom-0 w-[32rem] bg-base-100 border-l border-base-300 shadow-xl flex flex-col">
       <header class="flex items-center gap-3 px-6 py-4 border-b border-base-300">
         <div class="flex-1 font-semibold">Edit contact</div>
         <button class="btn btn-sm btn-ghost">${icon("copy", "size-4")}Duplicate</button>
@@ -113,24 +116,26 @@ const editBody = shell("contacts", `
             <p class="text-xs text-base-content/60">A photo you upload is a placeholder: the next sync replaces it as soon as WhatsApp, Telegram, Gravatar or a profile link has a real one, even in “only contacts without a photo” mode.</p>
           </div>
         </div>
-        <div><div class="text-xs font-semibold uppercase tracking-wide text-base-content/50 mb-2">Name</div>
-          <div class="grid grid-cols-2 gap-2"><input class="input input-sm" value="Davide"/><input class="input input-sm" value="Gallo"/></div></div>
-        <div><div class="text-xs font-semibold uppercase tracking-wide text-base-content/50 mb-2">Phone numbers</div>
-          <div class="space-y-2">${field("Mobile", "+39 338 555 0412", "phone")}</div>
-          <button class="btn btn-xs btn-ghost mt-1">${icon("plus", "size-3.5")}Add number</button></div>
-        <div><div class="text-xs font-semibold uppercase tracking-wide text-base-content/50 mb-2">Emails</div>
-          <button class="btn btn-xs btn-ghost">${icon("plus", "size-3.5")}Add email</button></div>
-        <div><div class="text-xs font-semibold uppercase tracking-wide text-base-content/50 mb-2">Profile links</div>
-          <div class="space-y-2">
+        ${section("Name", "user-round", `<div class="grid grid-cols-2 gap-2"><input class="input input-sm" value="Davide"/><input class="input input-sm" value="Gallo"/></div>`)}
+        ${section("Work", "briefcase", `<div class="grid grid-cols-2 gap-2"><input class="input input-sm" value="Gallo Ceramiche"/><input class="input input-sm" placeholder="Job title"/></div>`)}
+        ${section("Phone numbers", "phone", `<div class="space-y-2">${field("Mobile", "+39 338 555 0412", "phone")}${field("Work", "+39 02 4455 6677", "phone")}</div>`, "Add number")}
+        ${section("Emails", "mail", `<div class="space-y-2">${field("Home", "davide.gallo@example.com", "mail")}</div>`, "Add email")}
+        ${section("Profile links", "link", `<div class="space-y-2">
             <div class="flex items-center gap-2"><label class="input input-sm flex-1">${icon("link", "size-4 opacity-50")}<input value="https://www.instagram.com/davide.gallo/"/></label>
               <button class="btn btn-sm">Find photo</button><button class="btn btn-sm btn-ghost btn-square">${icon("x", "size-4")}</button></div>
             <div class="flex items-center gap-3 rounded-xl border border-base-300 p-3">
               ${face("Davide upload", "size-10")}${icon("arrow-right", "size-4 text-base-content/40")}${face("Davide Gallo", "size-10")}
               <div class="flex-1 text-sm"><div class="font-medium">Found on Instagram</div><div class="text-xs text-base-content/60">Use it instead of the placeholder?</div></div>
               <button class="btn btn-xs btn-primary">${icon("check", "size-3.5")}Use this photo</button>
-            </div>
-          </div>
-          <button class="btn btn-xs btn-ghost mt-1">${icon("plus", "size-3.5")}Add link</button></div>
+            </div></div>`, "Add link")}
+        ${section("Birthday", "cake", `<div class="grid grid-cols-3 gap-2"><select class="select select-sm"><option>12</option></select><select class="select select-sm"><option>March</option></select><input class="input input-sm" placeholder="Year (optional)"/></div>`)}
+        ${section("Addresses", "map-pin", `<div class="rounded-xl border border-base-300 p-3 space-y-2">
+            <div class="flex items-center gap-2"><input class="input input-sm flex-1" value="Via Roma 12"/><select class="select select-sm w-28"><option>Home</option></select><button class="btn btn-sm btn-ghost btn-square">${icon("x", "size-4")}</button></div>
+            <div class="grid grid-cols-[6rem_1fr_1fr] gap-2"><input class="input input-sm" value="20121"/><input class="input input-sm" value="Milano"/><input class="input input-sm" value="Italy"/></div></div>`, "Add address")}
+        ${section("Labels", "tag", `<div class="flex flex-wrap items-center gap-1.5">
+            <span class="badge badge-soft badge-primary gap-1">Work${icon("x", "size-3")}</span><span class="badge badge-soft badge-primary gap-1">ICE${icon("x", "size-3")}</span>
+            <button class="btn btn-xs btn-ghost">${icon("plus", "size-3.5")}Add label</button></div>`)}
+        ${section("Notes", "notebook-pen", `<textarea class="textarea textarea-sm w-full" rows="3">Met at the volley tournament in 2024.</textarea>`)}
       </div>
       <footer class="flex items-center gap-2 px-6 py-4 border-t border-base-300">
         <span class="text-xs text-base-content/50 flex-1">Changes go to Google when you press Save.</span>
@@ -140,6 +145,38 @@ const editBody = shell("contacts", `
   </div>`);
 
 export const contactEdit = page(editBody);
+
+// Upload photos: match image files to contacts by name or number.
+const upload = (file, who, kind, status) => `<tr>
+  <td><div class="flex items-center gap-3">${face(file, "size-10 rounded-lg")}<span class="font-mono text-xs">${file}</span></div></td>
+  <td>${who ? `<button class="btn btn-sm btn-ghost border-base-300 justify-start w-56">${initials(who, "size-6", "text-[10px]")}<span class="flex-1 text-left truncate">${who}</span>${icon("chevron-down", "size-3.5")}</button>` : `<button class="btn btn-sm btn-ghost border-dashed border-base-300 w-56 text-base-content/60">${icon("search", "size-3.5")}Choose a contact</button>`}</td>
+  <td class="text-xs text-base-content/60">${kind}</td>
+  <td>${status}</td></tr>`;
+
+export const contactsUpload = page(shell("contacts", `
+  <div class="relative flex-1 overflow-hidden">
+    <div class="absolute inset-0 opacity-40 pointer-events-none">${pageHeader("Contacts")}</div>
+    <div class="absolute inset-0 bg-base-content/20 grid place-items-center">
+      <div class="w-[52rem] rounded-box bg-base-100 border border-base-300 shadow-xl p-6">
+        <div class="flex items-center gap-3"><div class="flex-1 text-lg font-semibold">Upload photos</div><button class="btn btn-sm btn-ghost btn-square">${icon("x", "size-4")}</button></div>
+        <p class="text-sm text-base-content/60 mt-1">Each file is matched to a contact by its name (“Davide Gallo.jpg”) or a phone number in it. Check the matches, then upload: they're placeholders until a sync finds a real photo.</p>
+        <div class="mt-4 rounded-xl border-2 border-dashed border-base-300 p-4 flex items-center gap-3 text-sm text-base-content/60">${icon("cloud-upload", "size-6")}<span class="flex-1">Drop more images here, or</span><button class="btn btn-sm">${icon("folder-open", "size-4")}Choose files</button></div>
+        <table class="table table-sm mt-4">
+          <thead><tr><th>File</th><th>Contact</th><th>Matched by</th><th></th></tr></thead>
+          <tbody>
+            ${upload("Davide Gallo.jpg", "Davide Gallo", "Name", `<span class="badge badge-sm badge-soft badge-success">Ready</span>`)}
+            ${upload("lorenzo_giordano.png", "Lorenzo Giordano", "Name", `<span class="badge badge-sm badge-soft badge-success">Ready</span>`)}
+            ${upload("IMG_3402 +393401112227.jpg", "Martina Marino", "Phone number", `<span class="badge badge-sm badge-soft badge-success">Ready</span>`)}
+            ${upload("marco.jpg", "Marco Rossi", "Name", `<span class="badge badge-sm badge-soft badge-warning" title="Marco Rossi has a photo in Google">Has a photo</span>`)}
+            ${upload("cena-2023.jpg", "", "—", `<span class="badge badge-sm badge-ghost">No match</span>`)}
+          </tbody>
+        </table>
+        <label class="mt-3 flex items-center gap-2 text-sm"><input type="checkbox" class="checkbox checkbox-xs checkbox-primary" checked/>Skip contacts that already have a real photo</label>
+        <div class="mt-5 flex items-center gap-2"><span class="flex-1 text-xs text-base-content/50">3 photos will be uploaded · 2 skipped</span><button class="btn btn-sm btn-ghost">Cancel</button><button class="btn btn-sm btn-primary">${icon("upload", "size-4")}Upload 3 photos</button></div>
+      </div>
+    </div>
+  </div>`));
+
 
 // Merge from the selection: the same preview Clean up uses.
 export const contactsMerge = page(shell("contacts", `
@@ -169,3 +206,5 @@ export const contactsMerge = page(shell("contacts", `
       </div>
     </div>
   </div>`));
+
+export const sizes = { contactEdit: [1280, 1460] };
