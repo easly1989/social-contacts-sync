@@ -72,7 +72,7 @@ router.beforeEach(
     const status: SessionStatus = await response.json();
 
     applyStatus(status);
-    if (status.desktop) return desktopRedirect(to.path, status);
+    if (status.desktop) return desktopRedirect(to.path, status, from.matched.length === 0);
 
     if (
       (["/whatsapp", "/gauth"].includes(to.path) || to.path.startsWith("/app")) &&

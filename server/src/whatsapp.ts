@@ -10,6 +10,7 @@ import { sendEvent } from "./ws";
 import { Base64 } from "./types";
 import { EventType } from "../../interfaces/api";
 import { deleteFromCache, getFromCache, setInCache } from "./cache";
+import { desktopMode } from "./desktop";
 import { whatsappDataPath } from "./desktopSession";
 import { verifyPurchaseWAId } from "./payments";
 import { toE164Digits } from "./phone";
@@ -67,7 +68,10 @@ export function initWhatsApp(id: string): Client {
     }
 
     if (verified) {
-      sendEvent(ws, EventType.Redirect, "/gauth");
+      // The web flow moves on to Google. The desktop app's pages watch the
+      // status themselves: a redirect would pull the window out of the app
+      // each time a saved link reconnects at start.
+      if (!desktopMode) sendEvent(ws, EventType.Redirect, "/gauth");
     } else {
       deleteFromCache(id, "whatsapp");
       deleteFromCache(id, "purchased");
