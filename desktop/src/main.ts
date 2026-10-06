@@ -6,7 +6,7 @@ import { resolvePaths } from "./paths";
 import { loadConfig, saveConfig } from "./config";
 import { loadDataKey } from "./dataKey";
 import { downloadBrowser, findInstalledBrowser } from "./browser";
-import { findUpdate, isPrerelease, releasesRepo, updateStrategy } from "./updates";
+import { findUpdate, releasesRepo, updateFeed, updateStrategy } from "./updates";
 import { deleteLocalData, packageKind, writableValues } from "./localData";
 import { telegramEnv } from "./telegramApp";
 
@@ -250,18 +250,23 @@ async function checkForUpdates(): Promise<UpdateResult> {
     if (strategy === "auto") {
       // Downloads in the background and installs when the app quits.
       const { autoUpdater } = await import("electron-updater");
-      autoUpdater.allowPrerelease = isPrerelease(app.getVersion());
       if (!autoUpdater.listenerCount("update-downloaded")) {
         autoUpdater.on("update-downloaded", (info) => {
           lastUpdate = { status: "ready", version: info.version, url: releasePage(info.version), checkedAt: new Date().toISOString() };
         });
       }
       if (lastUpdate?.status === "ready") return lastUpdate;
-      const result = await autoUpdater.checkForUpdatesAndNotify({
-        title: `${productName} {version} is ready`,
-        body: "It will be installed when you close the app.",
-      });
-      const version = result?.isUpdateAvailable ? result.updateInfo.version : undefined;
+      // We pick the release (see updateFeed), electron-updater installs it.
+      const update = await findUpdate(app.getVersion());
+      let version: string | undefined;
+      if (update) {
+        autoUpdater.setFeedURL(updateFeed(update.version));
+        const result = await autoUpdater.checkForUpdatesAndNotify({
+          title: `${productName} {version} is ready`,
+          body: "It will be installed when you close the app.",
+        });
+        version = result?.isUpdateAvailable ? result.updateInfo.version : undefined;
+      }
       lastUpdate = version ? { status: "available", version, url: releasePage(version), checkedAt } : { status: "current", checkedAt };
     } else if (strategy === "notify") {
       const update = await findUpdate(app.getVersion());

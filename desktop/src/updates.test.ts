@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { findUpdate, isNewer, isPrerelease, pickUpdate, updateStrategy } from "./updates";
+import { findUpdate, isNewer, isPrerelease, pickUpdate, updateFeed, updateStrategy } from "./updates";
 
 test("which builds update themselves", () => {
   assert.equal(updateStrategy("win32", {}, true), "auto");
@@ -56,4 +56,20 @@ test("findUpdate reads the GitHub releases API", async () => {
   }) as unknown as typeof fetch;
   assert.deepEqual(await findUpdate("0.1.0", fakeFetch), { version: "0.2.1", url: "https://example/0.2.1" });
   assert.match(requested, /^https:\/\/api\.github\.com\/repos\/easly1989\/social-contacts-sync\/releases/);
+});
+
+test("betas numbered without a dot still update to the next one (v0.1.0-beta2 → v0.1.0-beta3)", () => {
+  const betas = [
+    { tag_name: "v0.1.0-beta3", html_url: "https://example/beta3", draft: false, prerelease: true },
+    { tag_name: "v0.1.0-beta2", html_url: "https://example/beta2", draft: false, prerelease: true },
+  ];
+  assert.deepEqual(pickUpdate(betas, "0.1.0-beta2"), { version: "0.1.0-beta3", url: "https://example/beta3" });
+  assert.equal(pickUpdate(betas, "0.1.0-beta3"), undefined);
+});
+
+test("the installer updates from the files of the release we picked", () => {
+  assert.deepEqual(updateFeed("0.1.0-beta3"), {
+    provider: "generic",
+    url: "https://github.com/easly1989/social-contacts-sync/releases/download/v0.1.0-beta3",
+  });
 });
