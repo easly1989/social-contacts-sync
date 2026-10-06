@@ -124,6 +124,18 @@ test.describe("desktop start", () => {
     await expect(page).toHaveURL(/\/app$/);
   });
 
+  test("WhatsApp reconnecting after start doesn't pull the app back into the setup", async ({ page }) => {
+    Object.assign(backend.status, { googleConfigured: true, googleConnected: true, whatsappSaved: true, telegramConnected: true });
+    await page.goto("/start");
+    await expect(page).toHaveURL(/\/app$/);
+    // The web flow's "WhatsApp linked" redirect, as sent by older servers.
+    backend.status.whatsappConnected = true;
+    await backend.send(EventType.Redirect, "/gauth");
+    await page.waitForTimeout(500);
+    await expect(page).toHaveURL(/\/app$/);
+    await expect(page.getByRole("heading", { name: "Dashboard" })).toBeVisible();
+  });
+
   test("an unfinished setup opens the welcome page", async ({ page }) => {
     backend.status.googleConfigured = true;
     await page.goto("/start");

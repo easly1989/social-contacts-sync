@@ -22,17 +22,22 @@ export function desktopStart(status: SessionStatus): string {
   return status.desktop && nextDesktopStep(status) === "/app" ? "/app" : "/";
 }
 
-/** Where to send a desktop user who asked for `path`, or undefined to allow it. */
-export function desktopRedirect(path: string, status: SessionStatus): string | undefined {
+/**
+ * Where to send a desktop user who asked for `path`: undefined allows it,
+ * false stays on the current page. `initial`: the window's first page.
+ */
+export function desktopRedirect(path: string, status: SessionStatus, initial = false): string | false | undefined {
   if (path === "/" || path === "/privacy") return undefined;
   if (!status.googleConfigured) return path === "/setup/google" ? undefined : "/setup/google";
   // The web flow's entry points lead into the wizard instead; returning
   // users with everything connected go straight to the options.
   if (["/contribute", "/whatsapp"].includes(path)) return nextDesktopStep(status);
-  // WhatsApp's "linked" redirect: stay on the sources step to finish setup.
+  // The web flow's "WhatsApp linked" redirect: during setup, the next step;
+  // once set up, it must not pull the user away from where they are.
   if (path === "/gauth") {
     const next = nextDesktopStep(status);
-    return next === "/app" ? "/setup/sources" : next;
+    if (next !== "/app") return next;
+    return initial ? "/app" : false;
   }
   if (path === "/setup/sources" && !status.googleConnected) return "/setup/signin";
   // The app needs Google; WhatsApp is one source among others.
