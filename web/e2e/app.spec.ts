@@ -131,6 +131,7 @@ test("report: kept Google photos aren't 'no photo found', and an error stays one
   const error = page.getByRole("row").nth(1).locator(".line-clamp-2");
   await expect(error).toContainText("Google had a temporary problem (502)");
   expect(await error.evaluate((el) => el.getBoundingClientRect().height)).toBeLessThan(50);
+  await screenshot(page, "25d-report-kept-and-error");
 });
 
 test("report: the photos open larger, before and after (issue #44)", async ({ page }) => {
