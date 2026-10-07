@@ -4,6 +4,7 @@ import { useI18n } from "vue-i18n";
 import { CircleCheck, CloudUpload, FolderOpen, Upload, X } from "lucide-vue-next";
 
 import { api, withGoogleDetail } from "../../api";
+import PhotoZoom from "../PhotoZoom.vue";
 import { displayName, matchFile, shrinkImage } from "../../contactTools";
 import { Contact } from "../../../../interfaces/api";
 
@@ -125,7 +126,7 @@ onBeforeUnmount(() => {
             <tr v-for="row in rows" :key="row.key">
               <td>
                 <div class="flex items-center gap-3">
-                  <img :src="row.preview" alt="" class="size-10 shrink-0 rounded-lg object-cover" />
+                  <PhotoZoom :src="row.preview" :name="row.file.name"><img :src="row.preview" alt="" class="size-10 shrink-0 rounded-lg object-cover" /></PhotoZoom>
                   <span class="break-all font-mono text-xs">{{ row.file.name }}</span>
                 </div>
               </td>

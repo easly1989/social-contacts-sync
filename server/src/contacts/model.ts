@@ -33,8 +33,11 @@ export function toContact(person: Person, placeholders: Record<string, string> =
   return {
     id,
     name: clean(person.names?.find((n) => n.displayName)?.displayName),
+    honorificPrefix: clean(name?.honorificPrefix),
     givenName: clean(name?.givenName),
+    middleName: clean(name?.middleName),
     familyName: clean(name?.familyName),
+    honorificSuffix: clean(name?.honorificSuffix),
     company: clean(org?.name),
     jobTitle: clean(org?.title),
     phones: contactEntries(person.phoneNumbers).map(field).filter((f): f is ContactField => Boolean(f)),
@@ -94,8 +97,11 @@ export function parseInput(body: unknown): ContactInput | undefined {
   const day = int(bd?.day, 1, 31);
   const year = int(bd?.year, 1, 9999);
   return {
+    honorificPrefix: text(b.honorificPrefix, 200),
     givenName: text(b.givenName, 200),
+    middleName: text(b.middleName, 200),
     familyName: text(b.familyName, 200),
+    honorificSuffix: text(b.honorificSuffix, 200),
     company: text(b.company, 200),
     jobTitle: text(b.jobTitle, 200),
     phones: list(b.phones),
@@ -110,11 +116,17 @@ export function parseInput(body: unknown): ContactInput | undefined {
 
 type Field = "names" | "organizations" | "phoneNumbers" | "emailAddresses" | "urls" | "addresses" | "birthdays" | "biographies" | "memberships";
 
-function nameParts(current?: Person) {
+const nameKeys = ["honorificPrefix", "givenName", "middleName", "familyName", "honorificSuffix"] as const;
+
+/** Whether the input has any part of a name. */
+export function hasName(input: ContactInput): boolean {
+  return nameKeys.some((k) => input[k]);
+}
+
+/** The phonetic name isn't in the editor: it stays. */
+function phoneticParts(current?: Person) {
   const name = contactEntries(current?.names)[0];
-  return Object.fromEntries(
-    (["middleName", "honorificPrefix", "honorificSuffix", "phoneticGivenName", "phoneticMiddleName", "phoneticFamilyName"] as const).filter((k) => name?.[k]).map((k) => [k, name![k]])
-  );
+  return Object.fromEntries((["phoneticGivenName", "phoneticMiddleName", "phoneticFamilyName"] as const).filter((k) => name?.[k]).map((k) => [k, name![k]]));
 }
 
 /** The People API entries for each editable field. */
@@ -127,8 +139,7 @@ function entries(input: ContactInput, current?: Person): Required<Pick<Person, F
   const groups = [...system.map((m) => m.contactGroupMembership!.contactGroupResourceName!), ...input.labels];
   if (!groups.includes(myContacts)) groups.unshift(myContacts);
   return {
-    // Middle name and titles aren't in the editor: they stay.
-    names: input.givenName || input.familyName ? [{ ...nameParts(current), givenName: input.givenName ?? "", familyName: input.familyName ?? "" }] : [],
+    names: hasName(input) ? [{ ...phoneticParts(current), ...Object.fromEntries(nameKeys.map((k) => [k, input[k] ?? ""])) }] : [],
     organizations: [...(input.company || input.jobTitle ? [{ name: input.company ?? "", title: input.jobTitle ?? "" }] : []), ...otherOrgs],
     phoneNumbers: fields(input.phones),
     emailAddresses: fields(input.emails),
@@ -164,7 +175,7 @@ const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b)
 export function personUpdate(current: Person, input: ContactInput): { body: Person; fields: Field[] } {
   const now = toContact(current);
   const changed: Record<Field, boolean> = {
-    names: now.givenName !== input.givenName || now.familyName !== input.familyName,
+    names: nameKeys.some((k) => now[k] !== input[k]),
     organizations: now.company !== input.company || now.jobTitle !== input.jobTitle,
     phoneNumbers: !same(now.phones, input.phones),
     emailAddresses: !same(now.emails, input.emails),

@@ -4,6 +4,7 @@ import { useI18n } from "vue-i18n";
 import { GitMerge, ShieldCheck } from "lucide-vue-next";
 
 import ContactAvatar from "../ContactAvatar.vue";
+import PhotoZoom from "../PhotoZoom.vue";
 import { api, ApiError, withGoogleDetail } from "../../api";
 import { birthday, relativeTime } from "../../format";
 import { CleanupContact, DuplicateGroup, MergeRequest } from "../../../../interfaces/api";
@@ -152,7 +153,7 @@ async function merge(): Promise<void> {
                 <span class="min-w-0 text-sm">
                   <template v-if="!has[row](c)"><span class="text-base-content/40">—</span></template>
                   <template v-else-if="row === 'name'">{{ c.name }}</template>
-                  <img v-else-if="row === 'photo'" :src="c.photoUrl" alt="" class="size-10 rounded-lg object-cover" referrerpolicy="no-referrer" />
+                  <PhotoZoom v-else-if="row === 'photo'" :src="c.photoUrl" :name="c.name"><img :src="c.photoUrl" alt="" class="size-10 rounded-lg object-cover" referrerpolicy="no-referrer" /></PhotoZoom>
                   <template v-else-if="row === 'company'">{{ c.company }}</template>
                   <template v-else-if="row === 'birthday'">{{ birthday(c.birthday!, locale) }}</template>
                   <template v-else-if="row === 'phones'"><span v-for="p in c.phones" :key="p.value" class="block">{{ p.value }}<span v-if="p.type" class="text-base-content/50"> ({{ p.type }})</span></span></template>

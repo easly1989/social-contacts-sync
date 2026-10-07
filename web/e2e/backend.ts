@@ -281,7 +281,7 @@ export class FakeBackend {
     if (pathname === "/api/contacts" && method === "POST") {
       const c = body.contact;
       if (!(c.givenName || c.familyName || c.company || c.phones.length || c.emails.length)) return route.fulfill({ status: 400, json: { error: "empty_contact" } });
-      const contact: Contact = { ...body.contact, id: `people/new${this.contactRequests.length}`, name: [body.contact.givenName, body.contact.familyName].filter(Boolean).join(" "), hasPhoto: false, updatedAt: now() };
+      const contact: Contact = { ...body.contact, id: `people/new${this.contactRequests.length}`, name: googleName(body.contact), hasPhoto: false, updatedAt: now() };
       this.contacts.push(contact);
       return route.fulfill({ json: contact });
     }
@@ -326,7 +326,8 @@ export class FakeBackend {
       if (!contact.urls.some((u) => u.value === "https://instagram.com/elena.conti.ph")) contact.urls.push({ value: "https://instagram.com/elena.conti.ph", type: "profile" });
     } else if (method === "PUT") {
       if (body.updatedAt !== contact.updatedAt) return route.fulfill({ status: 409, json: { error: "changed", contact } });
-      Object.assign(contact, body.contact, { name: [body.contact.givenName, body.contact.familyName].filter(Boolean).join(" "), updatedAt: now() });
+      for (const key of ["honorificPrefix", "givenName", "middleName", "familyName", "honorificSuffix"] as const) contact[key] = body.contact[key];
+      Object.assign(contact, body.contact, { name: googleName(body.contact), updatedAt: now() });
     }
     return route.fulfill({ json: contact });
   }
@@ -344,6 +345,12 @@ export class FakeBackend {
   count(pathname: string): number {
     return this.requests.filter((r) => new URL(r.url()).pathname === pathname).length;
   }
+}
+
+/** The display name Google makes from the parts: "(Volley) Matteo De Luca, Coach". */
+function googleName(c: Partial<Contact>): string {
+  const name = [c.honorificPrefix, c.givenName, c.middleName, c.familyName].filter(Boolean).join(" ");
+  return c.honorificSuffix ? `${name}, ${c.honorificSuffix}` : name;
 }
 
 // Playwright runs from the web/ directory (see playwright.config.ts).

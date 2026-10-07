@@ -6,6 +6,7 @@ import { ArrowRight, Check, CircleAlert, CircleCheck, Image, ImagePlus, Keyboard
 
 import AppShell from "../../components/AppShell.vue";
 import ProfileLinkLookup from "../../components/ProfileLinkLookup.vue";
+import PhotoZoom from "../../components/PhotoZoom.vue";
 import SourceBadge from "../../components/SourceBadge.vue";
 import StatTile from "../../components/StatTile.vue";
 import { addHandler, sendEvent } from "../../services/ws";
@@ -239,7 +240,7 @@ onUnmounted(() => {
         </div>
         <ul class="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4" :aria-label="$t('syncRun.justAdded')">
           <li v-for="item in latest" :key="item.key" class="flex items-center gap-3 rounded-xl bg-base-200/60 p-2.5">
-            <img :src="photo(item.image)" alt="" class="size-10 rounded-full object-cover" />
+            <PhotoZoom :src="photo(item.image)" :name="item.name"><img :src="photo(item.image)" alt="" class="size-10 rounded-full object-cover" /></PhotoZoom>
             <div class="min-w-0">
               <div class="truncate text-sm font-medium">{{ item.name ?? $t("sync.review.unknown") }}</div>
               <SourceBadge :source="item.source" />

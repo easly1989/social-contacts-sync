@@ -8,7 +8,7 @@ import { googleRateLimiter } from "../src/sync";
 import { executeMerge, MergeBackup, MergeError } from "../src/cleanup/merge";
 import { ContactsApi, Person, peopleContactsApi } from "../src/cleanup/people";
 import { CleanupAction, getScan, saveAction } from "../src/cleanup/store";
-import { duplicatePerson, newPerson, parseInput, personUpdate, toContact, userGroup, withLabel } from "../src/contacts/model";
+import { duplicatePerson, hasName, newPerson, parseInput, personUpdate, toContact, userGroup, withLabel } from "../src/contacts/model";
 import { clearPlaceholder, getPlaceholders, markPlaceholder, prunePlaceholders } from "../src/contacts/placeholders";
 import { addContactLink } from "../src/contactLinks";
 import { getLookup } from "../src/linkLookups";
@@ -82,7 +82,7 @@ export function contactsRouter(contactsApi: (auth: OAuth2Client) => ContactsApi 
     const api = google(req, res);
     if (!api) return;
     const input = parseInput(req.body?.contact);
-    if (!input || !(input.givenName || input.familyName || input.company || input.phones.length || input.emails.length))
+    if (!input || !(hasName(input) || input.company || input.phones.length || input.emails.length))
       return res.status(400).send({ error: "empty_contact" });
     try {
       await beforeWrite(req);

@@ -309,8 +309,13 @@ export interface Contact {
   id: string;
   /** Google's display name. */
   name?: string;
+  /** Before the name, e.g. "Dr." or "(Volley)". */
+  honorificPrefix?: string;
   givenName?: string;
+  middleName?: string;
   familyName?: string;
+  /** After the name, e.g. "Jr." or "Volley" in "Alberto Della Costanza, Volley". */
+  honorificSuffix?: string;
   company?: string;
   jobTitle?: string;
   phones: ContactField[];

@@ -211,3 +211,39 @@ test("merge, label and delete the selected contacts, with undo", async ({ page }
   await page.goto("/app/history");
   await expect(page.getByTestId("cleanup-history")).toContainText("Deleted Davide Gallo");
 });
+
+test("prefix, middle name and suffix are editable, a double click opens a row, photos grow on hover (issue #57)", async ({ page }) => {
+  await page.goto("/app/contacts");
+  await page.getByTestId("tile-all").click();
+
+  // Hovering a photo shows it larger.
+  await row(page, /Giulia Bianchi/).locator("img").hover();
+  await expect(page.getByTestId("photo-zoom")).toBeVisible();
+  await expect(page.getByTestId("photo-zoom")).toContainText("Giulia Bianchi");
+  await screenshot(page, "65-photo-zoom", { fullPage: false });
+  await page.getByLabel("Search name, number, email or link").hover();
+  await expect(page.getByTestId("photo-zoom")).toBeHidden();
+
+  // A double click on the row, not only on the name.
+  await row(page, /Matteo De Luca/).getByRole("cell").nth(2).dblclick();
+  const editor = page.getByTestId("contact-editor");
+  await expect(editor.getByLabel("Prefix, e.g. Dr. or (Volley)")).toHaveValue("(Volley)");
+  await expect(editor.getByLabel("First name")).toHaveValue("Matteo");
+  await expect(editor.getByLabel("Last name")).toHaveValue("De Luca");
+  await expect(editor.getByLabel("Suffix, e.g. Jr. or Volley")).toHaveValue("Coach");
+  await expect(editor.getByTestId("name-preview")).toHaveText("Shown in Google as: (Volley) Matteo De Luca, Coach");
+  await editor.getByLabel("Prefix, e.g. Dr. or (Volley)").fill("");
+  await editor.getByLabel("Middle name").fill("Maria");
+  await editor.getByLabel("Suffix, e.g. Jr. or Volley").fill("Volley");
+  await expect(editor.getByTestId("name-preview")).toHaveText("Shown in Google as: Matteo Maria De Luca, Volley");
+  await screenshot(page, "66-contact-name-parts", { fullPage: false });
+  await editor.getByRole("button", { name: "Save" }).click();
+  await expect(editor).toBeHidden();
+  expect(sent("/md", "PUT")[0].body.contact).toMatchObject({ givenName: "Matteo", middleName: "Maria", familyName: "De Luca", honorificSuffix: "Volley" });
+  expect(sent("/md", "PUT")[0].body.contact.honorificPrefix ?? "").toBe(""); // cleared: the server drops empties
+  await expect(row(page, /Matteo Maria De Luca, Volley/)).toBeVisible();
+
+  // A double click on a row's checkbox only selects it.
+  await row(page, /Davide Gallo/).getByRole("checkbox").dblclick();
+  await expect(editor).toBeHidden();
+});

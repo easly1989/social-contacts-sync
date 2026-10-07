@@ -112,6 +112,7 @@ export function sampleContacts(): Contact[] {
       labels: ["contactGroups/work"],
     }),
     c("mm", "Martina Marino", { phones: [{ value: "+39 349 777 2227", type: "mobile" }], emails: [{ value: "martina@marino.example", type: "home" }], urls: [{ value: "https://t.me/martina", type: "profile" }] }),
-    c("md", "Matteo De Luca", { ...photo(3), phones: [{ value: "+39 328 309 7537", type: "mobile" }] }),
+    // Prefix and suffix, the way Google shows them (issue #57).
+    c("md", "(Volley) Matteo De Luca, Coach", { ...photo(3), honorificPrefix: "(Volley)", givenName: "Matteo", familyName: "De Luca", honorificSuffix: "Coach", phones: [{ value: "+39 328 309 7537", type: "mobile" }] }),
   ];
 }
