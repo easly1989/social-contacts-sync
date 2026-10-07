@@ -5,6 +5,7 @@ import { useI18n } from "vue-i18n";
 import { KeyRound, LogOut } from "lucide-vue-next";
 
 import SettingRow from "./SettingRow.vue";
+import PhotoZoom from "../PhotoZoom.vue";
 import SettingsCard from "./SettingsCard.vue";
 import { api } from "../../api";
 import { number } from "../../format";
@@ -30,7 +31,7 @@ onMounted(async () => {
 <template>
   <SettingsCard>
     <div class="flex flex-wrap items-center gap-4 pb-5" data-testid="google-account">
-      <img v-if="account?.photoUrl" :src="account.photoUrl" alt="" class="size-12 rounded-full" referrerpolicy="no-referrer" />
+      <PhotoZoom v-if="account?.photoUrl" :src="account.photoUrl" :name="account.name"><img :src="account.photoUrl" alt="" class="size-12 rounded-full" referrerpolicy="no-referrer" /></PhotoZoom>
       <span v-else class="grid size-12 place-items-center rounded-full border border-base-300"><img src="/google_logo.svg" alt="" class="size-5" /></span>
       <div class="min-w-[12rem] flex-1">
         <div class="font-semibold">{{ account?.name ?? account?.email ?? "Google" }}</div>

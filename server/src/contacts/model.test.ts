@@ -9,7 +9,7 @@ const person: Person = {
   resourceName: "people/c1",
   etag: "e1",
   metadata: { sources: [{ type: "CONTACT", id: "c1", etag: "e1", updateTime: "2026-10-01T10:00:00Z" }] },
-  names: [{ displayName: "Davide Gallo", givenName: "Davide", familyName: "Gallo", middleName: "Maria" }, { displayName: "Dave", givenName: "Dave", ...linked }],
+  names: [{ displayName: "(Volley) Davide Maria Gallo, Coach", honorificPrefix: "(Volley)", givenName: "Davide", middleName: "Maria", familyName: "Gallo", honorificSuffix: "Coach", phoneticGivenName: "Davide" }, { displayName: "Dave", givenName: "Dave", ...linked }],
   organizations: [{ name: "Gallo Ceramiche", title: "Owner" }, { name: "Volley club" }],
   phoneNumbers: [{ value: "+39 338 555 0412", type: "mobile", canonicalForm: "+393385550412" }, { value: "+39 02 1", ...linked }],
   emailAddresses: [{ value: "davide@example.com", type: "home" }],
@@ -29,9 +29,12 @@ test("a person as the Contacts page shows it: only the contact's own entries, la
   const contact = toContact(person, { "people/c1": "https://lh3.example/contacts/abc" });
   assert.deepEqual(contact, {
     id: "people/c1",
-    name: "Davide Gallo",
+    name: "(Volley) Davide Maria Gallo, Coach",
+    honorificPrefix: "(Volley)",
     givenName: "Davide",
+    middleName: "Maria",
     familyName: "Gallo",
+    honorificSuffix: "Coach",
     company: "Gallo Ceramiche",
     jobTitle: "Owner",
     phones: [{ value: "+39 338 555 0412", type: "mobile" }],
@@ -64,8 +67,11 @@ test("the editor's input is cleaned: empties dropped, system groups refused, bad
       notes: "",
     }),
     {
+      honorificPrefix: undefined,
       givenName: "Elena",
+      middleName: undefined,
       familyName: undefined,
+      honorificSuffix: undefined,
       company: undefined,
       jobTitle: undefined,
       phones: [{ value: "+39 347 100 2000", type: "mobile" }],
@@ -94,7 +100,11 @@ test("an update writes only what changed, and keeps what the editor doesn't show
 
   const renamed = personUpdate(person, { ...input, givenName: "Dav", birthday: { year: 1990, month: 3, day: 12 } });
   assert.deepEqual(renamed.fields, ["names", "organizations", "birthdays", "memberships"]);
-  assert.deepEqual(renamed.body.names, [{ middleName: "Maria", givenName: "Dav", familyName: "Gallo" }]);
+  // Every part of the name is written; the phonetic name, not in the editor, stays.
+  assert.deepEqual(renamed.body.names, [{ phoneticGivenName: "Davide", honorificPrefix: "(Volley)", givenName: "Dav", middleName: "Maria", familyName: "Gallo", honorificSuffix: "Coach" }]);
+  const noSuffix = personUpdate(person, { ...input, honorificSuffix: undefined });
+  assert.deepEqual(noSuffix.fields, ["names", "organizations", "memberships"]);
+  assert.equal(noSuffix.body.names![0].honorificSuffix, "");
   assert.deepEqual(renamed.body.birthdays, [{ date: { year: 1990, month: 3, day: 12 } }]);
 
   assert.deepEqual(personUpdate(person, parseInput(toContact(person))!).fields, []);
@@ -106,7 +116,8 @@ test("a new contact, a copy and a label change are valid People API bodies", () 
     { contactGroupMembership: { contactGroupResourceName: "contactGroups/myContacts" } },
     { contactGroupMembership: { contactGroupResourceName: "contactGroups/9z" } },
   ]);
-  assert.deepEqual(created.names, [{ givenName: "Sara", familyName: "" }]);
+  assert.deepEqual(created.names, [{ honorificPrefix: "", givenName: "Sara", middleName: "", familyName: "", honorificSuffix: "" }]);
+  assert.deepEqual(newPerson(parseInput({ honorificSuffix: "Volley", phones: [] })!).names?.[0].honorificSuffix, "Volley");
 
   const copy = duplicatePerson(person);
   assert.equal(copy.resourceName, undefined);

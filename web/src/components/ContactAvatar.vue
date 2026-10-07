@@ -1,7 +1,9 @@
 <script setup lang="ts">
 import { computed, ref, watch } from "vue";
 
-// A contact's photo, or their initial on a colour picked from the name.
+import PhotoZoom from "./PhotoZoom.vue";
+
+// A contact's photo, larger on hover, or their initial on a colour picked from the name.
 const props = defineProps<{ name?: string; photoUrl?: string; size?: string }>();
 const failed = ref(false);
 watch(() => props.photoUrl, () => (failed.value = false));
@@ -16,6 +18,8 @@ const initial = computed(() => (props.name?.trim()[0] ?? "?").toUpperCase());
 </script>
 
 <template>
-  <img v-if="photoUrl && !failed" :src="photoUrl" alt="" class="shrink-0 rounded-full object-cover ring-2 ring-base-100" :class="size ?? 'size-9'" referrerpolicy="no-referrer" @error="failed = true" />
+  <PhotoZoom v-if="photoUrl && !failed" :src="photoUrl" :name="name">
+    <img :src="photoUrl" alt="" class="shrink-0 rounded-full object-cover ring-2 ring-base-100" :class="size ?? 'size-9'" referrerpolicy="no-referrer" @error="failed = true" />
+  </PhotoZoom>
   <span v-else class="grid shrink-0 place-items-center rounded-full text-sm font-semibold text-white ring-2 ring-base-100" :class="size ?? 'size-9'" :style="{ background: color }" aria-hidden="true">{{ initial }}</span>
 </template>

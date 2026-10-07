@@ -6,6 +6,7 @@ import { ArrowLeft, ArrowRight, Check, CircleAlert, FileDown, Image, ImagePlus, 
 
 import AppShell from "../../components/AppShell.vue";
 import PhotoCompare from "../../components/PhotoCompare.vue";
+import PhotoZoom from "../../components/PhotoZoom.vue";
 import ProfileLinkLookup from "../../components/ProfileLinkLookup.vue";
 import SourceBadge from "../../components/SourceBadge.vue";
 import StatTile from "../../components/StatTile.vue";
@@ -227,7 +228,7 @@ onUnmounted(() => window.clearInterval(poll));
                   <div v-if="found" class="mt-3 flex flex-wrap items-center gap-4 rounded-xl border border-base-300 bg-base-100 p-3">
                     <span class="grid size-12 place-items-center rounded-full bg-base-300 text-base font-semibold text-base-content/50">{{ (result.name ?? "?")[0] }}</span>
                     <ArrowRight class="size-4 text-base-content/40" />
-                    <img :src="`data:image/jpeg;base64,${found.photo}`" :alt="$t('links.foundOn', { network: found.network })" class="size-12 rounded-full object-cover" />
+                    <PhotoZoom :src="`data:image/jpeg;base64,${found.photo}`" :name="result.name"><img :src="`data:image/jpeg;base64,${found.photo}`" :alt="$t('links.foundOn', { network: found.network })" class="size-12 rounded-full object-cover" /></PhotoZoom>
                     <div class="min-w-[12rem] flex-1">
                       <div class="text-sm font-medium">{{ $t("links.foundOn", { network: found.network }) }}</div>
                       <div class="text-xs text-base-content/60">{{ $t("links.saveHint") }}</div>

@@ -4,6 +4,7 @@ import { useI18n } from "vue-i18n";
 import { ArrowRight, CircleAlert, ImagePlus, RefreshCw, Sparkles } from "lucide-vue-next";
 
 import AppShell from "../../components/AppShell.vue";
+import PhotoZoom from "../../components/PhotoZoom.vue";
 import SourceMark from "../../components/SourceMark.vue";
 import { api } from "../../api";
 import { cleanupSummary } from "../../cleanupState";
@@ -173,13 +174,9 @@ onMounted(() => load());
       <!-- Latest photos -->
       <section v-if="lastRun" class="flex flex-wrap items-center gap-5 rounded-box border border-base-300 bg-base-100 p-6 xl:col-span-3">
         <div class="flex -space-x-3">
-          <img
-            v-for="{ index } in recentPhotos"
-            :key="index"
-            :src="api.photoUrl(lastRun.id, index, 'photo')"
-            alt=""
-            class="size-10 rounded-full object-cover ring-2 ring-base-100"
-          />
+          <PhotoZoom v-for="{ index } in recentPhotos" :key="index" :src="api.photoUrl(lastRun.id, index, 'photo')">
+            <img :src="api.photoUrl(lastRun.id, index, 'photo')" alt="" class="size-10 rounded-full object-cover ring-2 ring-base-100" />
+          </PhotoZoom>
         </div>
         <div class="min-w-[12rem] flex-1 text-sm">
           <div class="font-semibold">{{ $t("dashboard.recentPhotos") }}</div>

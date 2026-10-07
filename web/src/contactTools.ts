@@ -9,7 +9,7 @@ import { CleanupContact, Contact } from "../../interfaces/api";
 export function fold(text: string): string {
   return text
     .normalize("NFD")
-    .replace(/[̀-ͯ]/g, "")
+    .replace(/[\u0300-\u036f]/g, "")
     .toLowerCase()
     .replace(/[^a-z0-9@+]+/g, " ")
     .trim();
@@ -17,8 +17,16 @@ export function fold(text: string): string {
 
 const digits = (s: string) => s.replace(/\D/g, "");
 
-export function displayName(c: Pick<Contact, "name" | "givenName" | "familyName" | "company" | "emails" | "phones">): string {
-  return c.name ?? ([c.givenName, c.familyName].filter(Boolean).join(" ") || c.company || c.emails[0]?.value || c.phones[0]?.value || "");
+type Named = Pick<Contact, "name" | "honorificPrefix" | "givenName" | "middleName" | "familyName" | "honorificSuffix" | "company" | "emails" | "phones">;
+
+/** The name as Google shows it: "(Volley) Davide Maria Gallo, Coach". */
+export function composedName(c: Omit<Named, "name" | "company" | "emails" | "phones">): string {
+  const name = [c.honorificPrefix, c.givenName, c.middleName, c.familyName].filter(Boolean).join(" ");
+  return c.honorificSuffix ? (name ? `${name}, ${c.honorificSuffix}` : c.honorificSuffix) : name;
+}
+
+export function displayName(c: Named): string {
+  return c.name ?? (composedName(c) || c.company || c.emails[0]?.value || c.phones[0]?.value || "");
 }
 
 /** Whether a contact matches what was typed in the search box. */

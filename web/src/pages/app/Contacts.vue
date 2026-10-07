@@ -85,6 +85,12 @@ const toggle = (id: string, on: boolean) => (selected.value = on ? [...selected.
 const editing = ref<{ contact?: Contact; key: number }>();
 let editorKey = 0;
 const openEditor = (contact?: Contact) => (editing.value = { contact, key: editorKey++ });
+/** A double click anywhere on a row opens it, except on its own controls. */
+function rowDoubleClick(event: MouseEvent, contact: Contact): void {
+  if ((event.target as HTMLElement).closest("input, button, summary, select, a, details")) return;
+  window.getSelection()?.removeAllRanges();
+  if (editing.value?.contact?.id !== contact.id) openEditor(contact);
+}
 function onDeleted(actionId: string, id: string): void {
   drop([id]);
   selected.value = selected.value.filter((s) => s !== id);
@@ -295,7 +301,7 @@ const uploading = ref(false);
               </tr>
             </thead>
             <tbody>
-              <tr v-for="contact in rows" :key="contact.id" :class="{ 'bg-primary/5': selected.includes(contact.id) }">
+              <tr v-for="contact in rows" :key="contact.id" class="cursor-default" :class="{ 'bg-primary/5': selected.includes(contact.id) }" @dblclick="rowDoubleClick($event, contact)">
                 <td>
                   <input type="checkbox" class="checkbox checkbox-xs" :checked="selected.includes(contact.id)" :aria-label="$t('contacts.select', { name: displayName(contact) || '—' })" @change="toggle(contact.id, ($event.target as HTMLInputElement).checked)" />
                 </td>

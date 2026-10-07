@@ -4,8 +4,9 @@ import { useI18n } from "vue-i18n";
 import { ArrowRight, Briefcase, Cake, Check, Copy, Link, Mail, MapPin, NotebookPen, Phone, Plus, Tag, Trash2, Upload, UserRound, X } from "lucide-vue-next";
 
 import ContactAvatar from "../ContactAvatar.vue";
+import PhotoZoom from "../PhotoZoom.vue";
 import { api, ApiError, withGoogleDetail } from "../../api";
-import { displayName, shrinkImage } from "../../contactTools";
+import { composedName, displayName, shrinkImage } from "../../contactTools";
 import { lookupError } from "../../profileLinks";
 import { Contact, ContactAddress, ContactField, ContactInput, ContactLabel, LinkLookup } from "../../../../interfaces/api";
 
@@ -313,10 +314,16 @@ onBeforeUnmount(() => {
 
         <fieldset>
           <legend class="mb-2 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-base-content/50"><UserRound class="size-3.5" />{{ $t("contacts.fields.name") }}</legend>
-          <div class="grid grid-cols-2 gap-2">
+          <div class="grid grid-cols-3 gap-2">
             <input v-model.trim="form.givenName" class="input input-sm w-full" :placeholder="$t('contacts.fields.givenName')" :aria-label="$t('contacts.fields.givenName')" />
+            <input v-model.trim="form.middleName" class="input input-sm w-full" :placeholder="$t('contacts.fields.middleName')" :aria-label="$t('contacts.fields.middleName')" />
             <input v-model.trim="form.familyName" class="input input-sm w-full" :placeholder="$t('contacts.fields.familyName')" :aria-label="$t('contacts.fields.familyName')" />
           </div>
+          <div class="mt-2 grid grid-cols-2 gap-2">
+            <input v-model.trim="form.honorificPrefix" class="input input-sm w-full" :placeholder="$t('contacts.fields.prefix')" :aria-label="$t('contacts.fields.prefix')" />
+            <input v-model.trim="form.honorificSuffix" class="input input-sm w-full" :placeholder="$t('contacts.fields.suffix')" :aria-label="$t('contacts.fields.suffix')" />
+          </div>
+          <p class="mt-1.5 text-xs text-base-content/50" data-testid="name-preview">{{ $t("contacts.namePreview", { name: composedName(form) || "—" }) }}</p>
         </fieldset>
 
         <fieldset>
@@ -364,7 +371,7 @@ onBeforeUnmount(() => {
               <div v-if="found?.index === i" class="mt-2 flex flex-wrap items-center gap-3 rounded-xl border border-base-300 p-3">
                 <ContactAvatar :name="displayName({ ...form, name: current?.name })" :photo-url="photoUrl" size="size-10" />
                 <ArrowRight class="size-4 text-base-content/40" />
-                <img :src="`data:image/jpeg;base64,${found.lookup.photo}`" :alt="$t('links.foundOn', { network: found.lookup.network })" class="size-10 rounded-full object-cover" />
+                <PhotoZoom :src="`data:image/jpeg;base64,${found.lookup.photo}`" :name="found.lookup.network"><img :src="`data:image/jpeg;base64,${found.lookup.photo}`" :alt="$t('links.foundOn', { network: found.lookup.network })" class="size-10 rounded-full object-cover" /></PhotoZoom>
                 <div class="min-w-[9rem] flex-1 text-sm">
                   <div class="font-medium">{{ $t("links.foundOn", { network: found.lookup.network }) }}</div>
                   <div class="text-xs text-base-content/60">{{ $t(isPlaceholder ? "contacts.useInsteadOfPlaceholder" : photoUrl ? "contacts.useInstead" : "contacts.useIt") }}</div>
