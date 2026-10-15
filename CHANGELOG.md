@@ -3,6 +3,15 @@
 What changed in each release of Social Contacts Sync. The packages are on the
 [releases page](https://github.com/easly1989/social-contacts-sync/releases).
 
+## 1.3.3 — 2026-10-15
+
+### Fixed
+
+- Facebook friends read by the login scan came in without their photo: a
+  friend's picture and name are two links to the same profile, and they're now
+  read together. Scan Facebook again to fill in the photos of friends already
+  read. ([#71](https://github.com/easly1989/social-contacts-sync/issues/71))
+
 ## 1.3.2 — 2026-10-15
 
 ### Added
