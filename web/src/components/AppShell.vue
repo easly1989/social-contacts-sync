@@ -4,10 +4,11 @@ import { useRoute } from "vue-router";
 import { ArrowUpCircle, CircleCheck, ContactRound, HandHeart, History, LayoutDashboard, RefreshCw, Settings, Sparkles } from "lucide-vue-next";
 
 import BrandLogo from "./BrandLogo.vue";
+import GoogleSignIn from "./GoogleSignIn.vue";
 import PreferencesMenu from "./PreferencesMenu.vue";
 import { cleanupSummary, loadCleanupSummary } from "../cleanupState";
 import { desktopInfo, loadDesktopInfo } from "../desktopInfo";
-import { isDesktop } from "../settings";
+import { isDesktop, sessionStatus } from "../settings";
 
 // The app frame from the mockups in issue #8: sidebar on wide windows,
 // bottom tabs on phones.
@@ -29,6 +30,11 @@ const items = [
   { to: "/app/history", key: "history", icon: History },
   { to: "/app/settings", key: "settings", icon: Settings },
 ];
+// Set up, but Google signed out or the sign-in expired: the pages can't read
+// contacts, so they ask for the sign-in right here (Settings stay usable).
+const needsSignIn = computed(() => isDesktop.value && sessionStatus.value?.setupDone && !sessionStatus.value.googleConnected);
+const blocked = computed(() => needsSignIn.value && !route.path.startsWith("/app/settings"));
+
 const active = computed(() => (item: (typeof items)[number]) =>
   item.exact ? route.path === item.to : route.path === item.to || route.path.startsWith(`${item.to}/`)
 );
@@ -78,7 +84,21 @@ const active = computed(() => (item: (typeof items)[number]) =>
         </div>
         <div class="flex items-center gap-2"><slot name="actions" /><PreferencesMenu /></div>
       </header>
-      <main class="flex-1 px-4 pb-8 sm:px-8"><slot /></main>
+      <main class="flex-1 px-4 pb-8 sm:px-8">
+        <section v-if="blocked" class="mx-auto max-w-xl rounded-box border border-base-300 bg-base-100 p-6 text-center" data-testid="signin-needed">
+          <div class="mx-auto grid size-14 place-items-center rounded-2xl border border-base-300"><img class="size-7" alt="" src="/google_logo.svg" /></div>
+          <h2 class="mt-4 text-xl font-bold">{{ $t("app.signInAgain") }}</h2>
+          <p class="mt-1 text-sm text-base-content/70">{{ $t("app.signInAgainText") }}</p>
+          <GoogleSignIn class="mt-2 [&>button]:mx-auto [&>button]:flex" />
+        </section>
+        <template v-else>
+          <div v-if="needsSignIn && route.path !== '/app/settings/google'" class="mb-4 flex flex-wrap items-center gap-3 rounded-box border border-warning/40 bg-warning/10 px-4 py-3 text-sm" role="status">
+            <span class="flex-1">{{ $t("app.signedOut") }}</span>
+            <router-link to="/app/settings/google" class="btn btn-sm">{{ $t("app.signInAgain") }}</router-link>
+          </div>
+          <slot />
+        </template>
+      </main>
     </div>
 
     <nav class="fixed inset-x-0 bottom-0 z-10 grid grid-cols-6 border-t border-base-300 bg-base-100 text-[11px] font-medium lg:hidden" :aria-label="$t('app.navigation')">

@@ -1,11 +1,13 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from "vue";
 import { useI18n } from "vue-i18n";
+import { useRouter } from "vue-router";
 import { ArrowRight, CircleAlert, ImagePlus, RefreshCw, Sparkles } from "lucide-vue-next";
 
 import AppShell from "../../components/AppShell.vue";
 import PhotoZoom from "../../components/PhotoZoom.vue";
 import SourceMark from "../../components/SourceMark.vue";
+import { signInAgainIfNeeded } from "../../signInAgain";
 import { api } from "../../api";
 import { cleanupSummary } from "../../cleanupState";
 import { duration, number, relativeTime } from "../../format";
@@ -13,6 +15,7 @@ import { isDesktop } from "../../settings";
 import { GoogleAccount, GoogleStats, RunRecord, RunSummary, SessionStatus } from "../../../../interfaces/api";
 
 // Mockup 2 in issue #8.
+const router = useRouter();
 const { locale } = useI18n();
 const status = ref<SessionStatus>();
 const account = ref<GoogleAccount>();
@@ -33,7 +36,8 @@ const recentPhotos = computed(() =>
     .filter(({ result }) => result.hasPhoto && !result.undone)
     .slice(0, 7)
 );
-const whatsappLink = computed(() => (isDesktop.value ? "/setup/sources" : "/whatsapp"));
+// The desktop app links sources in Settings once set up (the wizard is for the first run).
+const whatsappLink = computed(() => (isDesktop.value ? "/app/settings/sources" : "/whatsapp"));
 
 async function load(refresh = false): Promise<void> {
   loading.value = true;
@@ -47,6 +51,7 @@ async function load(refresh = false): Promise<void> {
     stats.value = await api.stats(refresh);
   } catch {
     statsError.value = true;
+    if (await signInAgainIfNeeded(router)) return;
   }
   loading.value = false;
 }

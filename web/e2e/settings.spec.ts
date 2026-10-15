@@ -1,5 +1,6 @@
 import { test, expect } from "@playwright/test";
 
+import { EventType } from "../../interfaces/api";
 import { FakeBackend, screenshot } from "./backend";
 import { sampleRun } from "./fixtures";
 
@@ -8,7 +9,7 @@ let backend: FakeBackend;
 
 test.beforeEach(async ({ page }) => {
   backend = new FakeBackend(page);
-  Object.assign(backend.status, { whatsappConnected: true, googleConnected: true, googleConfigured: true, desktop: true });
+  Object.assign(backend.status, { whatsappConnected: true, googleConnected: true, googleConfigured: true, desktop: true, setupDone: true });
   backend.runs = [sampleRun()];
   await backend.install();
 });
@@ -74,17 +75,28 @@ test("desktop: checking for updates shows the new version", async ({ page }) => 
   await screenshot(page, "33-settings-updates");
 });
 
-test("desktop: Google account and sources can be signed out and unlinked", async ({ page }) => {
+test("desktop: Google account and sources can be signed out and unlinked, and connected again in place", async ({ page }) => {
   await page.goto("/app/settings/sources");
-  await page.getByTestId("settings-source-whatsapp").getByRole("button", { name: "Unlink" }).click();
-  await expect(page.getByTestId("settings-source-whatsapp").getByRole("link", { name: "Connect" })).toHaveAttribute("href", "/setup/sources");
+  const whatsapp = page.getByTestId("settings-source-whatsapp");
+  await whatsapp.getByRole("button", { name: "Unlink" }).click();
+  // Linked again right here, not in the first-run wizard.
+  await whatsapp.getByRole("button", { name: "Connect" }).click();
+  await expect.poll(() => backend.requested("/api/init_whatsapp")).toBeTruthy();
+  await backend.send(EventType.WhatsAppQR, "2@fake-qr-payload,for-the-e2e-tests");
+  await expect(whatsapp.getByTestId("settings-whatsapp-link").locator("canvas")).toBeVisible();
+  await expect(page).toHaveURL(/\/app\/settings\/sources$/);
 
   await page.getByRole("link", { name: "Google account" }).click();
   await expect(page.getByTestId("google-account")).toContainText("Ada Lovelace");
   await expect(page.getByTestId("google-account")).toContainText("ada@example.com · 1,248 contacts");
   await screenshot(page, "34-settings-google");
   await page.getByRole("button", { name: "Sign out" }).click();
-  await expect(page).toHaveURL(/\/setup\/signin$/);
+  // Set up once: signing in again happens here, not in the wizard.
+  await expect(page).toHaveURL(/\/app\/settings\/google$/);
+  await expect(page.getByText("Not signed in: contacts can't be read or updated.")).toBeVisible();
+  await page.getByRole("button", { name: "Sign in with Google" }).click();
+  await expect(page.getByTestId("google-account")).toContainText("Ada Lovelace");
+  expect(new URL(backend.requested("/api/google_auth_start")!.url()).searchParams.get("return")).toBe("/app/settings/google");
 });
 
 test("about: credits, donations and licence", async ({ page }) => {

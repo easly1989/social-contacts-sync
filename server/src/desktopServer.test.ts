@@ -136,6 +136,37 @@ test("desktop mode keeps the Google sign-in across restarts", async (t) => {
   });
 });
 
+test("desktop mode: a sign-in Google no longer accepts is forgotten, without going back to the wizard", async (t) => {
+  // Google answers the refresh with invalid_grant, as after 7 days in Testing.
+  const google = http.createServer((_req, res) => {
+    res.writeHead(400, { "Content-Type": "application/json" });
+    res.end(JSON.stringify({ error: "invalid_grant", error_description: "Token has been expired or revoked." }));
+  });
+  await new Promise<void>((resolve) => google.listen(0, "127.0.0.1", resolve));
+  const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), "scs-expired-"));
+  const key = crypto.randomBytes(32);
+  fs.writeFileSync(path.join(dataDir, "google-token.enc"), encrypt({ refresh_token: "1//old", access_token: "ya29.old", expiry_date: Date.now() - 1000 }, key));
+  // A previous version set the app up: a Google project and a linked source.
+  fs.writeFileSync(path.join(dataDir, "setup-done"), "2026-10-01T10:00:00.000Z");
+
+  const { base, child } = await startDesktopServer({
+    SCS_DATA_DIR: dataDir,
+    SCS_DATA_KEY: key.toString("base64"),
+    GOOGLE_CLIENT_ID: "1-abc.apps.googleusercontent.com",
+    GOOGLE_CLIENT_SECRET: "s",
+    SCS_GOOGLE_TOKEN_ENDPOINT: `http://127.0.0.1:${(google.address() as AddressInfo).port}/token`,
+  });
+  t.after(() => {
+    child.kill();
+    google.close();
+  });
+  const status = (await (await fetch(`${base}/status`)).json()) as Record<string, unknown>;
+  assert.equal(status.googleConnected, false);
+  assert.equal(status.googleExpired, true);
+  assert.equal(status.setupDone, true);
+  assert.equal(fs.existsSync(path.join(dataDir, "google-token.enc")), false);
+});
+
 test("desktop mode: Settings talk to the desktop app", async (t) => {
   const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), "scs-settings-"));
   const key = crypto.randomBytes(32);

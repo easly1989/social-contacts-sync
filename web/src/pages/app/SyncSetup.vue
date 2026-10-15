@@ -122,7 +122,7 @@ onMounted(async () => {
                 <button type="button" class="btn btn-ghost btn-xs join-item" :disabled="index === 0" :aria-label="$t('syncSetup.moveUp', { name: sourceInfo[source].name })" @click="move(index, -1)"><ChevronUp class="size-4" /></button>
                 <button type="button" class="btn btn-ghost btn-xs join-item" :disabled="index === prefs.order.length - 1" :aria-label="$t('syncSetup.moveDown', { name: sourceInfo[source].name })" @click="move(index, 1)"><ChevronDown class="size-4" /></button>
               </div>
-              <router-link v-if="source === 'whatsapp' && !available(source)" :to="isDesktop ? '/setup/sources' : '/whatsapp'" class="btn btn-xs">{{ $t("dashboard.connect") }}</router-link>
+              <router-link v-if="source === 'whatsapp' && !available(source)" :to="isDesktop ? '/app/settings/sources' : '/whatsapp'" class="btn btn-xs">{{ $t("dashboard.connect") }}</router-link>
               <router-link v-else-if="source === 'telegram' && !available(source) && status?.telegramAvailable" to="/app/settings/sources" class="btn btn-xs">{{ $t("dashboard.connect") }}</router-link>
               <input
                 v-else

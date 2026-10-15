@@ -56,6 +56,11 @@ export function restoreGoogleAuth(): OAuth2Client | undefined {
   return client;
 }
 
+/** Deletes the saved Google sign-in (Google no longer accepts it). */
+export function forgetSavedGoogleAuth(): void {
+  if (desktopMode) deleteSecret(googleTokenFile);
+}
+
 export async function signOutGoogle(sessionId: string): Promise<void> {
   const client: OAuth2Client | undefined = getFromCache(sessionId, "gauth");
   deleteFromCache(sessionId, "gauth");
@@ -74,6 +79,31 @@ export function whatsappDataPath(): string | undefined {
 export function hasSavedWhatsAppSession(): boolean {
   const dir = whatsappDataPath();
   return Boolean(dir && fs.existsSync(path.join(dir, "session")));
+}
+
+function setupFile(): string | undefined {
+  return desktopMode && process.env.SCS_DATA_DIR ? path.join(process.env.SCS_DATA_DIR, "setup-done") : undefined;
+}
+
+/**
+ * The first-run wizard was finished: from then on signing in again and
+ * linking sources happen inside the app. Earlier versions didn't record
+ * it, so a Google project with a source linked counts as set up too.
+ */
+export function setupDone(state: { googleConfigured: boolean; sourceLinked: boolean }): boolean {
+  const file = setupFile();
+  if (!file) return false;
+  if (fs.existsSync(file)) return true;
+  if (!state.googleConfigured || !state.sourceLinked) return false;
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  fs.writeFileSync(file, new Date().toISOString());
+  return true;
+}
+
+/** "Delete all data": the next start is a first run again. */
+export function forgetSetup(): void {
+  const file = setupFile();
+  if (file) fs.rmSync(file, { force: true });
 }
 
 /** Called once at startup in desktop mode. */

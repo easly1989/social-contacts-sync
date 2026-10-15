@@ -87,6 +87,49 @@ test("sign-in waits for the browser, then shows the connected account", async ({
   await expect(page).toHaveURL(/\/setup\/sources$/);
 });
 
+test("an expired Google sign-in asks to sign in again inside the app, never in the wizard", async ({ page }) => {
+  // Google stopped accepting the saved sign-in (7 days in Testing): the server forgot it.
+  Object.assign(backend.status, { googleConfigured: true, googleConnected: false, googleExpired: true, whatsappSaved: true, setupDone: true });
+  await page.goto("/app");
+  await expect(page).toHaveURL(/\/app$/);
+  const card = page.getByTestId("signin-needed");
+  await expect(card).toContainText("Sign in to Google again");
+  await expect(card.getByTestId("signin-expired")).toContainText("Google closed the app's access to your contacts");
+  await expect(card.getByTestId("signin-expired")).toContainText("Publish app");
+  await screenshot(page, "12b-signin-expired");
+
+  // The wizard's pages lead to Settings now.
+  await page.goto("/setup/signin");
+  await expect(page).toHaveURL(/\/app\/settings\/google$/);
+  await page.goto("/setup/sources");
+  await expect(page).toHaveURL(/\/app\/settings\/sources$/);
+  await expect(page.getByRole("status")).toContainText("The app is signed out of Google");
+
+  await page.goto("/app/contacts");
+  await page.getByTestId("signin-needed").getByRole("button", { name: "Sign in with Google" }).click();
+  await expect(page.getByRole("heading", { name: "Contacts" })).toBeVisible();
+  await expect(page.getByTestId("signin-needed")).toHaveCount(0);
+  expect(new URL(backend.requested("/api/google_auth_start")!.url()).searchParams.get("return")).toBe("/app/contacts");
+});
+
+test("a page that finds the sign-in gone asks for it in place", async ({ page }) => {
+  Object.assign(backend.status, { googleConfigured: true, googleConnected: true, whatsappConnected: true, setupDone: true });
+  await page.route("**/api/contacts", (route) => {
+    Object.assign(backend.status, { googleConnected: false, googleExpired: true });
+    return route.fulfill({ status: 401, json: { error: "google_signin_expired" } });
+  });
+  await page.goto("/app/contacts");
+  await expect(page.getByTestId("signin-needed").getByTestId("signin-expired")).toBeVisible();
+  await expect(page).toHaveURL(/\/app\/contacts$/);
+});
+
+test("on the first run an expired sign-in is part of the wizard", async ({ page }) => {
+  Object.assign(backend.status, { googleConfigured: true, googleConnected: false, googleExpired: true });
+  await page.goto("/app");
+  await expect(page).toHaveURL(/\/setup\/signin$/);
+  await expect(page.getByTestId("signin-expired")).toBeVisible();
+});
+
 test("linking WhatsApp finishes the setup", async ({ page }) => {
   backend.status.googleConfigured = true;
   backend.status.googleConnected = true;

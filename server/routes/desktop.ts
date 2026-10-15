@@ -3,12 +3,13 @@ import express, { Request, Response } from "express";
 import fs from "fs";
 
 import { deleteFromCache, getFromCache } from "../src/cache";
-import { rememberSignIns, setRememberSignIns, signOutGoogle, whatsappDataPath } from "../src/desktopSession";
+import { forgetSetup, rememberSignIns, setRememberSignIns, signOutGoogle, whatsappDataPath } from "../src/desktopSession";
 import { askDesktop, desktopMode, saveDesktopConfig } from "../src/desktop";
 import { historyUsage } from "../src/runs";
 import { forgetSavedTelegram, saveTelegram, signOutTelegram } from "../src/telegramSession";
 import { getAccountSummary } from "../src/gapi";
 import { parseGoogleCredentials, verifyGoogleCredentials } from "../src/googleCredentials";
+import { answeredRevoked } from "../src/googleSignIn";
 
 // Routes for the desktop app's setup wizard and Settings (and the account summary).
 const router = express.Router();
@@ -120,6 +121,7 @@ router.post("/desktop/delete_all_data", async (req: Request, res: Response) => {
   await signOutGoogle(req.sessionID);
   await unlinkWhatsApp(req.sessionID);
   await signOutTelegram(req.sessionID);
+  forgetSetup();
   try {
     await askDesktop("delete-data");
   } catch (e) {
@@ -135,6 +137,7 @@ router.get("/google_account", async (req: Request, res: Response) => {
   try {
     res.send(await getAccountSummary(gAuth));
   } catch (e) {
+    if (answeredRevoked(req.sessionID, e, res)) return;
     console.error("Reading the Google account failed:", e);
     res.status(502).send({ error: "google_unavailable" });
   }

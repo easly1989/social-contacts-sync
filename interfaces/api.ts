@@ -96,6 +96,10 @@ export interface RunRecord extends RunSummary {
 export interface SessionStatus {
   whatsappConnected: boolean;
   googleConnected: boolean;
+  /** Desktop: the first-run wizard is behind; sign-ins and links happen inside the app. */
+  setupDone?: boolean;
+  /** Google stopped accepting the saved sign-in (e.g. after 7 days in Testing): sign in again. */
+  googleExpired?: boolean;
   enforcePayments: boolean;
   purchased: boolean;
   /** Running inside the desktop app. */

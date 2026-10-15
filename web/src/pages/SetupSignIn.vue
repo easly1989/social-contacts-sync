@@ -1,9 +1,10 @@
 <script setup lang="ts">
 import { onMounted, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
-import { ArrowLeft, ArrowRight, CircleCheck } from "lucide-vue-next";
+import { ArrowLeft, ArrowRight, CircleCheck, TriangleAlert } from "lucide-vue-next";
 
 import FlowFrame from "../components/FlowFrame.vue";
+import { nextDesktopStep } from "../desktopFlow";
 import { GoogleAccount, SessionStatus } from "../../../interfaces/api";
 
 // Mockup 1.3 in issue #8. In the desktop app Google's page opens in the
@@ -12,10 +13,11 @@ const route = useRoute();
 const router = useRouter();
 const waiting = ref(false);
 const account = ref<GoogleAccount>();
+const status = ref<SessionStatus>();
 
 async function refresh(): Promise<void> {
-  const status: SessionStatus = await fetch("/api/status", { credentials: "include" }).then((r) => r.json());
-  if (!status.googleConnected) return;
+  status.value = await fetch("/api/status", { credentials: "include" }).then((r) => r.json());
+  if (!status.value?.googleConnected) return;
   waiting.value = false;
   account.value = await fetch("/api/google_account", { credentials: "include" })
     .then((r) => (r.ok ? r.json() : {}))
@@ -50,6 +52,13 @@ watch(() => route.query.connected, refresh);
       <h1 class="mt-6 text-2xl font-bold tracking-tight">{{ $t("setup.signin.title") }}</h1>
       <p class="mt-2 text-sm text-base-content/70">{{ $t("setup.signin.lead") }}</p>
 
+      <!-- Google stopped accepting the saved sign-in: say why, and how to stop it happening. -->
+      <div v-if="status?.googleExpired && !account" class="mt-6 rounded-box border border-warning/40 bg-warning/10 p-5 text-left text-sm" role="alert" data-testid="signin-expired">
+        <div class="flex items-center gap-2 font-semibold"><TriangleAlert class="size-4 shrink-0 text-warning" />{{ $t("setup.signin.expiredTitle") }}</div>
+        <p class="mt-1.5 text-base-content/80">{{ $t("setup.signin.expiredText") }}</p>
+        <p class="mt-2 text-xs text-base-content/60">{{ $t("setup.signin.expiredTip") }}</p>
+      </div>
+
       <div v-if="account" class="mt-8 flex items-center gap-4 rounded-box border border-success/30 bg-success/5 p-5 text-left" role="status">
         <img v-if="account.photoUrl" :src="account.photoUrl" alt="" class="size-12 rounded-full" referrerpolicy="no-referrer" />
         <div class="flex-1">
@@ -80,7 +89,8 @@ watch(() => route.query.connected, refresh);
     <template #actions>
       <router-link to="/setup/google" class="btn btn-ghost"><ArrowLeft class="size-4" />{{ $t("common.back") }}</router-link>
       <span class="flex-1"></span>
-      <button type="button" class="btn btn-primary" :disabled="!account" @click="router.push('/setup/sources')">
+      <!-- Signing in again after an expired sign-in: straight back to the app when it's set up. -->
+      <button type="button" class="btn btn-primary" :disabled="!account" @click="router.push(status ? nextDesktopStep(status) : '/setup/sources')">
         {{ $t("common.continue") }}<ArrowRight class="size-4" />
       </button>
     </template>
