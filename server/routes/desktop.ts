@@ -99,6 +99,31 @@ router.post("/desktop/check_updates", async (req: Request, res: Response) => {
   }
 });
 
+// "Update and restart": the app closes, installs the update and opens again (issue #63).
+router.post("/desktop/install_update", async (req: Request, res: Response) => {
+  if (!desktopAction(req, res)) return;
+  try {
+    await askDesktop("install-update");
+    res.send({ ok: true });
+  } catch (e) {
+    console.error("Installing the update failed:", e);
+    res.status(409).send({ error: "no_update_ready" });
+  }
+});
+
+// "Automatic updates": download a new version as soon as it's out (issue #63).
+router.post("/desktop/auto_updates", async (req: Request, res: Response) => {
+  if (!desktopAction(req, res)) return;
+  if (typeof req.body?.enabled !== "boolean") return res.status(400).send({ error: "enabled_required" });
+  try {
+    const info = await askDesktop<object>("set-auto-updates", { enabled: req.body.enabled });
+    res.send({ ...info, rememberSignIns: rememberSignIns(), history: historyUsage() });
+  } catch (e) {
+    console.error("Saving the setting failed:", e);
+    res.status(500).send({ error: "save_failed" });
+  }
+});
+
 router.post("/desktop/remember_sign_ins", async (req: Request, res: Response) => {
   if (!desktopAction(req, res)) return;
   if (typeof req.body?.enabled !== "boolean") return res.status(400).send({ error: "enabled_required" });

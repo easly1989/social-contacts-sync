@@ -75,6 +75,37 @@ test("desktop: checking for updates shows the new version", async ({ page }) => 
   await screenshot(page, "33-settings-updates");
 });
 
+test("desktop: an update's download shows its progress, then installs on request (issue #63)", async ({ page }) => {
+  const url = "https://github.com/easly1989/social-contacts-sync/releases/tag/v1.3.1";
+  Object.assign(backend.desktopInfo, { packageKind: "windows-installer", portable: false, updates: "auto" });
+  backend.desktopInfo.lastUpdate = { status: "downloading", version: "1.3.1", progress: 46, url, checkedAt: new Date().toISOString() };
+  await page.goto("/app/settings/updates");
+  await expect(page.getByTestId("update-status")).toContainText("Downloading version 1.3.1… 46%");
+  await expect(page.getByRole("progressbar", { name: "Download progress" })).toHaveAttribute("value", "46");
+  await expect(page.getByTestId("app-version")).toContainText("1.3.1 · 46%");
+  await expect(page.getByRole("button", { name: "Check for updates" })).toBeDisabled();
+  await screenshot(page, "33b-settings-update-downloading");
+
+  // The download finishes: Settings picks it up by itself.
+  backend.desktopInfo.lastUpdate = { status: "ready", version: "1.3.1", url, checkedAt: new Date().toISOString() };
+  await expect(page.getByTestId("update-status")).toContainText("Version 1.3.1 is ready to install", { timeout: 6000 });
+  await expect(page.getByTestId("app-version")).toContainText("1.3.1 ready");
+  await screenshot(page, "33c-settings-update-ready");
+  await page.getByRole("button", { name: "Update and restart" }).click();
+  await expect.poll(() => backend.desktopActions.map((a) => a.route)).toEqual(["install_update"]);
+});
+
+test("desktop: automatic updates can be turned off (issue #63)", async ({ page }) => {
+  Object.assign(backend.desktopInfo, { packageKind: "windows-installer", portable: false, updates: "auto" });
+  backend.desktopInfo.lastUpdate = { status: "available", version: "1.3.1", checkedAt: new Date().toISOString() };
+  await page.goto("/app/settings/updates");
+  await expect(page.getByText("A new version is downloaded as soon as it's out.")).toBeVisible();
+  await page.getByRole("checkbox", { name: "Automatic updates" }).uncheck();
+  await expect.poll(() => backend.desktopActions[0]).toEqual({ route: "auto_updates", body: { enabled: false } });
+  await expect(page.getByText("A new version is only downloaded when you check for updates.")).toBeVisible();
+  await expect(page.getByTestId("update-status")).toContainText("Check for updates to download it.");
+});
+
 test("desktop: Google account and sources can be signed out and unlinked, and connected again in place", async ({ page }) => {
   await page.goto("/app/settings/sources");
   const whatsapp = page.getByTestId("settings-source-whatsapp");

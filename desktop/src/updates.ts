@@ -15,6 +15,14 @@ export function updateStrategy(platform: NodeJS.Platform, env: NodeJS.ProcessEnv
   return "notify";
 }
 
+/**
+ * "Automatic updates" in Settings (AUTO_UPDATES in config.env), on by
+ * default. Off, an update is only downloaded after "Check for updates".
+ */
+export function autoUpdatesOn(config: Record<string, string>): boolean {
+  return config.AUTO_UPDATES !== "false";
+}
+
 interface Version {
   core: number[];
   pre: string[];

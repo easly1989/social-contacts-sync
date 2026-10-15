@@ -1,12 +1,14 @@
 import fs from "fs";
 import path from "path";
-import { app, BrowserWindow, Menu, nativeTheme, Notification, safeStorage, session, shell, utilityProcess, UtilityProcess } from "electron";
+import { app, BrowserWindow, dialog, Menu, nativeTheme, Notification, safeStorage, session, shell, utilityProcess, UtilityProcess } from "electron";
+import type { AppUpdater } from "electron-updater";
 
 import { resolvePaths } from "./paths";
 import { loadConfig, saveConfig } from "./config";
 import { loadDataKey } from "./dataKey";
 import { downloadBrowser, findInstalledBrowser } from "./browser";
-import { findUpdate, releasesRepo, updateFeed, updateStrategy } from "./updates";
+import { autoUpdatesOn, findUpdate, releasesRepo, updateFeed, updateStrategy } from "./updates";
+import { afterUpdate, closeChoices, takePendingUpdate, UpdateLanguage, updateLanguage, updateText, writePendingUpdate } from "./updateFlow";
 import { deleteLocalData, packageKind, writableValues } from "./localData";
 import { telegramEnv } from "./telegramApp";
 import { forgetSocialSessions, socialLogin, socialLogout, socialScan, socialStatus, socialStop } from "./socialScan";
@@ -26,6 +28,8 @@ if (!app.requestSingleInstanceLock()) app.quit();
 const paths = resolvePaths({ env: process.env, userData: app.getPath("userData") });
 // Portable builds keep Electron's own storage (preferences, cookies) with the data too.
 if (paths.portable) app.setPath("userData", path.join(paths.dataDir, "electron"));
+// The choice made when closing the app to install an update (see updateFlow.ts).
+const pendingUpdateFile = path.join(paths.dataDir, "update-pending.json");
 
 let mainWindow: BrowserWindow | undefined;
 let server: UtilityProcess | undefined;
@@ -119,7 +123,17 @@ async function answer({ id, request, payload = {} }: ServerMessage): Promise<voi
         else await shell.openPath(paths.dataDir);
         return reply();
       case "check-updates":
-        return reply(await checkForUpdates());
+        // Asked for: downloads it even with automatic updates off.
+        return reply(await checkForUpdates(true));
+      case "set-auto-updates":
+        saveConfig(paths.configFile, { AUTO_UPDATES: String(payload.enabled === true) });
+        if (payload.enabled === true) void checkForUpdates();
+        return reply(desktopInfo());
+      case "install-update":
+        // "Update and restart" in Settings.
+        if (lastUpdate?.status !== "ready") return reply(undefined, "No update is ready to install.");
+        reply();
+        return void setTimeout(() => void installUpdate(true).catch((error) => console.warn("Installing the update failed:", error)), 500);
       case "delete-data":
         reply();
         return void deleteDataAndRestart();
@@ -163,6 +177,7 @@ function desktopInfo() {
     configFile: paths.configFile,
     portable: paths.portable,
     updates: updateStrategy(process.platform, process.env, app.isPackaged),
+    autoUpdates: autoUpdatesOn(loadConfig(paths.configFile)),
     lastUpdate,
   };
 }
@@ -222,6 +237,12 @@ async function start(): Promise<void> {
     webPreferences: { contextIsolation: true, sandbox: true, nodeIntegration: false },
   });
   const win = mainWindow;
+  // Closing with an update ready asks what to do with it (issue #63).
+  win.on("close", (event) => {
+    if (quitting || lastUpdate?.status !== "ready") return;
+    event.preventDefault();
+    void askBeforeClosing(win);
+  });
   await showStatus(win, `Starting ${productName}…`);
 
   try {
@@ -244,15 +265,19 @@ async function start(): Promise<void> {
     // /start opens the app once set up, otherwise the welcome page.
     await win.loadURL(`${origin}/start`);
     void checkForUpdates();
+    // A long session still hears of a new version.
+    setInterval(() => void checkForUpdates(), 6 * 60 * 60 * 1000);
   } catch (error) {
     await showStatus(win, `${productName} could not start`, error instanceof Error ? error.message : String(error));
   }
 }
 
 interface UpdateResult {
-  status: "current" | "available" | "ready" | "error" | "disabled";
+  status: "current" | "available" | "downloading" | "ready" | "error" | "disabled";
   version?: string;
   url?: string;
+  /** While downloading, 0–100. */
+  progress?: number;
   checkedAt: string;
 }
 
@@ -263,32 +288,73 @@ function releasePage(version: string): string {
   return `https://github.com/${releasesRepo}/releases/tag/v${version}`;
 }
 
-/** Checks at start-up and from Settings; the result is shown in the app. */
-async function checkForUpdates(): Promise<UpdateResult> {
+/** The language the app is shown in, for the update dialogs. */
+async function uiLanguage(): Promise<UpdateLanguage> {
+  const lang = await mainWindow?.webContents.executeJavaScript("document.documentElement.lang").catch(() => undefined);
+  return updateLanguage(typeof lang === "string" && lang ? lang : app.getLocale());
+}
+
+let watchingDownloads = false;
+
+/** The download's progress, shown in Settings and the sidebar. */
+function watchDownloads(autoUpdater: AppUpdater): void {
+  if (watchingDownloads) return;
+  watchingDownloads = true;
+  autoUpdater.on("download-progress", (progress) => {
+    if (lastUpdate?.status === "downloading") lastUpdate = { ...lastUpdate, progress: Math.floor(progress.percent) };
+  });
+  autoUpdater.on("update-downloaded", (info) => {
+    lastUpdate = { status: "ready", version: info.version, url: releasePage(info.version), checkedAt: new Date().toISOString() };
+    void notifyDownloaded(info.version);
+  });
+  autoUpdater.on("error", (error) => {
+    console.warn("Updating failed:", error);
+    if (lastUpdate?.status === "downloading") lastUpdate = { status: "error", checkedAt: new Date().toISOString() };
+  });
+}
+
+async function notifyDownloaded(version: string): Promise<void> {
+  if (notified || !Notification.isSupported()) return;
+  notified = true;
+  const lang = await uiLanguage();
+  new Notification({ title: updateText(lang, "downloadedTitle", { product: productName, version }), body: updateText(lang, "downloadedBody") }).show();
+}
+
+/**
+ * Checks at start-up, every few hours and from Settings (`asked`); the
+ * result is shown in the app. With automatic updates off, only an asked
+ * check downloads the update.
+ */
+async function checkForUpdates(asked = false): Promise<UpdateResult> {
   const strategy = updateStrategy(process.platform, process.env, app.isPackaged);
   const checkedAt = new Date().toISOString();
   try {
     if (strategy === "auto") {
-      // Downloads in the background and installs when the app quits.
+      // Downloads in the background; installed when the app closes (see askBeforeClosing).
       const { autoUpdater } = await import("electron-updater");
-      if (!autoUpdater.listenerCount("update-downloaded")) {
-        autoUpdater.on("update-downloaded", (info) => {
-          lastUpdate = { status: "ready", version: info.version, url: releasePage(info.version), checkedAt: new Date().toISOString() };
-        });
-      }
-      if (lastUpdate?.status === "ready") return lastUpdate;
+      watchDownloads(autoUpdater);
+      if (lastUpdate?.status === "ready" || lastUpdate?.status === "downloading") return lastUpdate;
       // We pick the release (see updateFeed), electron-updater installs it.
       const update = await findUpdate(app.getVersion());
-      let version: string | undefined;
       if (update) {
         autoUpdater.setFeedURL(updateFeed(update.version));
-        const result = await autoUpdater.checkForUpdatesAndNotify({
-          title: `${productName} {version} is ready`,
-          body: "It will be installed when you close the app.",
-        });
-        version = result?.isUpdateAvailable ? result.updateInfo.version : undefined;
+        autoUpdater.autoDownload = asked || autoUpdatesOn(loadConfig(paths.configFile));
+        const result = await autoUpdater.checkForUpdates();
+        if (result?.isUpdateAvailable) {
+          const version = result.updateInfo.version;
+          // Its failure comes in as the "error" event too (see watchDownloads).
+          result.downloadPromise?.catch(() => undefined);
+          // An earlier download of the same version is ready at once (the
+          // event may have come in during the await).
+          const now = lastUpdate as UpdateResult | undefined;
+          if (now?.status === "ready") return now;
+          lastUpdate = result.downloadPromise
+            ? { status: "downloading", version, progress: 0, url: releasePage(version), checkedAt }
+            : { status: "available", version, url: releasePage(version), checkedAt };
+          return lastUpdate;
+        }
       }
-      lastUpdate = version ? { status: "available", version, url: releasePage(version), checkedAt } : { status: "current", checkedAt };
+      lastUpdate = { status: "current", checkedAt };
     } else if (strategy === "notify") {
       const update = await findUpdate(app.getVersion());
       lastUpdate = update ? { status: "available", ...update, checkedAt } : { status: "current", checkedAt };
@@ -311,6 +377,77 @@ async function checkForUpdates(): Promise<UpdateResult> {
   return lastUpdate;
 }
 
+/**
+ * Closes the app and runs the installer with its own progress window. The
+ * installer opens the app again when it's done; `reopen` says whether that
+ * start goes straight into the app or first asks (see openAfterUpdate).
+ */
+async function installUpdate(reopen: boolean, lang?: UpdateLanguage): Promise<void> {
+  const version = lastUpdate?.status === "ready" ? lastUpdate.version : undefined;
+  if (!version) throw new Error("No update is ready to install.");
+  const { autoUpdater } = await import("electron-updater");
+  writePendingUpdate(pendingUpdateFile, { version, reopen, lang: lang ?? (await uiLanguage()) });
+  quitting = true;
+  autoUpdater.quitAndInstall(false, true);
+}
+
+let askingBeforeClosing = false;
+
+/** Closing with an update ready: update now, close without updating, or stay. */
+async function askBeforeClosing(win: BrowserWindow): Promise<void> {
+  if (askingBeforeClosing || !lastUpdate?.version) return;
+  askingBeforeClosing = true;
+  try {
+    const lang = await uiLanguage();
+    const labels = { update: "updateAndClose", close: "closeWithout", cancel: "cancel" } as const;
+    const { response, checkboxChecked } = await dialog.showMessageBox(win, {
+      type: "info",
+      title: productName,
+      message: updateText(lang, "readyTitle", { version: lastUpdate.version }),
+      detail: updateText(lang, "readyDetail"),
+      buttons: closeChoices.map((choice) => updateText(lang, labels[choice])),
+      defaultId: 0,
+      cancelId: closeChoices.indexOf("cancel"),
+      noLink: true,
+      checkboxLabel: updateText(lang, "reopen"),
+      checkboxChecked: false,
+    });
+    const choice = closeChoices[response];
+    if (choice === "update") {
+      await installUpdate(checkboxChecked, lang);
+    } else if (choice === "close") {
+      // Kept for next time: the downloaded update is offered again then.
+      const { autoUpdater } = await import("electron-updater");
+      autoUpdater.autoInstallOnAppQuit = false;
+      quitting = true;
+      app.quit();
+    }
+  } catch (error) {
+    console.warn("Closing with an update failed:", error);
+    quitting = true;
+    app.quit();
+  } finally {
+    askingBeforeClosing = false;
+  }
+}
+
+/** After an update: straight into the app, or a small window asking first. */
+async function openAfterUpdate(): Promise<boolean> {
+  const pending = takePendingUpdate(pendingUpdateFile);
+  if (!pending || afterUpdate(pending, app.getVersion()) === "open") return true;
+  const { response } = await dialog.showMessageBox({
+    type: "info",
+    title: productName,
+    message: updateText(pending.lang, "installedTitle", { product: productName, version: app.getVersion() }),
+    detail: updateText(pending.lang, "installedDetail"),
+    buttons: [updateText(pending.lang, "open"), updateText(pending.lang, "close")],
+    defaultId: 0,
+    cancelId: 1,
+    noLink: true,
+  });
+  return response === 0;
+}
+
 app.on("second-instance", () => {
   if (!mainWindow) return;
   if (mainWindow.isMinimized()) mainWindow.restore();
@@ -324,7 +461,8 @@ app.on("before-quit", () => {
 
 app.on("window-all-closed", () => app.quit());
 
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
   if (process.platform !== "darwin") Menu.setApplicationMenu(null);
+  if (!(await openAfterUpdate())) return app.quit();
   void start();
 });
