@@ -9,4 +9,6 @@ export interface SimpleContact {
   urls?: string[];
   /** The photo was uploaded by hand on the Contacts page: any real photo replaces it (issue #55). */
   placeholder?: boolean;
+  /** The photo is kept: no sync replaces it, whatever the mode (issue #67). */
+  photoKept?: boolean;
 }

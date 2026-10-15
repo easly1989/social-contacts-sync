@@ -22,14 +22,15 @@ export function photoKey(url: string | undefined | null): string | undefined {
   return url ? url.replace(/[?#].*$/, "").replace(/=[^/=]*$/, "") : undefined;
 }
 
-export function toContact(person: Person, placeholders: Record<string, string> = {}): Contact {
+export function toContact(person: Person, placeholders: Record<string, string> = {}, kept: Set<string> = new Set()): Contact {
   const name = contactEntries(person.names)[0];
   const org = contactEntries(person.organizations)[0];
   const date = contactEntries(person.birthdays).find((b) => b.date?.month && b.date.day)?.date;
   const photoUrl = ownPhotoUrl(person);
   const id = person.resourceName!;
   const updatedAt = person.metadata?.sources?.map((s) => s.updateTime).filter((t): t is string => Boolean(t)).sort().pop();
-  const placeholder = Boolean(photoUrl && placeholders[id] && placeholders[id] === photoKey(photoUrl));
+  const photoKept = Boolean(photoUrl && kept.has(id));
+  const placeholder = !photoKept && Boolean(photoUrl && placeholders[id] && placeholders[id] === photoKey(photoUrl));
   return {
     id,
     name: clean(person.names?.find((n) => n.displayName)?.displayName),
@@ -66,6 +67,7 @@ export function toContact(person: Person, placeholders: Record<string, string> =
     hasPhoto: Boolean(photoUrl),
     photoUrl,
     ...(placeholder ? { placeholder } : {}),
+    ...(photoKept ? { photoKept } : {}),
     updatedAt,
   };
 }

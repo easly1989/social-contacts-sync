@@ -339,11 +339,13 @@ export interface Contact {
   photoUrl?: string;
   /** The photo was uploaded by hand: a sync replaces it when a source has one. */
   placeholder?: boolean;
+  /** The photo is kept: the app never replaces it (issue #67). */
+  photoKept?: boolean;
   updatedAt?: string;
 }
 
 /** What the editor sends for a new or changed contact. */
-export type ContactInput = Omit<Contact, "id" | "name" | "hasPhoto" | "photoUrl" | "placeholder" | "updatedAt">;
+export type ContactInput = Omit<Contact, "id" | "name" | "hasPhoto" | "photoUrl" | "placeholder" | "photoKept" | "updatedAt">;
 
 export interface ContactLabel {
   id: string;
@@ -389,6 +391,7 @@ export interface ProfileSuggestion {
   photoUrl?: string;
   hasPhoto: boolean;
   placeholder?: boolean;
+  photoKept?: boolean;
   detail?: string;
   candidates: ProfileCandidate[];
 }

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref } from "vue";
 import { useI18n } from "vue-i18n";
-import { ArrowRight, Briefcase, Cake, Check, Copy, Link, Mail, MapPin, NotebookPen, Phone, Plus, Tag, Trash2, Upload, UserRound, X } from "lucide-vue-next";
+import { ArrowRight, Briefcase, Cake, Check, Copy, Link, Lock, Mail, MapPin, NotebookPen, Phone, Plus, Tag, Trash2, Upload, UserRound, X } from "lucide-vue-next";
 
 import ContactAvatar from "../ContactAvatar.vue";
 import PhotoZoom from "../PhotoZoom.vue";
@@ -109,7 +109,24 @@ const fileInput = ref<HTMLInputElement>();
 const pendingPhoto = ref<Blob>();
 const pendingPreview = ref<string>();
 const photoUrl = computed(() => pendingPreview.value ?? (pendingLink.value ? `data:image/jpeg;base64,${pendingLink.value.photo}` : current.value?.photoUrl));
-const isPlaceholder = computed(() => Boolean(pendingPhoto.value) || (!pendingLink.value && current.value?.placeholder));
+// "Keep this photo" (issue #67): for a new contact, applied with its photo on Save.
+const keepNew = ref(false);
+const isKept = computed(() => (current.value ? Boolean(current.value.photoKept) : keepNew.value && Boolean(pendingPhoto.value || pendingLink.value)));
+const isPlaceholder = computed(() => !isKept.value && (Boolean(pendingPhoto.value) || (!pendingLink.value && current.value?.placeholder)));
+
+async function setKept(kept: boolean): Promise<void> {
+  if (!current.value) {
+    keepNew.value = kept;
+    return;
+  }
+  busy.value = "photo";
+  try {
+    updated(await api.keepPhoto(current.value.id, kept));
+  } catch (e) {
+    error.value = withGoogleDetail(t("contacts.errors.photo"), e);
+  }
+  busy.value = undefined;
+}
 
 async function choosePhoto(event: Event): Promise<void> {
   const file = (event.target as HTMLInputElement).files?.[0];
@@ -132,7 +149,7 @@ async function choosePhoto(event: Event): Promise<void> {
   }
   busy.value = "photo";
   try {
-    updated(await api.uploadPhoto(current.value.id, photo));
+    updated(await api.uploadPhoto(current.value.id, photo, Boolean(current.value.photoKept)));
   } catch (e) {
     error.value = withGoogleDetail(t("contacts.errors.photo"), e);
   }
@@ -211,8 +228,11 @@ async function save(): Promise<void> {
     if (current.value) contact = await api.saveContact(current.value.id, form.value, current.value.updatedAt);
     else {
       contact = await api.createContact(form.value);
-      if (pendingPhoto.value) contact = await api.uploadPhoto(contact.id, pendingPhoto.value);
-      else if (pendingLink.value) contact = await api.photoFromLink(contact.id, pendingLink.value.token);
+      if (pendingPhoto.value) contact = await api.uploadPhoto(contact.id, pendingPhoto.value, keepNew.value);
+      else if (pendingLink.value) {
+        contact = await api.photoFromLink(contact.id, pendingLink.value.token);
+        if (keepNew.value) contact = await api.keepPhoto(contact.id, true);
+      }
     }
     emit("saved", contact);
     saved.value = JSON.stringify(form.value);
@@ -298,7 +318,8 @@ onBeforeUnmount(() => {
         <div class="flex items-center gap-4">
           <div class="relative">
             <ContactAvatar :name="displayName({ ...form, name: current?.name })" :photo-url="photoUrl" size="size-20" />
-            <span v-if="photoUrl && isPlaceholder" class="badge badge-warning badge-soft badge-xs absolute -bottom-1 left-1/2 -translate-x-1/2">{{ $t("contacts.placeholder") }}</span>
+            <span v-if="photoUrl && isKept" class="badge badge-info badge-soft badge-xs absolute -bottom-1 left-1/2 -translate-x-1/2 gap-1" data-testid="kept-badge"><Lock class="size-3" />{{ $t("contacts.kept") }}</span>
+            <span v-else-if="photoUrl && isPlaceholder" class="badge badge-warning badge-soft badge-xs absolute -bottom-1 left-1/2 -translate-x-1/2">{{ $t("contacts.placeholder") }}</span>
           </div>
           <div class="min-w-0 flex-1 space-y-2">
             <div class="flex flex-wrap gap-2">
@@ -308,7 +329,14 @@ onBeforeUnmount(() => {
               <button v-if="photoUrl" type="button" class="btn btn-ghost btn-sm" :disabled="Boolean(busy)" @click="removePhoto"><Trash2 class="size-4" />{{ $t("contacts.removePhoto") }}</button>
               <input ref="fileInput" type="file" accept="image/*" class="hidden" :aria-label="$t('contacts.uploadPhoto')" data-testid="photo-input" @change="choosePhoto" />
             </div>
-            <p class="text-xs text-base-content/60">{{ $t("contacts.placeholderHint") }}</p>
+            <label v-if="photoUrl" class="flex cursor-pointer items-start gap-3 rounded-xl border p-3" :class="isKept ? 'border-info/40 bg-info/5' : 'border-base-300'">
+              <input type="checkbox" class="toggle toggle-info toggle-sm mt-0.5" :checked="isKept" :disabled="Boolean(busy)" @change="setKept(($event.target as HTMLInputElement).checked)" />
+              <span class="flex-1">
+                <span class="block text-sm font-medium">{{ $t("contacts.keepPhoto") }}</span>
+                <span class="mt-0.5 block text-xs text-base-content/60">{{ $t("contacts.keepPhotoHint") }}</span>
+              </span>
+            </label>
+            <p v-if="!isKept" class="text-xs text-base-content/60">{{ $t("contacts.placeholderHint") }}</p>
           </div>
         </div>
 

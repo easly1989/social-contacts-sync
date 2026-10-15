@@ -1,13 +1,13 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
 import { useI18n } from "vue-i18n";
-import { ExternalLink, Link } from "lucide-vue-next";
+import { ExternalLink, Link, Lock } from "lucide-vue-next";
 
 import ContactAvatar from "../ContactAvatar.vue";
 import NetworkMark from "./NetworkMark.vue";
 import ProfilePhoto from "./ProfilePhoto.vue";
 import { api, withGoogleDetail } from "../../api";
-import { linkRequest, ProfilePick, toggle } from "../../profilePick";
+import { linkRequest, ProfilePick, toggle, wantsPhotoFor } from "../../profilePick";
 import { notify, notifyError } from "../../toasts";
 import { ProfileCandidate, ProfileSuggestion } from "../../../../interfaces/api";
 
@@ -18,7 +18,7 @@ const emit = defineEmits<{ "update:pick": [pick: ProfilePick]; "update:selected"
 const { t } = useI18n();
 
 const busy = ref(false);
-const wantsPhoto = computed(() => !props.suggestion.hasPhoto || Boolean(props.suggestion.placeholder));
+const wantsPhoto = computed(() => wantsPhotoFor(props.suggestion));
 const ticked = (c: ProfileCandidate) => props.pick.ticked.includes(c.person.id);
 const why = (c: ProfileCandidate) =>
   [c.person.relation ? t(`profiles.relation.${c.person.relation}`) : t(`profiles.from.${c.person.source}`), t(`profiles.reason.${c.reason}`), c.person.detail].filter(Boolean).join(" · ");
@@ -68,7 +68,9 @@ defineExpose({ act, tickAt: (i: number) => props.suggestion.candidates[i] && tic
       />
       <ContactAvatar :name="suggestion.name" :photo-url="suggestion.photoUrl" :size="large ? 'size-16' : 'size-10'" />
       <div class="min-w-[10rem] flex-1">
-        <component :is="large ? 'h2' : 'h3'" class="font-semibold" :class="large ? 'text-xl font-bold' : ''">{{ suggestion.name || $t("cleanup.noName") }}</component>
+        <component :is="large ? 'h2' : 'h3'" class="flex flex-wrap items-center gap-2 font-semibold" :class="large ? 'text-xl font-bold' : ''"
+          >{{ suggestion.name || $t("cleanup.noName") }}<span v-if="suggestion.photoKept" class="badge badge-info badge-soft badge-xs gap-1 font-normal"><Lock class="size-3" />{{ $t("contacts.kept") }}</span></component
+        >
         <p class="text-xs text-base-content/60">
           {{ [suggestion.detail, suggestion.placeholder ? $t("contacts.placeholder") : suggestion.hasPhoto ? $t("profiles.hasPhoto") : $t("contacts.noPhoto")].filter(Boolean).join(" · ") }}
         </p>
@@ -94,11 +96,12 @@ defineExpose({ act, tickAt: (i: number) => props.suggestion.candidates[i] && tic
           </div>
           <a :href="c.person.url" target="_blank" rel="noopener" class="btn btn-ghost btn-xs btn-square" :aria-label="$t('profiles.open')" @click.stop><ExternalLink class="size-3.5" /></a>
         </label>
-        <label v-if="ticked(c) && c.person.photoUrl" class="ml-8 mt-2 flex cursor-pointer items-center gap-2 text-xs" :class="pick.photoFrom === c.person.id ? 'font-medium text-primary' : 'text-base-content/60'">
+        <label v-if="ticked(c) && c.person.photoUrl && !suggestion.photoKept" class="ml-8 mt-2 flex cursor-pointer items-center gap-2 text-xs" :class="pick.photoFrom === c.person.id ? 'font-medium text-primary' : 'text-base-content/60'">
           <input type="checkbox" class="checkbox checkbox-primary checkbox-xs rounded-full" :checked="pick.photoFrom === c.person.id" :disabled="disabled" @change="usePhoto(c)" />{{ $t("profiles.useThisPhoto") }}
         </label>
       </div>
     </div>
-    <p v-if="suggestion.hasPhoto && !suggestion.placeholder" class="mt-2 text-xs text-base-content/50" :class="{ 'sm:pl-8': selectable }">{{ $t("profiles.keepsPhoto") }}</p>
+    <p v-if="suggestion.photoKept" class="mt-2 flex items-center gap-1.5 text-xs text-base-content/60" :class="{ 'sm:pl-8': selectable }"><Lock class="size-3.5" />{{ $t("profiles.photoKept") }}</p>
+    <p v-else-if="suggestion.hasPhoto && !suggestion.placeholder" class="mt-2 text-xs text-base-content/50" :class="{ 'sm:pl-8': selectable }">{{ $t("profiles.keepsPhoto") }}</p>
   </section>
 </template>

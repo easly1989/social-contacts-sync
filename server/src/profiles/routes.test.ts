@@ -6,6 +6,7 @@ import { AddressInfo } from "net";
 import { ProfileScanState, SocialPerson } from "../../../interfaces/api";
 import { profilesRouter, ScanNetwork } from "../../routes/profiles";
 import { setInCache } from "../cache";
+import { setKeptPhoto } from "../contacts/keptPhotos";
 import { FakeContacts } from "../cleanup/fakeContacts";
 import { Person } from "../cleanup/people";
 
@@ -146,4 +147,16 @@ test("several profiles per contact, in bulk, and photos through the server (issu
   assert.equal(Buffer.from(await photo.arrayBuffer()).length, jpeg.length);
   assert.equal((await call("GET", "/profiles/photo?id=linkedin:davidegallo")).status, 404);
   assert.equal((await call("GET", "/profiles/photo?id=nobody")).status, 404);
+});
+
+test("a kept photo is never replaced from Find profiles; the links are added (issue #67)", async (t) => {
+  const { google, call } = await start(t, "profiles-67");
+  await call("POST", "/profiles/scan/start", { network: "instagram", acceptRisk: true });
+  setKeptPhoto("profiles-67", "people/ec", true);
+  const overview = (await call("GET", "/profiles")).json;
+  assert.equal(overview.suggestions.find((s: any) => s.contactId === "people/ec").photoKept, true);
+  const linked = await call("POST", "/profiles/link", { contactId: "people/ec", personIds: ["instagram:elena_conti"], photoFrom: "instagram:elena_conti" });
+  assert.equal(linked.json.photoSet, false);
+  assert.equal(google.photos.get("people/ec"), "T0xE");
+  assert.deepEqual(google.people.get("people/ec")!.urls, [{ value: "https://instagram.com/elena_conti", type: "profile" }]);
 });

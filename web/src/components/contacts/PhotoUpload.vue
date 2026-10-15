@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from "vue";
 import { useI18n } from "vue-i18n";
-import { CircleCheck, CloudUpload, FolderOpen, Upload, X } from "lucide-vue-next";
+import { CircleCheck, CloudUpload, FolderOpen, Upload, X, Lock } from "lucide-vue-next";
 
 import { api, withGoogleDetail } from "../../api";
 import PhotoZoom from "../PhotoZoom.vue";
@@ -26,6 +26,8 @@ interface Row {
 }
 const rows = ref<Row[]>([]);
 const skipReal = ref(true);
+// Placeholders, or photos the app keeps (issue #67).
+const uploadAs = ref<"placeholder" | "kept">("placeholder");
 const running = ref(false);
 const dragging = ref(false);
 const fileInput = ref<HTMLInputElement>();
@@ -66,7 +68,7 @@ async function upload(): Promise<void> {
   for (const row of toUpload.value) {
     row.state = "uploading";
     try {
-      const contact = await api.uploadPhoto(row.contactId, await shrinkImage(row.file));
+      const contact = await api.uploadPhoto(row.contactId, await shrinkImage(row.file), uploadAs.value === "kept");
       row.state = "done";
       emit("uploaded", contact);
     } catch (e) {
@@ -152,6 +154,16 @@ onBeforeUnmount(() => {
         </table>
       </div>
 
+      <div class="mt-4 text-xs font-semibold uppercase tracking-wide text-base-content/50">{{ $t("contacts.upload.as") }}</div>
+      <div class="mt-2 grid gap-3 sm:grid-cols-2" role="radiogroup" :aria-label="$t('contacts.upload.as')">
+        <label v-for="kind in ['placeholder', 'kept'] as const" :key="kind" class="flex cursor-pointer gap-3 rounded-xl border-2 p-3" :class="uploadAs === kind ? 'border-primary bg-primary/5' : 'border-base-300'">
+          <input v-model="uploadAs" type="radio" class="radio radio-primary radio-sm mt-0.5" :value="kind" :disabled="running" />
+          <span>
+            <span class="flex items-center gap-2 text-sm font-medium"><Lock v-if="kind === 'kept'" class="size-3.5 text-info" />{{ $t(`contacts.upload.asKind.${kind}`) }}</span>
+            <span class="mt-0.5 block text-xs text-base-content/60">{{ $t(`contacts.upload.asHint.${kind}`) }}</span>
+          </span>
+        </label>
+      </div>
       <label class="mt-3 flex items-center gap-2 text-sm">
         <input v-model="skipReal" type="checkbox" class="checkbox checkbox-primary checkbox-xs" :disabled="running" />{{ $t("contacts.upload.skipReal") }}
       </label>

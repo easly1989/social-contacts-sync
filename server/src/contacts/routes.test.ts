@@ -12,6 +12,7 @@ import { Person } from "../cleanup/people";
 import { saveLookup } from "../linkLookups";
 import { parseProfileLink } from "../sources/links";
 import { getPlaceholders } from "./placeholders";
+import { getKeptPhotos } from "./keptPhotos";
 import { runSync } from "../syncEngine";
 import { withPlaceholders } from "../sync";
 
@@ -109,6 +110,40 @@ test("placeholder photos: uploaded by hand, then replaced by the next sync, even
   // Removing a photo.
   const removed = await call("DELETE", "/contacts/c/photo");
   assert.equal(removed.json.hasPhoto, false);
+});
+
+test("kept photos: never replaced by a sync in any mode, and links still work (issue #67)", async (t) => {
+  const { google, call } = await start(t, "contacts-67");
+  // Uploaded as kept; and Elena's own Google photo kept from the list.
+  const uploaded = await call("PUT", "/contacts/a/photo?as=kept", Buffer.alloc(2048, 1), "image/jpeg");
+  assert.equal(uploaded.json.photoKept, true);
+  assert.equal(uploaded.json.placeholder, undefined);
+  assert.deepEqual(await call("PUT", "/contacts/b/keep_photo", { kept: true }), { status: 409, json: { error: "no_photo" } });
+  assert.equal((await call("PUT", "/contacts/c/keep_photo", { kept: true })).json.photoKept, true);
+  assert.deepEqual([...getKeptPhotos("contacts-67")].sort(), ["people/a", "people/c"]);
+
+  const contacts = withPlaceholders(
+    (await google.list()).map((p) => ({ id: p.resourceName!, name: p.names?.[0]?.displayName ?? undefined, numbers: [], hasPhoto: google.photos.has(p.resourceName!), photoUrl: p.photos?.[0]?.url ?? undefined })),
+    getPlaceholders("contacts-67"),
+    getKeptPhotos("contacts-67")
+  );
+  for (const mode of ["fill", "replace"] as const) {
+    const { run } = await runSync(
+      { listContacts: async () => contacts, currentPhoto: async (c) => google.photos.get(c.id) ?? null, setPhoto: (id, photo) => google.setPhoto(id, photo) },
+      [{ id: "whatsapp", find: async () => ({ photo: "V0E=", source: "whatsapp", matchedBy: "+39" }) }],
+      mode,
+      { progress: () => {}, cancelled: () => false },
+      { shuffle: false }
+    );
+    assert.deepEqual(run.results.map((r) => [r.contactId, r.outcome]), [["people/a", "alreadyHadPhoto"], ["people/b", "added"], ["people/c", "alreadyHadPhoto"]], mode);
+  }
+  assert.equal(google.photos.get("people/a"), Buffer.alloc(2048, 1).toString("base64"));
+  assert.equal(google.photos.get("people/c"), "UkVBTA==");
+
+  // Allowed again; and removing the photo forgets it.
+  assert.equal((await call("PUT", "/contacts/c/keep_photo", { kept: false })).json.photoKept, undefined);
+  await call("DELETE", "/contacts/a/photo");
+  assert.deepEqual([...getKeptPhotos("contacts-67")], []);
 });
 
 test("a photo from a profile link is a real photo and saves the link", async (t) => {

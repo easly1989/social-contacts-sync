@@ -88,7 +88,9 @@ export const api = {
   deleteContacts: (contactIds: string[]) => post<{ actionId: string; deleted: string[] }>("/api/contacts/delete", { contactIds }),
   mergeContacts: (contactIds: string[], request: Omit<MergeRequest, "groupId">, updatedAt: Record<string, string | undefined>) =>
     post<{ actionId: string; contact: Contact; deleted: string[] }>("/api/contacts/merge", { contactIds, request, updatedAt }),
-  uploadPhoto: (id: string, photo: Blob) => send<Contact>("PUT", `${contactPath(id)}/photo`, photo, photo.type || "image/jpeg"),
+  /** `kept`: a photo the app never replaces (issue #67); otherwise a placeholder. */
+  uploadPhoto: (id: string, photo: Blob, kept = false) => send<Contact>("PUT", `${contactPath(id)}/photo${kept ? "?as=kept" : ""}`, photo, photo.type || "image/jpeg"),
+  keepPhoto: (id: string, kept: boolean) => send<Contact>("PUT", `${contactPath(id)}/keep_photo`, JSON.stringify({ kept })),
   removePhoto: (id: string) => send<Contact>("DELETE", `${contactPath(id)}/photo`),
   photoFromLink: (id: string, token: string) => post<Contact>(`${contactPath(id)}/photo_from_link`, { token }),
   createLabel: (name: string) => post<ContactLabel>("/api/contacts/labels", { name }),
