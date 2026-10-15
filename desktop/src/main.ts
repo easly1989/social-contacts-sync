@@ -9,6 +9,8 @@ import { downloadBrowser, findInstalledBrowser } from "./browser";
 import { findUpdate, releasesRepo, updateFeed, updateStrategy } from "./updates";
 import { deleteLocalData, packageKind, writableValues } from "./localData";
 import { telegramEnv } from "./telegramApp";
+import { forgetSocialSessions, socialLogin, socialLogout, socialScan, socialStatus, socialStop } from "./socialScan";
+import { ScanNetwork } from "./socialParse";
 
 const productName = "Social Contacts Sync";
 
@@ -121,6 +123,19 @@ async function answer({ id, request, payload = {} }: ServerMessage): Promise<voi
       case "delete-data":
         reply();
         return void deleteDataAndRestart();
+      // Find profiles' login scan (issue #61).
+      case "social-status":
+        return reply(await socialStatus());
+      case "social-login":
+        return reply(await socialLogin(scanNetwork(payload.network), mainWindow));
+      case "social-logout":
+        await socialLogout(scanNetwork(payload.network));
+        return reply();
+      case "social-scan":
+        return reply(await socialScan(scanNetwork(payload.network)));
+      case "social-stop":
+        socialStop(scanNetwork(payload.network));
+        return reply();
       case "focus":
         // After signing in from the system browser: back to the app.
         if (mainWindow?.isMinimized()) mainWindow.restore();
@@ -133,6 +148,11 @@ async function answer({ id, request, payload = {} }: ServerMessage): Promise<voi
   } catch (error) {
     reply(undefined, error instanceof Error ? error.message : String(error));
   }
+}
+
+function scanNetwork(value: unknown): ScanNetwork {
+  if (value === "instagram" || value === "facebook" || value === "linkedin") return value;
+  throw new Error(`Unknown network: ${String(value)}`);
 }
 
 function desktopInfo() {
@@ -157,6 +177,7 @@ async function deleteDataAndRestart(): Promise<void> {
   serverLog?.end();
   await new Promise((resolve) => setTimeout(resolve, 1000));
   await session.defaultSession.clearStorageData().catch(() => undefined);
+  await forgetSocialSessions().catch(() => undefined);
   const skipped = deleteLocalData(paths);
   if (skipped.length) console.warn("Could not delete:", skipped);
   // The portable .exe and the AppImage run from a temporary copy that goes

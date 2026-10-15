@@ -351,3 +351,87 @@ export interface ContactsList {
   contacts: Contact[];
   labels: ContactLabel[];
 }
+
+/* Find profiles (issue #61). */
+
+export type SocialNetwork = "instagram" | "linkedin" | "facebook" | "bluesky" | "mastodon" | "github";
+
+/** Someone found on a social network: a profile that may belong to one of the contacts. */
+export interface SocialPerson {
+  /** `network:handle`, stable across imports and scans. */
+  id: string;
+  network: SocialNetwork;
+  url: string;
+  handle?: string;
+  name?: string;
+  photoUrl?: string;
+  /** Where it came from: the user's data export, a public search, or a scan with their login. */
+  source: "export" | "search" | "scan";
+  relation?: "follower" | "following" | "friend" | "connection";
+  /** E.g. the company of a LinkedIn connection. */
+  detail?: string;
+}
+
+export interface ProfileCandidate {
+  person: SocialPerson;
+  /** 0–1: how well the name matches. */
+  score: number;
+  reason: "sameName" | "similarName" | "handleMatchesName";
+}
+
+export interface ProfileSuggestion {
+  contactId: string;
+  name: string;
+  photoUrl?: string;
+  hasPhoto: boolean;
+  placeholder?: boolean;
+  detail?: string;
+  candidates: ProfileCandidate[];
+}
+
+export interface ProfileLinked {
+  contactId: string;
+  name: string;
+  person: SocialPerson;
+  at: string;
+  photoSet: boolean;
+  undone?: boolean;
+}
+
+export interface ProfileSourceState {
+  network: SocialNetwork;
+  /** People known from this network, by source. */
+  people: number;
+  imported?: string;
+  scanned?: string;
+}
+
+export interface ProfileSearchState {
+  running: boolean;
+  networks: SocialNetwork[];
+  checked: number;
+  total: number;
+  found: Partial<Record<SocialNetwork, number>>;
+  error?: string;
+}
+
+export interface ProfileScanState {
+  network: SocialNetwork;
+  loggedIn: boolean;
+  account?: string;
+  running?: boolean;
+  read?: number;
+  /** Why the last scan stopped early (a block, a sign-in page…). */
+  stopped?: string;
+  finishedAt?: string;
+}
+
+/** GET /api/profiles */
+export interface ProfilesOverview {
+  sources: ProfileSourceState[];
+  search: ProfileSearchState;
+  /** Desktop only: the login scan. */
+  scans?: ProfileScanState[];
+  suggestions: ProfileSuggestion[];
+  linked: ProfileLinked[];
+}

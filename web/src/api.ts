@@ -1,4 +1,4 @@
-import { Contact, ContactInput, ContactLabel, ContactsList, ContactResult, LinkLookup, SyncCounters, TelegramState, CleanupActionSummary, CleanupScan, CleanupSummary, DesktopInfo, DuplicateGroup, GoogleAccount, MergeRequest, GoogleStats, RunRecord, RunSummary, SessionStatus, UpdateCheck } from "../../interfaces/api";
+import { ProfileLinked, ProfileScanState, ProfileSearchState, ProfilesOverview, SocialNetwork, Contact, ContactInput, ContactLabel, ContactsList, ContactResult, LinkLookup, SyncCounters, TelegramState, CleanupActionSummary, CleanupScan, CleanupSummary, DesktopInfo, DuplicateGroup, GoogleAccount, MergeRequest, GoogleStats, RunRecord, RunSummary, SessionStatus, UpdateCheck } from "../../interfaces/api";
 
 // Small typed wrappers around the server API.
 
@@ -91,6 +91,18 @@ export const api = {
   photoFromLink: (id: string, token: string) => post<Contact>(`${contactPath(id)}/photo_from_link`, { token }),
   createLabel: (name: string) => post<ContactLabel>("/api/contacts/labels", { name }),
   applyLabel: (contactIds: string[], label: string, add: boolean) => post<{ contacts: Contact[] }>("/api/contacts/labels/apply", { contactIds, label, add }),
+  // Find profiles (issue #61).
+  profiles: () => get<ProfilesOverview>("/api/profiles"),
+  importProfiles: async (network: "instagram" | "linkedin", file: File) =>
+    send<{ read: number; added: number }>("POST", `/api/profiles/import?network=${network}&file=${encodeURIComponent(file.name)}`, await file.text(), "text/plain"),
+  searchProfiles: (networks: SocialNetwork[]) => post<ProfileSearchState>("/api/profiles/search", { networks }),
+  stopProfileSearch: () => post<ProfileSearchState>("/api/profiles/search/stop"),
+  linkProfile: (contactId: string, personId: string, usePhoto: boolean) => post<{ linked: ProfileLinked; photoWanted: boolean }>("/api/profiles/link", { contactId, personId, usePhoto }),
+  undoProfile: (contactId: string, personId: string) => post("/api/profiles/undo", { contactId, personId }),
+  rejectProfiles: (contactId: string, personIds: string[]) => post("/api/profiles/reject", { contactId, personIds }),
+  skipProfiles: (contactId: string) => post("/api/profiles/skip", { contactId }),
+  profileScan: (action: "login" | "logout" | "start" | "stop", network: SocialNetwork, acceptRisk = false) =>
+    post<ProfileScanState | { ok: true }>(`/api/profiles/scan/${action}`, { network, ...(acceptRisk ? { acceptRisk } : {}) }),
   // Telegram sign-in (issue #36).
   telegram: () => get<TelegramState>("/api/telegram"),
   telegramSendCode: (phone: string) => post<TelegramState>("/api/telegram/send_code", { phone }),

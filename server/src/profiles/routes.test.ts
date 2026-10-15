@@ -1,0 +1,111 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import express from "express";
+import { AddressInfo } from "net";
+
+import { ProfileScanState, SocialPerson } from "../../../interfaces/api";
+import { profilesRouter, ScanNetwork } from "../../routes/profiles";
+import { setInCache } from "../cache";
+import { FakeContacts } from "../cleanup/fakeContacts";
+import { Person } from "../cleanup/people";
+
+// Find profiles (issue #61) against the fake address book, a fake web and a fake desktop app.
+const people: Person[] = [
+  { resourceName: "people/dg", names: [{ displayName: "Davide Gallo", givenName: "Davide", familyName: "Gallo" }], phoneNumbers: [{ value: "+39 338 555 0412" }] },
+  { resourceName: "people/ec", names: [{ displayName: "Elena Conti", givenName: "Elena", familyName: "Conti" }] },
+  { resourceName: "people/m", names: [{ displayName: "Mamma", givenName: "Mamma" }] },
+];
+const jpeg = Buffer.alloc(2048, 9);
+
+async function start(t: { after(fn: () => void): void }, sessionId: string) {
+  delete process.env.SCS_DESKTOP; // in memory
+  const google = new FakeContacts(people, { "people/ec": "T0xE" });
+  const scanned: SocialPerson[] = [{ id: "instagram:elena_conti", network: "instagram", url: "https://instagram.com/elena_conti", handle: "elena_conti", name: "Elena Conti", photoUrl: "https://scontent.cdninstagram.com/e.jpg", source: "scan", relation: "follower" }];
+  const desktopCalls: string[] = [];
+  const desktop = {
+    status: async (): Promise<ProfileScanState[]> => [{ network: "instagram", loggedIn: true, account: "easly1989" }],
+    login: async (network: ScanNetwork) => (desktopCalls.push(`login ${network}`), { network, loggedIn: true }),
+    logout: async (network: ScanNetwork) => void desktopCalls.push(`logout ${network}`),
+    scan: async (network: ScanNetwork) => (desktopCalls.push(`scan ${network}`), { people: scanned }),
+    stop: async (network: ScanNetwork) => void desktopCalls.push(`stop ${network}`),
+  };
+  const fetchImpl = (async (url: string) => {
+    if (url.includes("cdninstagram")) return new Response(new Uint8Array(jpeg), { headers: { "content-type": "image/jpeg" } });
+    if (url.includes("bsky")) return new Response(JSON.stringify({ actors: [{ handle: "dgallo.bsky.social", displayName: "Davide Gallo" }] }), { headers: { "content-type": "application/json" } });
+    return new Response("{}", { status: 404 });
+  }) as typeof fetch;
+  const app = express();
+  app.use(express.json());
+  app.use((req, _res, next) => {
+    (req as unknown as { sessionID: string }).sessionID = sessionId;
+    next();
+  });
+  app.use("/api", profilesRouter({ contactsApi: () => google, desktop, fetchImpl, sleep: async () => {} }));
+  setInCache(sessionId, "gauth", {});
+  const server = app.listen(0, "127.0.0.1");
+  await new Promise((resolve) => server.once("listening", resolve));
+  t.after(() => server.close());
+  const base = `http://127.0.0.1:${(server.address() as AddressInfo).port}/api`;
+  const call = async (method: string, route: string, body?: unknown, type = "application/json") => {
+    const response = await fetch(`${base}${route}`, { method, headers: body === undefined ? {} : { "Content-Type": type }, body: typeof body === "string" ? body : body === undefined ? undefined : JSON.stringify(body) });
+    return { status: response.status, json: (await response.json()) as any };
+  };
+  return { google, call, desktopCalls };
+}
+
+test("import, search and scan feed one review queue; link with photo, then undo", async (t) => {
+  const { google, call, desktopCalls } = await start(t, "profiles-1");
+  const csv = "First Name,Last Name,URL,Email Address,Company,Position,Connected On\nDavide,Gallo,https://www.linkedin.com/in/davidegallo,,Gallo Ceramiche,Owner,01 Oct 2026";
+  assert.deepEqual(await call("POST", "/profiles/import?network=linkedin", csv, "text/plain"), { status: 200, json: { read: 1, added: 1 } });
+  assert.deepEqual(await call("POST", "/profiles/import?network=facebook", csv, "text/plain"), { status: 400, json: { error: "unsupported_network" } });
+  assert.deepEqual(await call("POST", "/profiles/import?network=linkedin", "nope", "text/plain"), { status: 400, json: { error: "unreadable_file" } });
+
+  // Public search, in the background.
+  assert.equal((await call("POST", "/profiles/search", { networks: ["bluesky"] })).status, 200);
+  await new Promise((resolve) => setTimeout(resolve, 50));
+  let overview = (await call("GET", "/profiles")).json;
+  assert.equal(overview.search.running, false);
+  assert.deepEqual(overview.search.found, { bluesky: 1 });
+
+  // The login scan: only once the risk is accepted.
+  assert.deepEqual(await call("POST", "/profiles/scan/start", { network: "instagram" }), { status: 400, json: { error: "risk_not_accepted" } });
+  assert.equal((await call("POST", "/profiles/scan/start", { network: "instagram", acceptRisk: true })).status, 200);
+  await new Promise((resolve) => setTimeout(resolve, 50));
+  assert.deepEqual(desktopCalls, ["scan instagram"]);
+
+  overview = (await call("GET", "/profiles")).json;
+  assert.deepEqual(overview.scans[0].account, "easly1989");
+  assert.equal(overview.scans[0].read, 1);
+  // Elena has a real photo, so Davide (none) comes first; Mamma has one word and no suggestions.
+  assert.deepEqual(
+    overview.suggestions.map((s: any) => [s.name, s.candidates.map((c: any) => `${c.person.id}:${c.reason}`)]),
+    [
+      ["Davide Gallo", ["bluesky:dgallo.bsky.social:sameName", "linkedin:davidegallo:sameName"]],
+      ["Elena Conti", ["instagram:elena_conti:sameName"]],
+    ]
+  );
+  assert.equal(overview.sources.find((s: any) => s.network === "linkedin").people, 1);
+
+  // Link Elena's Instagram with its photo; her old photo is kept for undo.
+  const linked = await call("POST", "/profiles/link", { contactId: "people/ec", personId: "instagram:elena_conti", usePhoto: true });
+  assert.equal(linked.status, 200);
+  assert.equal(linked.json.linked.photoSet, true);
+  assert.deepEqual(google.people.get("people/ec")!.urls, [{ value: "https://instagram.com/elena_conti", type: "profile" }]);
+  assert.equal(google.photos.get("people/ec"), jpeg.toString("base64"));
+  overview = (await call("GET", "/profiles")).json;
+  assert.deepEqual(overview.suggestions.map((s: any) => s.name), ["Davide Gallo"]);
+  assert.equal(overview.linked[0].person.id, "instagram:elena_conti");
+
+  assert.deepEqual(await call("POST", "/profiles/undo", { contactId: "people/ec", personId: "instagram:elena_conti" }), { status: 200, json: { ok: true } });
+  assert.deepEqual(google.people.get("people/ec")!.urls, []);
+  assert.equal(google.photos.get("people/ec"), "T0xE");
+
+  // "None of these" and "Skip".
+  await call("POST", "/profiles/reject", { contactId: "people/dg", personIds: ["bluesky:dgallo.bsky.social"] });
+  await call("POST", "/profiles/skip", { contactId: "people/dg" });
+  overview = (await call("GET", "/profiles")).json;
+  assert.deepEqual(
+    overview.suggestions.map((s: any) => [s.name, s.candidates.length]),
+    [["Elena Conti", 1], ["Davide Gallo", 1]]
+  );
+});

@@ -135,7 +135,7 @@ export function isPublicHost(hostname: string): boolean {
   return !/\.(local|localhost|internal|lan|home|arpa)$/.test(host);
 }
 
-async function get(fetchImpl: Fetch, url: string, network: Network): Promise<Response> {
+export async function get(fetchImpl: Fetch, url: string, network: Network): Promise<Response> {
   const target = new URL(url);
   if (target.protocol !== "https:" || !isPublicHost(target.hostname)) throw new Error(`Not a public https address: ${target.hostname}`);
   const response = await fetchImpl(url, {

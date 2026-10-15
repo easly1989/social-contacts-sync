@@ -1,4 +1,4 @@
-import { CleanupContact, CleanupScan, Contact, ContactLabel, RunRecord } from "../../interfaces/api";
+import { CleanupContact, CleanupScan, Contact, ContactLabel, ProfilesOverview, RunRecord, SocialPerson } from "../../interfaces/api";
 
 const names = [
   "Giulia Bianchi", "Marco Rossi", "Sofia Esposito", "Luca Romano", "Chiara Colombo",
@@ -115,4 +115,37 @@ export function sampleContacts(): Contact[] {
     // Prefix and suffix, the way Google shows them (issue #57).
     c("md", "(Volley) Matteo De Luca, Coach", { ...photo(3), honorificPrefix: "(Volley)", givenName: "Matteo", familyName: "De Luca", honorificSuffix: "Coach", phones: [{ value: "+39 328 309 7537", type: "mobile" }] }),
   ];
+}
+
+/** Find profiles (issue #61), shaped like its mockups. */
+export function sampleProfiles(): ProfilesOverview {
+  const photo = (i: number) => `/api/e2e-photos/${i}`;
+  const p = (extra: Partial<SocialPerson> & Pick<SocialPerson, "id" | "network" | "url">): SocialPerson => ({ source: "export", ...extra });
+  const davide = [
+    { person: p({ id: "instagram:davide.gallo", network: "instagram", url: "https://instagram.com/davide.gallo", handle: "davide.gallo", name: "Davide Gallo", photoUrl: photo(1), source: "scan", relation: "follower" }), score: 1, reason: "sameName" as const },
+    { person: p({ id: "linkedin:davidegallo", network: "linkedin", url: "https://linkedin.com/in/davidegallo", handle: "davidegallo", name: "Davide Gallo", photoUrl: photo(2), relation: "connection", detail: "Gallo Ceramiche" }), score: 1, reason: "sameName" as const },
+    { person: p({ id: "bluesky:dgallo.bsky.social", network: "bluesky", url: "https://bsky.app/profile/dgallo.bsky.social", handle: "dgallo.bsky.social", name: "Davide Gallo", photoUrl: photo(3), source: "search" }), score: 1, reason: "sameName" as const },
+    { person: p({ id: "instagram:davegalloni", network: "instagram", url: "https://instagram.com/davegalloni", handle: "davegalloni", name: "Davide Galloni", relation: "following" }), score: 0.6, reason: "handleMatchesName" as const },
+  ];
+  return {
+    sources: [
+      { network: "instagram", people: 1204, imported: "2026-10-14T10:00:00Z" },
+      { network: "linkedin", people: 0 },
+      { network: "facebook", people: 0 },
+      { network: "bluesky", people: 9 },
+      { network: "mastodon", people: 3 },
+      { network: "github", people: 0 },
+    ],
+    search: { running: true, networks: ["bluesky", "mastodon"], checked: 312, total: 781, found: { bluesky: 9, mastodon: 3 } },
+    scans: [
+      { network: "instagram", loggedIn: true },
+      { network: "facebook", loggedIn: false },
+      { network: "linkedin", loggedIn: false },
+    ],
+    suggestions: [
+      { contactId: "people/dg", name: "Davide Gallo", hasPhoto: false, detail: "+39 338 555 0412 · davide.gallo@example.com", candidates: davide },
+      { contactId: "people/ec", name: "Elena Conti", hasPhoto: true, placeholder: true, photoUrl: photo(4), candidates: [{ person: p({ id: "instagram:elena_conti", network: "instagram", url: "https://instagram.com/elena_conti", handle: "elena_conti", relation: "follower" }), score: 0.85, reason: "handleMatchesName" }] },
+    ],
+    linked: [],
+  };
 }
