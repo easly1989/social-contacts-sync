@@ -10,6 +10,7 @@ import ContactEditor from "../../components/contacts/ContactEditor.vue";
 import PhotoUpload from "../../components/contacts/PhotoUpload.vue";
 import MergePanel from "../../components/cleanup/MergePanel.vue";
 import { api, withGoogleDetail } from "../../api";
+import { notify, notifyError } from "../../toasts";
 import { signInAgainIfNeeded } from "../../signInAgain";
 import { displayName, matchesSearch, shrinkImage, toCleanupContact } from "../../contactTools";
 import { number } from "../../format";
@@ -23,7 +24,6 @@ const router = useRouter();
 const contacts = ref<Contact[]>();
 const labels = ref<ContactLabel[]>([]);
 const loadError = ref(false);
-const notice = ref<{ text: string; error?: boolean; undo?: string }>();
 
 type Filter = "all" | "noPhoto" | "placeholder";
 const filter = ref<Filter>("noPhoto");
@@ -99,12 +99,12 @@ function onDeleted(actionId: string, id: string): void {
   drop([id]);
   selected.value = selected.value.filter((s) => s !== id);
   editing.value = undefined;
-  notice.value = { text: t("contacts.deleted", 1), undo: actionId };
+  notify(t("contacts.deleted", 1), { label: t("report.undo"), run: () => void undo(actionId) });
 }
 function onDuplicated(copy: Contact): void {
   replace(copy);
   openEditor(copy);
-  notice.value = { text: t("contacts.duplicated") };
+  notify(t("contacts.duplicated"));
 }
 
 // Row menu.
@@ -114,7 +114,7 @@ async function duplicate(contact: Contact): Promise<void> {
   try {
     onDuplicated(await api.duplicateContact(contact.id));
   } catch (e) {
-    notice.value = { text: withGoogleDetail(t("contacts.errors.duplicate"), e), error: true };
+    notifyError(t("contacts.errors.duplicate"), e);
   }
   busyRow.value = undefined;
 }
@@ -134,9 +134,9 @@ async function rowPhotoChosen(event: Event): Promise<void> {
   busyRow.value = id;
   try {
     replace(await api.uploadPhoto(id, await shrinkImage(file)));
-    notice.value = { text: t("contacts.photoAdded") };
+    notify(t("contacts.photoAdded"));
   } catch (e) {
-    notice.value = { text: withGoogleDetail(t("contacts.errors.photo"), e), error: true };
+    notifyError(t("contacts.errors.photo"), e);
   }
   busyRow.value = undefined;
 }
@@ -150,9 +150,9 @@ async function deleteSelected(ids = [...selected.value]): Promise<void> {
     const { actionId, deleted } = await api.deleteContacts(ids);
     drop(deleted);
     selected.value = selected.value.filter((id) => !deleted.includes(id));
-    notice.value = { text: t("contacts.deleted", deleted.length), undo: actionId };
+    notify(t("contacts.deleted", deleted.length), { label: t("report.undo"), run: () => void undo(actionId) });
   } catch (e) {
-    notice.value = { text: withGoogleDetail(t("contacts.errors.delete"), e), error: true };
+    notifyError(t("contacts.errors.delete"), e);
     await load();
   }
   bulkBusy.value = false;
@@ -166,9 +166,9 @@ async function applyLabel(id: string, add: boolean): Promise<void> {
   try {
     const { contacts: changed } = await api.applyLabel(selected.value, id, add);
     changed.forEach(replace);
-    notice.value = { text: t(add ? "contacts.labelAdded" : "contacts.labelRemoved", { name: labelName(id), count: selected.value.length }) };
+    notify(t(add ? "contacts.labelAdded" : "contacts.labelRemoved", { name: labelName(id), count: selected.value.length }));
   } catch (e) {
-    notice.value = { text: withGoogleDetail(t("contacts.errors.label"), e), error: true };
+    notifyError(t("contacts.errors.label"), e);
     await load();
   }
   bulkBusy.value = false;
@@ -182,7 +182,7 @@ async function createAndApply(): Promise<void> {
     newLabel.value = "";
     await applyLabel(created.id, true);
   } catch (e) {
-    notice.value = { text: withGoogleDetail(t("contacts.errors.label"), e), error: true };
+    notifyError(t("contacts.errors.label"), e);
   }
 }
 function labelCreated(created: ContactLabel): void {
@@ -212,18 +212,17 @@ async function mergeWith(request: MergeRequest): Promise<string> {
 function merged(actionId: string): void {
   merging.value = undefined;
   selected.value = [];
-  notice.value = { text: t("contacts.merged"), undo: actionId };
+  notify(t("contacts.merged"), { label: t("report.undo"), run: () => void undo(actionId) });
 }
 
-// Undo from the notice, the same as from History.
+// Undo from the toast, the same as from History.
 async function undo(actionId: string): Promise<void> {
-  notice.value = undefined;
   try {
     await api.undoCleanup(actionId);
     await load();
-    notice.value = { text: t("contacts.undone") };
+    notify(t("contacts.undone"));
   } catch (e) {
-    notice.value = { text: withGoogleDetail(t("contacts.errors.undo"), e), error: true };
+    notifyError(t("contacts.errors.undo"), e);
   }
 }
 
@@ -361,13 +360,6 @@ const uploading = ref(false);
 
     <input ref="rowPhoto" type="file" accept="image/*" class="hidden" data-testid="row-photo-input" @change="rowPhotoChosen" />
 
-    <div v-if="notice" class="toast toast-center z-40" role="status">
-      <div class="alert" :class="notice.error ? 'alert-error' : ''">
-        <span>{{ notice.text }}</span>
-        <button v-if="notice.undo" type="button" class="btn btn-sm" @click="undo(notice.undo)">{{ $t("report.undo") }}</button>
-        <button type="button" class="btn btn-ghost btn-sm btn-square" :aria-label="$t('contacts.close')" @click="notice = undefined"><X class="size-4" /></button>
-      </div>
-    </div>
 
     <ContactEditor
       v-if="editing"

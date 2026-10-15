@@ -130,7 +130,7 @@ test("new contact with a photo, a photo from a row, and a profile link's photo",
   const chooser = page.waitForEvent("filechooser");
   await row(page, /Davide Gallo/).getByRole("button", { name: "Add photo" }).click();
   await (await chooser).setFiles(image("davide.jpg", 2));
-  await expect(page.getByRole("status")).toContainText("Photo added as a placeholder.");
+  await expect(page.getByRole("status").filter({ hasText: "Photo added as a placeholder." })).toBeVisible();
   await expect(page.getByTestId("tile-placeholder")).toContainText("3");
   await expect(row(page, /Davide Gallo/)).toHaveCount(0);
 
@@ -193,7 +193,7 @@ test("merge, label and delete the selected contacts, with undo", async ({ page }
   await expect(panel).toContainText("Merging 2 contacts.");
   await screenshot(page, "64-contacts-merge", { fullPage: false });
   await panel.getByRole("button", { name: "Merge into one" }).click();
-  await expect(page.getByRole("status")).toContainText("Contacts merged.");
+  await expect(page.getByRole("status").filter({ hasText: "Contacts merged." })).toBeVisible();
   const [merge] = sent("/merge");
   expect(merge.body).toMatchObject({ contactIds: ["people/fg", "people/fg2"], request: { keepId: "people/fg" }, updatedAt: { "people/fg": "2026-09-30T10:00:00Z", "people/fg2": "2019-05-01T10:00:00Z" } });
   await expect(row(page, /Francesco G\./)).toHaveCount(0);
@@ -202,10 +202,10 @@ test("merge, label and delete the selected contacts, with undo", async ({ page }
   page.once("dialog", (d) => d.accept());
   await row(page, /Davide Gallo/).getByLabel("More for Davide Gallo").click();
   await row(page, /Davide Gallo/).getByRole("button", { name: "Delete" }).click();
-  await expect(page.getByRole("status")).toContainText("Contact deleted.");
+  await expect(page.getByRole("status").filter({ hasText: "Contact deleted." })).toBeVisible();
   expect(sent("/delete").map((r) => r.body)).toEqual([{ contactIds: ["people/dg"] }]);
-  await page.getByRole("status").getByRole("button", { name: "Undo" }).click();
-  await expect(page.getByRole("status")).toContainText("Undone.");
+  await page.getByRole("status").filter({ hasText: "Contact deleted." }).getByRole("button", { name: "Undo" }).click();
+  await expect(page.getByRole("status").filter({ hasText: "Undone." })).toBeVisible();
   expect(backend.cleanupActions.find((a) => a.kind === "delete")?.undone).toBe(true);
 
   await page.goto("/app/history");

@@ -27,6 +27,15 @@ export async function addContactLink(api: ContactsApi, contactId: string, url: s
   return true;
 }
 
+/** Adds several links in one change; returns the ones that weren't there yet. */
+export async function addContactLinks(api: ContactsApi, contactId: string, links: string[]): Promise<string[]> {
+  const person = await api.get(contactId);
+  const urls = contactUrls(person);
+  const added = links.filter((url, i) => !urls.some((u) => sameLink(u.value ?? "", url)) && links.findIndex((l) => sameLink(l, url)) === i);
+  if (added.length) await api.update(contactId, { ...updateHeader(person), urls: [...urls, ...added.map((value) => ({ value, type: "profile" }))] }, ["urls"]);
+  return added;
+}
+
 /** Removes `url` from the contact's websites, if it's still there. */
 export async function removeContactLink(api: ContactsApi, contactId: string, url: string): Promise<void> {
   const person = await api.get(contactId);

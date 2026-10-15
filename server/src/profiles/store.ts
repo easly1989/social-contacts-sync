@@ -26,10 +26,12 @@ export interface ProfilesData {
   /** network → contact ids already searched. */
   searched: Record<string, string[]>;
   imports: Partial<Record<SocialNetwork, string>>;
+  /** network → when the public search last ran on it. */
+  searches: Partial<Record<SocialNetwork, string>>;
   scans: Partial<Record<SocialNetwork, { finishedAt: string; read: number; stopped?: string }>>;
 }
 
-const empty = (): ProfilesData => ({ people: [], rejected: {}, skipped: [], linked: [], searched: {}, imports: {}, scans: {} });
+const empty = (): ProfilesData => ({ people: [], rejected: {}, skipped: [], linked: [], searched: {}, imports: {}, searches: {}, scans: {} });
 
 function file(): string | undefined {
   return process.env.SCS_DESKTOP === "1" && process.env.SCS_DATA_DIR ? path.join(process.env.SCS_DATA_DIR, "profiles.json") : undefined;
