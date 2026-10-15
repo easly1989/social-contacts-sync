@@ -1,6 +1,6 @@
-import { BrowserWindow, session, Session } from "electron";
+import { app, BrowserWindow, session, Session } from "electron";
 
-import { blockedReason, facebookExtractScript, facebookPeople, instagramPage, linkedinPage, pause, ScannedPerson, ScanNetwork } from "./socialParse";
+import { blockedReason, browserUserAgent, facebookExtractScript, facebookPeople, instagramPage, isAbortedLoad, linkedinPage, pause, ScannedPerson, ScanNetwork } from "./socialParse";
 
 /*
   The experimental login scan of Find profiles (issue #61). The user logs in
@@ -25,7 +25,34 @@ interface Running {
 }
 const running = new Map<ScanNetwork, Running>();
 
-const partition = (network: ScanNetwork): Session => session.fromPartition(`persist:scs-social-${network}`);
+/** The site's own session, which presents itself as plain Chrome. */
+function partition(network: ScanNetwork): Session {
+  const ses = session.fromPartition(`persist:scs-social-${network}`);
+  ses.setUserAgent(browserUserAgent(app.userAgentFallback));
+  return ses;
+}
+
+/**
+ * Opens a page and waits for it to settle. Sites redirect (Facebook's
+ * /me/friends goes on to the profile's own friends page), which fails the
+ * first load with ERR_ABORTED although the page that follows is the one wanted.
+ */
+async function load(win: BrowserWindow, url: string): Promise<void> {
+  try {
+    await win.loadURL(url);
+  } catch (error) {
+    if (!isAbortedLoad(error)) throw error;
+  }
+  if (win.webContents.isLoading()) {
+    await new Promise<void>((resolve) => {
+      const timer = setTimeout(resolve, 30_000);
+      win.webContents.once("did-stop-loading", () => {
+        clearTimeout(timer);
+        resolve();
+      });
+    });
+  }
+}
 
 async function cookie(network: ScanNetwork, name: string): Promise<string | undefined> {
   const [found] = await partition(network).cookies.get({ name });
@@ -45,6 +72,7 @@ export async function socialStatus() {
 
 /** Opens the site's login page; resolves once its session cookie is there, or when the window is closed. */
 export function socialLogin(network: ScanNetwork, parent?: BrowserWindow): Promise<{ network: ScanNetwork; loggedIn: boolean }> {
+  partition(network);
   return new Promise((resolve) => {
     const win = new BrowserWindow({
       width: 520,
@@ -66,7 +94,7 @@ export function socialLogin(network: ScanNetwork, parent?: BrowserWindow): Promi
       if (await cookie(network, sites[network].cookie)) finish(true);
     }, 1000);
     win.on("closed", () => finish(false));
-    void win.loadURL(sites[network].login);
+    void load(win, sites[network].login).catch(() => undefined);
   });
 }
 
@@ -90,8 +118,9 @@ async function pageFetch(win: BrowserWindow, path: string, headers: Record<strin
 }
 
 async function openHidden(network: ScanNetwork): Promise<BrowserWindow> {
+  partition(network);
   const win = new BrowserWindow({ show: false, webPreferences: { partition: `persist:scs-social-${network}`, contextIsolation: true, nodeIntegration: false, sandbox: true } });
-  await win.loadURL(sites[network].home);
+  await load(win, sites[network].home);
   return win;
 }
 
@@ -136,7 +165,7 @@ async function scanLinkedIn(win: BrowserWindow, scan: Running, add: (people: Sca
 }
 
 async function scanFacebook(win: BrowserWindow, scan: Running, add: (people: ScannedPerson[]) => void): Promise<string | undefined> {
-  await win.loadURL("https://www.facebook.com/me/friends");
+  await load(win, "https://www.facebook.com/me/friends");
   const blocked = blockedReason(200, win.webContents.getURL());
   if (blocked) return blocked;
   let unchanged = 0;

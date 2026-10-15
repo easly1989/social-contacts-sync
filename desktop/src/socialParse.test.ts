@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { blockedReason, facebookPeople, instagramPage, linkedinPage, pause } from "./socialParse";
+import { blockedReason, browserUserAgent, facebookPeople, instagramPage, isAbortedLoad, linkedinPage, pause } from "./socialParse";
 
 // Shaped like the sites' answers (issue #61); the scan itself needs the real sites.
 test("Instagram followers pages: people and the next cursor", () => {
@@ -60,6 +60,16 @@ test("Facebook friends page: profile links only, once each", () => {
       ["https://facebook.com/profile.php?id=1000123", "Anna Costa", undefined],
     ]
   );
+});
+
+test("the sites see Chrome, and a redirect isn't a failed load (issue #65)", () => {
+  const electron =
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) social-contacts-sync/1.3.1 Chrome/142.0.7444.59 Electron/44.5.1 Safari/537.36";
+  assert.equal(browserUserAgent(electron), "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.7444.59 Safari/537.36");
+  const chrome = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36";
+  assert.equal(browserUserAgent(chrome), chrome);
+  assert.ok(isAbortedLoad(new Error("ERR_ABORTED (-3) loading 'https://www.facebook.com/me/friends'")));
+  assert.ok(!isAbortedLoad(new Error("ERR_NAME_NOT_RESOLVED (-105) loading 'https://www.facebook.com/'")));
 });
 
 test("sign-in pages and limits stop the scan; pauses vary", () => {

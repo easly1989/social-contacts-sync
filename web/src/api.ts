@@ -1,4 +1,4 @@
-import { ProfileLinked, ProfileScanState, ProfileSearchState, ProfilesOverview, SocialNetwork, Contact, ContactInput, ContactLabel, ContactsList, ContactResult, LinkLookup, SyncCounters, TelegramState, CleanupActionSummary, CleanupScan, CleanupSummary, DesktopInfo, DuplicateGroup, GoogleAccount, MergeRequest, GoogleStats, RunRecord, RunSummary, SessionStatus, UpdateCheck } from "../../interfaces/api";
+import { ProfileBulkState, ProfileLinked, ProfileLinkRequest, ProfileScanState, ProfileSearchState, ProfilesOverview, SocialNetwork, Contact, ContactInput, ContactLabel, ContactsList, ContactResult, LinkLookup, SyncCounters, TelegramState, CleanupActionSummary, CleanupScan, CleanupSummary, DesktopInfo, DuplicateGroup, GoogleAccount, MergeRequest, GoogleStats, RunRecord, RunSummary, SessionStatus, UpdateCheck } from "../../interfaces/api";
 
 // Small typed wrappers around the server API.
 
@@ -99,7 +99,9 @@ export const api = {
     send<{ read: number; added: number }>("POST", `/api/profiles/import?network=${network}&file=${encodeURIComponent(file.name)}`, await file.text(), "text/plain"),
   searchProfiles: (networks: SocialNetwork[]) => post<ProfileSearchState>("/api/profiles/search", { networks }),
   stopProfileSearch: () => post<ProfileSearchState>("/api/profiles/search/stop"),
-  linkProfile: (contactId: string, personId: string, usePhoto: boolean) => post<{ linked: ProfileLinked; photoWanted: boolean }>("/api/profiles/link", { contactId, personId, usePhoto }),
+  linkProfiles: (request: ProfileLinkRequest) => post<{ linked: ProfileLinked[]; photoWanted: boolean; photoSet: boolean }>("/api/profiles/link", request),
+  linkProfilesInBulk: (items: ProfileLinkRequest[]) => post<ProfileBulkState>("/api/profiles/link_many", { items }),
+  stopBulkLink: () => post<ProfileBulkState>("/api/profiles/link_many/stop"),
   undoProfile: (contactId: string, personId: string) => post("/api/profiles/undo", { contactId, personId }),
   rejectProfiles: (contactId: string, personIds: string[]) => post("/api/profiles/reject", { contactId, personIds }),
   skipProfiles: (contactId: string) => post("/api/profiles/skip", { contactId }),

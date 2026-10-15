@@ -408,6 +408,8 @@ export interface ProfileSourceState {
   people: number;
   imported?: string;
   scanned?: string;
+  /** When the public search last ran on this network. */
+  searched?: string;
 }
 
 export interface ProfileSearchState {
@@ -430,6 +432,28 @@ export interface ProfileScanState {
   finishedAt?: string;
 }
 
+/** One contact to link in bulk: the profiles ticked on its card, and the one whose photo to use. */
+export interface ProfileLinkRequest {
+  contactId: string;
+  personIds: string[];
+  photoFrom?: string;
+  /** The other profiles shown on the card: not this contact. */
+  rejectIds?: string[];
+  name?: string;
+}
+
+/** Linking in bulk (issue #65): runs in the background at Google's pace. */
+export interface ProfileBulkState {
+  running: boolean;
+  done: number;
+  total: number;
+  /** Contacts and profiles linked so far. */
+  contacts: number;
+  profiles: number;
+  failed: { contactId: string; name: string; error: string }[];
+  stopped?: boolean;
+}
+
 /** GET /api/profiles */
 export interface ProfilesOverview {
   sources: ProfileSourceState[];
@@ -438,4 +462,5 @@ export interface ProfilesOverview {
   scans?: ProfileScanState[];
   suggestions: ProfileSuggestion[];
   linked: ProfileLinked[];
+  bulk?: ProfileBulkState;
 }

@@ -50,7 +50,7 @@ async function start(t: { after(fn: () => void): void }, sessionId: string) {
     const response = await fetch(`${base}${route}`, { method, headers: body === undefined ? {} : { "Content-Type": type }, body: typeof body === "string" ? body : body === undefined ? undefined : JSON.stringify(body) });
     return { status: response.status, json: (await response.json()) as any };
   };
-  return { google, call, desktopCalls };
+  return { google, call, desktopCalls, base };
 }
 
 test("import, search and scan feed one review queue; link with photo, then undo", async (t) => {
@@ -89,7 +89,8 @@ test("import, search and scan feed one review queue; link with photo, then undo"
   // Link Elena's Instagram with its photo; her old photo is kept for undo.
   const linked = await call("POST", "/profiles/link", { contactId: "people/ec", personId: "instagram:elena_conti", usePhoto: true });
   assert.equal(linked.status, 200);
-  assert.equal(linked.json.linked.photoSet, true);
+  assert.equal(linked.json.linked[0].photoSet, true);
+  assert.equal(linked.json.photoSet, true);
   assert.deepEqual(google.people.get("people/ec")!.urls, [{ value: "https://instagram.com/elena_conti", type: "profile" }]);
   assert.equal(google.photos.get("people/ec"), jpeg.toString("base64"));
   overview = (await call("GET", "/profiles")).json;
@@ -108,4 +109,41 @@ test("import, search and scan feed one review queue; link with photo, then undo"
     overview.suggestions.map((s: any) => [s.name, s.candidates.length]),
     [["Elena Conti", 1], ["Davide Gallo", 1]]
   );
+});
+
+test("several profiles per contact, in bulk, and photos through the server (issue #65)", async (t) => {
+  const { google, call, base } = await start(t, "profiles-65");
+  const csv = "First Name,Last Name,URL\nDavide,Gallo,https://www.linkedin.com/in/davidegallo\nElena,Conti,https://www.linkedin.com/in/elenaconti";
+  await call("POST", "/profiles/import?network=linkedin", csv, "text/plain");
+  await call("POST", "/profiles/scan/start", { network: "instagram", acceptRisk: true });
+  await call("POST", "/profiles/search", { networks: ["bluesky"] });
+  await new Promise((resolve) => setTimeout(resolve, 50));
+  let overview = (await call("GET", "/profiles")).json;
+  assert.ok(overview.sources.find((s: any) => s.network === "bluesky").searched);
+
+  // Davide: LinkedIn and Bluesky in one change, no photo; nothing else left for him.
+  const one = await call("POST", "/profiles/link", { contactId: "people/dg", personIds: ["linkedin:davidegallo", "bluesky:dgallo.bsky.social"] });
+  assert.equal(one.status, 200);
+  assert.deepEqual(one.json.linked.map((l: any) => [l.person.id, l.photoSet]), [["linkedin:davidegallo", false], ["bluesky:dgallo.bsky.social", false]]);
+  assert.deepEqual(google.people.get("people/dg")!.urls!.map((u) => u.value), ["https://linkedin.com/in/davidegallo", "https://bsky.app/profile/dgallo.bsky.social"]);
+
+  // Elena in bulk: Instagram with its photo, LinkedIn not her.
+  const bulk = await call("POST", "/profiles/link_many", { items: [{ contactId: "people/ec", name: "Elena Conti", personIds: ["instagram:elena_conti"], photoFrom: "instagram:elena_conti", rejectIds: ["linkedin:elenaconti"] }, { contactId: "people/nobody", personIds: ["instagram:elena_conti"] }] });
+  assert.equal(bulk.status, 200);
+  assert.equal(bulk.json.total, 2);
+  for (let i = 0; i < 50 && (await call("GET", "/profiles")).json.bulk.running; i++) await new Promise((resolve) => setTimeout(resolve, 10));
+  overview = (await call("GET", "/profiles")).json;
+  assert.equal(overview.bulk.contacts, 1);
+  assert.equal(overview.bulk.profiles, 1);
+  assert.equal(overview.bulk.failed.length, 1);
+  assert.equal(google.photos.get("people/ec"), jpeg.toString("base64"));
+  assert.deepEqual(overview.suggestions, []);
+
+  // The Instagram photo, through the server; a profile without one is a 404.
+  const photo = await fetch(`${base}/profiles/photo?id=${encodeURIComponent("instagram:elena_conti")}`);
+  assert.equal(photo.status, 200);
+  assert.equal(photo.headers.get("content-type"), "image/jpeg");
+  assert.equal(Buffer.from(await photo.arrayBuffer()).length, jpeg.length);
+  assert.equal((await call("GET", "/profiles/photo?id=linkedin:davidegallo")).status, 404);
+  assert.equal((await call("GET", "/profiles/photo?id=nobody")).status, 404);
 });

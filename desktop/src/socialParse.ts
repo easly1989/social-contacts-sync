@@ -116,6 +116,21 @@ export function blockedReason(status: number, finalUrl: string, body = ""): stri
   return undefined;
 }
 
+/**
+ * The user agent the social sites see: Chrome's own, without the Electron
+ * and app tokens that make some of them serve a reduced page (issue #65).
+ */
+export function browserUserAgent(userAgent: string): string {
+  return userAgent
+    .replace(/\sElectron\/\S+/g, "")
+    .replace(/(\(KHTML, like Gecko\))\s+(?:(?!Chrome\/)\S+\/\S+\s+)+(?=Chrome\/)/, "$1 ");
+}
+
+/** Whether a page load failed only because the page went on to another one (a redirect). */
+export function isAbortedLoad(error: unknown): boolean {
+  return /ERR_ABORTED|\(-3\)/.test(error instanceof Error ? error.message : String(error));
+}
+
 /** A few seconds between pages, a little different each time. */
 export function pause(minMs: number, maxMs: number, random = Math.random): number {
   return Math.round(minMs + (maxMs - minMs) * random());

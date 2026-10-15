@@ -301,13 +301,26 @@ export class FakeBackend {
       data.search.running = false;
       return route.fulfill({ json: data.search });
     }
+    if (sub.startsWith("/photo")) {
+      const id = new URL(request.url()).searchParams.get("id") ?? "";
+      return route.fulfill({ contentType: "image/jpeg", body: Buffer.from(avatars[id.length % avatars.length], "base64") });
+    }
     if (sub === "/link") {
       const suggestion = data.suggestions.find((s) => s.contactId === body.contactId)!;
-      const person = suggestion.candidates.find((c) => c.person.id === body.personId)!.person;
-      const linked = { contactId: body.contactId, name: suggestion.name, person, at: new Date().toISOString(), photoSet: body.usePhoto };
-      data.linked.unshift(linked);
+      const linked = suggestion.candidates
+        .filter((c) => body.personIds.includes(c.person.id))
+        .map((c) => ({ contactId: body.contactId, name: suggestion.name, person: c.person, at: new Date().toISOString(), photoSet: c.person.id === body.photoFrom }));
+      data.linked.unshift(...linked);
       drop(body.contactId);
-      return route.fulfill({ json: { linked, photoWanted: body.usePhoto } });
+      return route.fulfill({ json: { linked, photoWanted: Boolean(body.photoFrom), photoSet: Boolean(body.photoFrom) } });
+    }
+    if (sub === "/link_many") {
+      data.bulk = { running: true, done: 0, total: body.items.length, contacts: 0, profiles: 0, failed: [] };
+      return route.fulfill({ json: data.bulk });
+    }
+    if (sub === "/link_many/stop") {
+      Object.assign(data.bulk!, { running: false, stopped: true });
+      return route.fulfill({ json: data.bulk });
     }
     if (sub === "/undo") {
       data.linked.find((l) => l.contactId === body.contactId && l.person.id === body.personId)!.undone = true;
