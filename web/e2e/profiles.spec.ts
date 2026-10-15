@@ -68,6 +68,32 @@ test("review list: several profiles per contact, the photo to use, and linking i
   await expect(failed).toHaveCount(0);
 });
 
+test("a contact that already has a photo keeps it unless a photo is picked by hand (issue #65)", async ({ page }) => {
+  const davide = backend.profiles!.suggestions[0];
+  Object.assign(davide, { hasPhoto: true, photoUrl: "/api/e2e-photos/7" });
+  backend.profiles!.suggestions = [davide];
+  await page.goto("/app/profiles");
+  const card = page.getByTestId("profile-card");
+  await expect(card).toContainText("Has a photo of its own");
+  // LinkedIn and Bluesky are ticked, but neither gives its photo.
+  await expect(card.getByRole("checkbox", { name: "Use this photo" })).toHaveCount(2);
+  for (const box of await card.getByRole("checkbox", { name: "Use this photo" }).all()) await expect(box).not.toBeChecked();
+  // Ticking or unticking more profiles doesn't pick one either.
+  await card.getByRole("checkbox", { name: "Davide Gallo · @davide.gallo" }).check();
+  await card.getByRole("checkbox", { name: "Davide Gallo · linkedin.com/in/davidegallo" }).uncheck();
+  for (const box of await card.getByRole("checkbox", { name: "Use this photo" }).all()) await expect(box).not.toBeChecked();
+
+  // In bulk too: links only.
+  await page.getByRole("checkbox", { name: "Select all" }).check();
+  await page.getByRole("button", { name: "Link 2 profiles to 1 contact" }).click();
+  expect(backend.profileRequests.find((r) => r.route === "/link_many")!.body.items[0]).toEqual({
+    contactId: "people/dg",
+    name: "Davide Gallo",
+    personIds: ["instagram:davide.gallo", "bluesky:dgallo.bsky.social"],
+    rejectIds: ["linkedin:davidegallo", "instagram:davegalloni"],
+  });
+});
+
 test("one at a time: keys tick profiles, link, and None of these; Linked has undo", async ({ page }) => {
   await page.goto("/app/profiles");
   await page.getByRole("button", { name: "One at a time" }).click();
