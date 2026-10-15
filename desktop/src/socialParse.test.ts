@@ -62,6 +62,26 @@ test("Facebook friends page: profile links only, once each", () => {
   );
 });
 
+test("Facebook friends page: the picture link and the name link meet by profile (issue #71)", () => {
+  assert.deepEqual(
+    facebookPeople([
+      // The picture's link comes first and has no text.
+      { href: "https://www.facebook.com/elisa.tasini?__cft__=abc", name: "", img: "https://scontent-mxp1-1.xx.fbcdn.net/v/t39.30808-1/e.jpg?oe=1" },
+      { href: "https://www.facebook.com/elisa.tasini?__cft__=abc", name: "Elisa Tasini" },
+      { href: "https://www.facebook.com/profile.php?id=1570023761&__tn__=R", name: "", img: "https://scontent-mxp1-1.xx.fbcdn.net/v/p.jpg" },
+      { href: "https://www.facebook.com/profile.php?id=1570023761", name: "Francesco Pimpinelli" },
+      // A picture that isn't https is not kept.
+      { href: "https://www.facebook.com/manuel.girometti", name: "", img: "data:image/gif;base64,R0lGOD" },
+      { href: "https://www.facebook.com/manuel.girometti", name: "Manuel Girometti" },
+    ]).map((p) => [p.url, p.name, p.photoUrl]),
+    [
+      ["https://facebook.com/elisa.tasini", "Elisa Tasini", "https://scontent-mxp1-1.xx.fbcdn.net/v/t39.30808-1/e.jpg?oe=1"],
+      ["https://facebook.com/profile.php?id=1570023761", "Francesco Pimpinelli", "https://scontent-mxp1-1.xx.fbcdn.net/v/p.jpg"],
+      ["https://facebook.com/manuel.girometti", "Manuel Girometti", undefined],
+    ]
+  );
+});
+
 test("the sites see Chrome, and a redirect isn't a failed load (issue #65)", () => {
   const electron =
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) social-contacts-sync/1.3.1 Chrome/142.0.7444.59 Electron/44.5.1 Safari/537.36";
