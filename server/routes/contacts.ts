@@ -12,6 +12,7 @@ import { duplicatePerson, hasName, newPerson, parseInput, personUpdate, toContac
 import { clearPlaceholder, getPlaceholders, markPlaceholder, prunePlaceholders } from "../src/contacts/placeholders";
 import { addContactLink } from "../src/contactLinks";
 import { getLookup } from "../src/linkLookups";
+import { answeredRevoked } from "../src/googleSignIn";
 
 // The Contacts page (issue #55): every Google contact, edited in place.
 export function contactsRouter(contactsApi: (auth: OAuth2Client) => ContactsApi = peopleContactsApi, limiter: () => RateLimiter = googleRateLimiter): express.Router {
@@ -45,6 +46,7 @@ export function contactsRouter(contactsApi: (auth: OAuth2Client) => ContactsApi 
   }
 
   function failed(res: Response, what: string, e: unknown): void {
+    if (answeredRevoked(res.req.sessionID, e, res)) return;
     const status = (e as { code?: unknown; response?: { status?: unknown } })?.response?.status ?? (e as { code?: unknown })?.code;
     if (status === 404) return void res.status(404).send({ error: "not_found" });
     console.error(`${what} failed:`, e);

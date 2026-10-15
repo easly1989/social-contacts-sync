@@ -143,7 +143,12 @@ export async function getAccountSummary(auth: OAuth2Client): Promise<GoogleAccou
 
 /** A client for previously saved tokens (desktop app restart). */
 export function oauth2ClientFromTokens(tokens: object): OAuth2Client {
-  const oauth2Client = new googleAuth.OAuth2(process.env.GOOGLE_CLIENT_ID, process.env.GOOGLE_CLIENT_SECRET);
+  const oauth2Client = new googleAuth.OAuth2({
+    clientId: process.env.GOOGLE_CLIENT_ID,
+    clientSecret: process.env.GOOGLE_CLIENT_SECRET,
+    // Tests stand in for Google's token endpoint.
+    ...(process.env.SCS_GOOGLE_TOKEN_ENDPOINT && { endpoints: { oauth2TokenUrl: process.env.SCS_GOOGLE_TOKEN_ENDPOINT } }),
+  });
   oauth2Client.setCredentials(tokens);
   return oauth2Client;
 }

@@ -8,6 +8,7 @@ import { GoogleStats } from "../../interfaces/api";
 import { getRun, getRunPhoto, listRuns, updateRun } from "../src/runs";
 import { googleRateLimiter } from "../src/sync";
 import { undoRun } from "../src/undo";
+import { answeredRevoked } from "../src/googleSignIn";
 
 // Reports, history and undo of sync runs (issue #20).
 const router = express.Router();
@@ -31,6 +32,7 @@ router.get("/google_stats", async (req: Request, res: Response) => {
     setInCache(req.sessionID, "google_stats", stats);
     res.send(stats);
   } catch (e) {
+    if (answeredRevoked(req.sessionID, e, res)) return;
     console.error("Reading contact statistics failed:", e);
     res.status(502).send({ error: "google_unavailable" });
   }

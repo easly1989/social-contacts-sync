@@ -15,8 +15,9 @@ import { enforcePayments } from "../src/config";
 import { checkPurchase } from "../src/payments";
 import { consumeOAuthState, createOAuthState } from "../src/oauthState";
 import { askDesktop, desktopMode, safeReturnPath } from "../src/desktop";
-import { hasSavedWhatsAppSession, persistGoogleAuth } from "../src/desktopSession";
+import { hasSavedWhatsAppSession, persistGoogleAuth, setupDone } from "../src/desktopSession";
 import { sendEvent } from "../src/ws";
+import { checkGoogleSignIn } from "../src/googleSignIn";
 import { hasSavedTelegram, telegramState } from "../src/telegramSession";
 
 // Based on https://github.com/HenningM/express-ws/issues/86
@@ -85,6 +86,9 @@ router.ws("/ws", (ws: WebSocket, req: Request) => {
 
 // Used by route guard
 router.get("/status", async (req: Request, res: Response) => {
+  // A sign-in Google stopped accepting is forgotten here, so every page
+  // sends the user to sign in again (pages ask for the status on each move).
+  await checkGoogleSignIn(req.sessionID);
   let whatsappConnected = false;
   const whatsappClient = getFromCache(req.sessionID, "whatsapp");
   try {
@@ -93,14 +97,18 @@ router.get("/status", async (req: Request, res: Response) => {
       WAState.CONNECTED;
   } catch {}
 
+  const googleConfigured = Boolean(process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET);
+  const sourceLinked = whatsappConnected || hasSavedWhatsAppSession() || telegramState(req.sessionID).connected || hasSavedTelegram();
   const status: SessionStatus = {
     whatsappConnected,
     googleConnected: getFromCache(req.sessionID, "gauth") !== undefined,
+    googleExpired: getFromCache(req.sessionID, "google_expired") === true,
     enforcePayments,
     desktop: desktopMode,
     whatsappStarting: Boolean(whatsappClient) && !whatsappConnected,
     whatsappSaved: hasSavedWhatsAppSession(),
-    googleConfigured: Boolean(process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET),
+    googleConfigured,
+    setupDone: setupDone({ googleConfigured, sourceLinked }),
     telegramAvailable: telegramState(req.sessionID).available,
     telegramConnected: telegramState(req.sessionID).connected,
     telegramSaved: hasSavedTelegram(),
@@ -158,6 +166,7 @@ router.get("/google_callback", async (req: Request, res: Response) => {
     const gAuth = await getOAuth2ClientFromCode(code as string, redirectUri);
     const { sessionId: sessionID, returnTo = "/options" } = signIn;
     setInCache(sessionID, "gauth", gAuth);
+    deleteFromCache(sessionID, "google_expired");
     persistGoogleAuth(gAuth);
     // The desktop app has one session for the window and the browser, so
     // the session alone can't tell them apart.

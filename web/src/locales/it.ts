@@ -9,6 +9,9 @@ const it: typeof en = {
     sourceCode: "Codice sorgente",
     navigation: "Navigazione principale",
     support: "Sostieni il progetto",
+    signInAgain: "Accedi di nuovo a Google",
+    signInAgainText: "L'app ha bisogno dell'accesso a Google per leggere e aggiornare i tuoi contatti. Tutto il resto resta com'è.",
+    signedOut: "L'app non è collegata a Google: i contatti non si possono leggere finché non accedi di nuovo.",
     nav: { dashboard: "Panoramica", contacts: "Contatti", sync: "Sincronizza foto", cleanup: "Pulizia", history: "Cronologia", settings: "Impostazioni" },
   },
   dashboard: {
@@ -249,6 +252,8 @@ const it: typeof en = {
       projectHint: "Il client OAuth con cui l'app accede, salvato in config.env.",
       change: "Cambia",
       webNote: "Per usare un altro account, accedi di nuovo dalla pagina iniziale.",
+      signedOut: "Non collegato: i contatti non si possono leggere né aggiornare.",
+      notConnected: "Non collegato",
     },
     data: {
       folder: "Cartella dei dati",
@@ -602,6 +607,9 @@ const it: typeof en = {
       },
     },
     signin: {
+      expiredTitle: "Google ha chiuso l'accesso dell'app ai tuoi contatti",
+      expiredText: "Google chiude l'accesso dopo 7 giorni finché il tuo progetto Google è in modalità Test, oppure quando l'accesso dell'app viene rimosso dal tuo account Google. Accedi di nuovo per continuare: cronologia, impostazioni e collegamenti a WhatsApp e Telegram restano come sono.",
+      expiredTip: "Per non doverlo rifare ogni settimana, pubblica l'app nel tuo progetto Google: nella console di Google Cloud apri Google Auth Platform → Pubblico (Schermata consenso OAuth nelle console meno recenti) e scegli Pubblica app. All'accesso vedrai l'avviso «app non verificata», come adesso, e l'accesso non scadrà più dopo 7 giorni.",
       signOut: "Esci",
       title: "Accedi a Google Contatti",
       lead: "Il browser apre la pagina di accesso di Google. Scegli l'account di cui vuoi aggiornare i contatti e consenti l'accesso ai contatti.",

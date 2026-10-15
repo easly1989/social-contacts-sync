@@ -7,6 +7,8 @@ export const enforcePayments: Deferred<boolean> = new Deferred();
 export const paymentsEnforced = ref(false);
 /** Running inside the desktop app (from the server's status). */
 export const isDesktop = ref(false);
+/** The latest /api/status answer: the app frame asks for a Google sign-in when it's gone. */
+export const sessionStatus = ref<SessionStatus>();
 
 export function setEnforcePayments(value: boolean): void {
   enforcePayments.resolve(value);
@@ -17,4 +19,5 @@ export function setEnforcePayments(value: boolean): void {
 export function applyStatus(status: SessionStatus): void {
   setEnforcePayments(status.enforcePayments);
   isDesktop.value = Boolean(status.desktop);
+  sessionStatus.value = status;
 }

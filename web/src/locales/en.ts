@@ -7,6 +7,9 @@ export default {
     sourceCode: "Source code",
     navigation: "Main navigation",
     support: "Support the project",
+    signInAgain: "Sign in to Google again",
+    signInAgainText: "The app needs your Google sign-in to read and update your contacts. Everything else stays as it is.",
+    signedOut: "The app is signed out of Google: contacts can't be read until you sign in again.",
     nav: { dashboard: "Dashboard", contacts: "Contacts", sync: "Sync photos", cleanup: "Clean up", history: "History", settings: "Settings" },
   },
   dashboard: {
@@ -247,6 +250,8 @@ export default {
       projectHint: "The OAuth client the app signs in with, saved in config.env.",
       change: "Change",
       webNote: "To use another account, sign in again from the start page.",
+      signedOut: "Not signed in: contacts can't be read or updated.",
+      notConnected: "Not connected",
     },
     data: {
       folder: "Data folder",
@@ -600,6 +605,9 @@ export default {
       },
     },
     signin: {
+      expiredTitle: "Google closed the app's access to your contacts",
+      expiredText: "Google ends the sign-in after 7 days while your Google project is in Testing, or when the app's access is removed from your Google account. Sign in again to carry on: history, settings and your WhatsApp and Telegram links stay as they are.",
+      expiredTip: "To stop it happening every week, publish the app in your Google project: in the Google Cloud console open Google Auth Platform → Audience (OAuth consent screen in older consoles) and choose Publish app. Signing in then shows the “unverified app” warning, as it does now, and the sign-in no longer expires after 7 days.",
       signOut: "Sign out",
       title: "Sign in to Google Contacts",
       lead: "Your browser opens Google's sign-in page. Choose the account whose contacts you want to update and allow access to contacts.",

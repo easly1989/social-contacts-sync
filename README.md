@@ -91,7 +91,9 @@ The packages are not code-signed yet:
    contacts to have its own credentials. Creating yours is free and takes a few
    minutes; the wizard links each page of the Google Cloud Console and checks
    the result. See the [step-by-step guide](docs/google-setup.md).
-3. **Sign in to Google** in your browser.
+3. **Sign in to Google** in your browser. While your Google project is in
+   *Testing*, Google ends the sign-in after 7 days: the app then asks you to
+   sign in again. [Publishing the app](docs/google-setup.md) stops that.
 4. **Link WhatsApp** by scanning a QR code, like WhatsApp Web, and/or **sign in
    to Telegram** with your phone number and the code Telegram sends you.
    Gravatar and profile links need no sign-in.

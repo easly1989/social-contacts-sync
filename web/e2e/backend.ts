@@ -92,6 +92,7 @@ export class FakeBackend {
       if (pathname === "/api/google_auth_start") {
         if (!this.signInCompletes) return route.fulfill({ status: 204 });
         this.status.googleConnected = true;
+        this.status.googleExpired = false;
         const back = new URL(request.url()).searchParams.get("return") ?? "/options";
         return route.fulfill({ status: 302, headers: { location: back } });
       }

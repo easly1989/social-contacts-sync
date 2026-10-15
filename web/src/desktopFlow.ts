@@ -11,6 +11,8 @@ export const setupPaths = ["/setup/google", "/setup/signin", "/setup/sources"];
 /** The first setup step that still needs doing. */
 export function nextDesktopStep(status: SessionStatus): string {
   if (!status.googleConfigured) return "/setup/google";
+  // Set up once: signing in again and linking sources happen inside the app.
+  if (status.setupDone) return "/app";
   if (!status.googleConnected) return "/setup/signin";
   // Saved links count: they reconnect by themselves a few seconds after start.
   if (!status.whatsappConnected && !status.whatsappSaved && !status.telegramConnected && !status.telegramSaved) return "/setup/sources";
@@ -38,6 +40,13 @@ export function desktopRedirect(path: string, status: SessionStatus, initial = f
     const next = nextDesktopStep(status);
     if (next !== "/app") return next;
     return initial ? "/app" : false;
+  }
+  // After the first run the wizard's steps live in Settings, and the app
+  // opens even without Google: it asks for the sign-in itself.
+  if (status.setupDone) {
+    if (path === "/setup/signin") return "/app/settings/google";
+    if (path === "/setup/sources") return "/app/settings/sources";
+    return undefined;
   }
   if (path === "/setup/sources" && !status.googleConnected) return "/setup/signin";
   // The app needs Google; WhatsApp is one source among others.

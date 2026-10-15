@@ -1,10 +1,11 @@
 <script setup lang="ts">
-import { onMounted, ref } from "vue";
+import { onMounted, onUnmounted, ref } from "vue";
 import { Check, FlaskConical, Info } from "lucide-vue-next";
 
 import SettingsCard from "./SettingsCard.vue";
 import SourceMark from "../SourceMark.vue";
 import TelegramLink from "../TelegramLink.vue";
+import WhatsAppLink from "../WhatsAppLink.vue";
 import { api } from "../../api";
 import { isDesktop } from "../../settings";
 import { bestEffortLinks, bestEffortNetworks, stableNetworks } from "../../profileLinks";
@@ -20,9 +21,25 @@ async function unlink(): Promise<void> {
   unlinking.value = false;
 }
 
+// Linking WhatsApp here (the wizard is only for the first run): the QR code
+// shows in place, then the status is watched until WhatsApp reports in.
+const linking = ref(false);
+let poll: number | undefined;
+function watchWhatsApp(): void {
+  window.clearInterval(poll);
+  poll = window.setInterval(async () => {
+    status.value = await api.status();
+    if (status.value.whatsappConnected) {
+      window.clearInterval(poll);
+      linking.value = false;
+    }
+  }, 2000);
+}
+
 onMounted(async () => {
   status.value = await api.status();
 });
+onUnmounted(() => window.clearInterval(poll));
 </script>
 
 <template>
@@ -38,7 +55,17 @@ onMounted(async () => {
         <button v-if="isDesktop" type="button" class="btn btn-ghost btn-sm" :disabled="unlinking" @click="unlink">{{ $t("setup.sources.unlink") }}</button>
       </template>
       <span v-else-if="status?.whatsappStarting" class="badge badge-ghost badge-sm">{{ $t("setup.sources.reconnecting") }}</span>
-      <router-link v-else-if="status" :to="isDesktop ? '/setup/sources' : '/whatsapp'" class="btn btn-sm">{{ $t("dashboard.connect") }}</router-link>
+      <button v-else-if="status && isDesktop && !linking" type="button" class="btn btn-sm" @click="linking = true">{{ $t("dashboard.connect") }}</button>
+      <router-link v-else-if="status && !isDesktop" to="/whatsapp" class="btn btn-sm">{{ $t("dashboard.connect") }}</router-link>
+      <div v-if="linking && !status?.whatsappConnected" class="flex w-full flex-wrap items-start gap-5 rounded-xl border border-base-300 p-4" data-testid="settings-whatsapp-link">
+        <WhatsAppLink :size="180" @connecting="watchWhatsApp" />
+        <ol class="min-w-[12rem] flex-1 list-inside list-decimal space-y-1 text-sm text-base-content/70">
+          <li>{{ $t("whatsapp.step1") }}</li>
+          <li>{{ $t("whatsapp.step2") }}</li>
+          <li>{{ $t("whatsapp.step3") }}</li>
+        </ol>
+        <button type="button" class="btn btn-ghost btn-sm" @click="linking = false">{{ $t("common.cancel") }}</button>
+      </div>
     </div>
     <div class="flex flex-wrap items-center gap-3 py-4">
       <SourceMark source="gravatar" />

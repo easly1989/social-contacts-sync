@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
+import { useRouter } from "vue-router";
 import { ImageOff, ImageUp, Images, Link, MoreVertical, RefreshCw, Search, Tag, Trash2, UserPlus, UsersRound, GitMerge, X } from "lucide-vue-next";
 
 import AppShell from "../../components/AppShell.vue";
@@ -9,6 +10,7 @@ import ContactEditor from "../../components/contacts/ContactEditor.vue";
 import PhotoUpload from "../../components/contacts/PhotoUpload.vue";
 import MergePanel from "../../components/cleanup/MergePanel.vue";
 import { api, withGoogleDetail } from "../../api";
+import { signInAgainIfNeeded } from "../../signInAgain";
 import { displayName, matchesSearch, shrinkImage, toCleanupContact } from "../../contactTools";
 import { number } from "../../format";
 import { Contact, ContactLabel, MergeRequest } from "../../../../interfaces/api";
@@ -16,6 +18,7 @@ import { Contact, ContactLabel, MergeRequest } from "../../../../interfaces/api"
 // Every Google contact (issue #55): the ones without a photo one click away,
 // edit, add, delete, merge, labels and photos uploaded by hand.
 const { t, locale } = useI18n();
+const router = useRouter();
 
 const contacts = ref<Contact[]>();
 const labels = ref<ContactLabel[]>([]);
@@ -36,6 +39,7 @@ async function load(): Promise<void> {
     labels.value = list.labels;
   } catch {
     loadError.value = true;
+    await signInAgainIfNeeded(router);
   }
 }
 onMounted(load);
