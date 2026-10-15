@@ -63,46 +63,68 @@ export interface FacebookItem {
 
 const facebookReserved = new Set(["friends", "groups", "pages", "watch", "marketplace", "events", "photo", "photos", "story.php", "help", "settings", "login", "messages", "notifications", "bookmarks", "me", "hashtag", "reel", "stories"]);
 
-/** Links read from the friends page: profile links only, one per person. */
+/** A Facebook profile address as the app saves it, and its handle; undefined for any other page. */
+function facebookLink(href: string): { handle: string; link: string } | undefined {
+  let url: URL;
+  try {
+    url = new URL(href);
+  } catch {
+    return undefined;
+  }
+  if (!/(^|\.)facebook\.com$/.test(url.hostname)) return undefined;
+  if (url.pathname === "/profile.php") {
+    const id = url.searchParams.get("id");
+    return id && /^\d+$/.test(id) ? { handle: id, link: `https://facebook.com/profile.php?id=${id}` } : undefined;
+  }
+  const parts = url.pathname.split("/").filter(Boolean);
+  const slug = parts[0];
+  if (parts.length !== 1 || !slug || !/^[\w.]{5,50}$/.test(slug) || facebookReserved.has(slug.toLowerCase())) return undefined;
+  return { handle: slug, link: `https://facebook.com/${slug}` };
+}
+
+/**
+ * Links read from the friends page: profile links only, one per person. A
+ * friend's card has two links to the same profile, one around the picture
+ * and one around the name (issue #71), so they're put together by profile.
+ */
 export function facebookPeople(items: FacebookItem[]): ScannedPerson[] {
+  const photos = new Map<string, string>();
+  for (const item of items) {
+    const found = facebookLink(item.href);
+    const img = httpsUrl(item.img);
+    if (found && img && !photos.has(found.handle.toLowerCase())) photos.set(found.handle.toLowerCase(), img);
+  }
   const people = new Map<string, ScannedPerson>();
   for (const item of items) {
-    let url: URL;
-    try {
-      url = new URL(item.href);
-    } catch {
-      continue;
-    }
-    if (!/(^|\.)facebook\.com$/.test(url.hostname)) continue;
+    const found = facebookLink(item.href);
     const name = text(item.name);
-    if (!name || name.length > 80) continue;
-    let handle: string | undefined;
-    let link: string | undefined;
-    if (url.pathname === "/profile.php") {
-      const id = url.searchParams.get("id");
-      if (id && /^\d+$/.test(id)) [handle, link] = [id, `https://facebook.com/profile.php?id=${id}`];
-    } else {
-      const slug = url.pathname.split("/").filter(Boolean)[0];
-      if (slug && /^[\w.]{5,50}$/.test(slug) && !facebookReserved.has(slug.toLowerCase()) && url.pathname.split("/").filter(Boolean).length === 1) [handle, link] = [slug, `https://facebook.com/${slug}`];
-    }
-    if (!handle || !link || people.has(handle.toLowerCase())) continue;
-    people.set(handle.toLowerCase(), { id: `facebook:${handle.toLowerCase()}`, network: "facebook", url: link, handle, name, photoUrl: httpsUrl(item.img), source: "scan", relation: "friend" });
+    if (!found || !name || name.length > 80) continue;
+    const key = found.handle.toLowerCase();
+    if (people.has(key)) continue;
+    people.set(key, { id: `facebook:${key}`, network: "facebook", url: found.link, handle: found.handle, name, photoUrl: httpsUrl(item.img) ?? photos.get(key), source: "scan", relation: "friend" });
   }
   return [...people.values()];
 }
 
 /**
- * Runs in the friends page: the profile links with a name and, next to it,
- * a picture. Kept as source text for executeJavaScript.
+ * Runs in the friends page: every link to a Facebook page, with its text
+ * (or label) and the picture inside it, if any. Kept as source text for
+ * executeJavaScript; facebookPeople keeps the profiles.
  */
 export const facebookExtractScript = `(() => {
   const items = [];
-  for (const a of document.querySelectorAll('a[href*="facebook.com/"], a[href^="/"]')) {
+  for (const a of document.querySelectorAll("a[href]")) {
+    let href;
+    try {
+      href = new URL(a.getAttribute("href"), location.href).href;
+    } catch {
+      continue;
+    }
+    if (!/facebook\\.com\\//.test(href)) continue;
     const name = (a.innerText || a.getAttribute("aria-label") || "").split("\\n")[0].trim();
-    if (!name) continue;
-    const box = a.closest('[role="listitem"], [data-visualcompletion]') || a.parentElement?.parentElement?.parentElement;
-    const img = box && (box.querySelector("img")?.src || box.querySelector("image")?.getAttribute("xlink:href"));
-    items.push({ href: new URL(a.getAttribute("href"), location.href).href, name, img: img || undefined });
+    const image = a.querySelector("image");
+    const img = a.querySelector("img")?.src || (image && (image.getAttribute("xlink:href") || image.getAttribute("href"))) || undefined;
+    if (name || img) items.push({ href, name, img });
   }
   return items;
 })()`;
