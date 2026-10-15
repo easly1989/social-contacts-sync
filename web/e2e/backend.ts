@@ -31,6 +31,7 @@ export class FakeBackend {
     configFile: "D:\\Apps\\SocialContactsSync\\config.env",
     portable: true,
     updates: "notify",
+    autoUpdates: true,
     lastUpdate: { status: "current", checkedAt: new Date(Date.now() - 5 * 60_000).toISOString() },
     rememberSignIns: true,
     history: { runs: 4, bytes: 3_355_443 },
@@ -149,7 +150,7 @@ export class FakeBackend {
         return route.fulfill({ json: { ok: true } });
       }
       if (pathname === "/api/desktop/info") return route.fulfill({ json: this.desktopInfo });
-      const action = /^\/api\/desktop\/(open|check_updates|remember_sign_ins|delete_all_data)$/.exec(pathname);
+      const action = /^\/api\/desktop\/(open|check_updates|install_update|auto_updates|remember_sign_ins|delete_all_data)$/.exec(pathname);
       if (action) {
         const body = request.postDataJSON() ?? {};
         this.desktopActions.push({ route: action[1], body });
@@ -158,6 +159,10 @@ export class FakeBackend {
           return route.fulfill({ json: this.desktopInfo.lastUpdate });
         }
         if (action[1] === "remember_sign_ins") this.desktopInfo.rememberSignIns = body.enabled;
+        if (action[1] === "auto_updates") {
+          this.desktopInfo.autoUpdates = body.enabled;
+          return route.fulfill({ json: this.desktopInfo });
+        }
         return route.fulfill({ json: { ok: true } });
       }
       if (pathname.startsWith("/api/e2e-photos/")) {

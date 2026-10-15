@@ -81,6 +81,14 @@ Get the latest version from the
 | Linux | `.AppImage` (no installation) or `.deb` | AppImage: automatic · deb: notification |
 | macOS | universal `.dmg` | notification |
 
+With automatic updates (Windows installer and AppImage), a new version downloads in
+the background and Settings shows its progress. When you close the app with an
+update ready, you choose: **Update and close**, which installs it with a progress
+window and can open the app again when it's done, or **Close without updating**,
+which offers it again next time. You can also install it from Settings with
+**Update and restart**. Turn off *Automatic updates* in Settings to download a
+new version only when you check for updates.
+
 The packages are not code-signed yet:
 
 - **Windows:** SmartScreen may warn on the first launch; choose *More info → Run anyway*.
@@ -270,6 +278,7 @@ The app stays signed in between launches, unless you turn off
 | `cleanup.json` | clean-up choices, such as groups marked *Not duplicates* |
 | `placeholders.json` | which contacts have a photo uploaded by hand on the Contacts page, so a sync can replace it |
 | `profiles.json` | Find profiles: the people read from your exports, searches and scans, and your answers |
+| `update-pending.json` | for a moment while an update installs: what to do when it's done |
 | `logs/` | server logs |
 
 **Settings** shows these folders and lets you sign out of Google, unlink

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted } from "vue";
 import { useRoute } from "vue-router";
-import { ArrowUpCircle, CircleCheck, ContactRound, HandHeart, History, LayoutDashboard, RefreshCw, Settings, Sparkles, UserRoundSearch } from "lucide-vue-next";
+import { ArrowUpCircle, CircleCheck, ContactRound, Download, HandHeart, History, LayoutDashboard, RefreshCw, Settings, Sparkles, UserRoundSearch } from "lucide-vue-next";
 
 import BrandLogo from "./BrandLogo.vue";
 import GoogleSignIn from "./GoogleSignIn.vue";
@@ -67,8 +67,11 @@ const active = computed(() => (item: (typeof items)[number]) =>
       </router-link>
       <div v-if="version" class="mt-2 flex items-center gap-2 border-t border-base-300 px-3 pt-3 text-xs text-base-content/50" data-testid="app-version">
         <span class="flex-1">v{{ version }}</span>
-        <router-link v-if="update?.status === 'available' || update?.status === 'ready'" to="/app/settings/updates" class="flex items-center gap-1 font-medium text-primary">
-          <ArrowUpCircle class="size-3.5" />{{ $t("settings.updates.newVersion", { version: update.version }) }}
+        <router-link v-if="update?.status === 'downloading'" to="/app/settings/updates" class="flex items-center gap-1 font-medium text-primary">
+          <Download class="size-3.5" />{{ $t("settings.updates.downloadingShort", { version: update.version, progress: update.progress ?? 0 }) }}
+        </router-link>
+        <router-link v-else-if="update?.status === 'available' || update?.status === 'ready'" to="/app/settings/updates" class="flex items-center gap-1 font-medium text-primary">
+          <ArrowUpCircle class="size-3.5" />{{ $t(update.status === "ready" ? "settings.updates.newVersionReady" : "settings.updates.newVersion", { version: update.version }) }}
         </router-link>
         <span v-else-if="update?.status === 'current'" class="flex items-center gap-1"><CircleCheck class="size-3.5 text-success" />{{ $t("settings.updates.upToDate") }}</span>
       </div>

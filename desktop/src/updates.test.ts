@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { findUpdate, isNewer, isPrerelease, pickUpdate, updateFeed, updateStrategy } from "./updates";
+import { autoUpdatesOn, findUpdate, isNewer, isPrerelease, pickUpdate, updateFeed, updateStrategy } from "./updates";
 
 test("which builds update themselves", () => {
   assert.equal(updateStrategy("win32", {}, true), "auto");
@@ -11,6 +11,12 @@ test("which builds update themselves", () => {
   assert.equal(updateStrategy("darwin", {}, true), "notify");
   assert.equal(updateStrategy("win32", {}, false), "none");
   assert.equal(updateStrategy("linux", { APPIMAGE: "/a", SCS_DISABLE_UPDATES: "1" }, true), "none");
+});
+
+test("automatic updates are on unless turned off", () => {
+  assert.equal(autoUpdatesOn({}), true);
+  assert.equal(autoUpdatesOn({ AUTO_UPDATES: "true" }), true);
+  assert.equal(autoUpdatesOn({ AUTO_UPDATES: "false" }), false);
 });
 
 test("semantic version ordering", () => {

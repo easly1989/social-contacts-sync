@@ -23,6 +23,10 @@ GOOGLE_CLIENT_SECRET=
 # Keep Google and WhatsApp signed in between launches (saved encrypted).
 REMEMBER_SIGN_INS=true
 
+# Download updates as soon as they're out (Windows installer and AppImage).
+# With false, they're downloaded only after "Check for updates".
+AUTO_UPDATES=true
+
 # Signs the cookie between the app window and its local server.
 # Generated on first start; changing it only signs you out.
 SESSION_SECRET=${sessionSecret}

@@ -159,10 +159,12 @@ export interface ReviewAnswer {
 
 /** Result of the desktop app's latest update check. */
 export interface UpdateCheck {
-  status: "current" | "available" | "ready" | "error" | "disabled";
+  status: "current" | "available" | "downloading" | "ready" | "error" | "disabled";
   version?: string;
   /** Release page of `version`. */
   url?: string;
+  /** While downloading, 0–100. */
+  progress?: number;
   checkedAt: string;
 }
 
@@ -175,6 +177,8 @@ export interface DesktopInfo {
   portable: boolean;
   /** How this package updates: by itself, by notifying, or not at all (development). */
   updates: "auto" | "notify" | "none";
+  /** "Automatic updates": download as soon as it's out, or only when asked. */
+  autoUpdates: boolean;
   lastUpdate?: UpdateCheck;
   rememberSignIns: boolean;
   history: { runs: number; bytes: number };
