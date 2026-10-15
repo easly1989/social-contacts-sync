@@ -43,6 +43,9 @@ async function launch(config: string | undefined, env: NodeJS.ProcessEnv = {}): 
       SCS_DATA_DIR: dataDir,
       // Any existing file skips the browser lookup/download; WhatsApp isn't started here.
       CHROME_PATH: process.execPath,
+      // A packaged Windows build updates itself: without this it would download
+      // the latest release and ask what to do with it when the test closes it.
+      SCS_DISABLE_UPDATES: "1",
       ...env,
     },
   });
