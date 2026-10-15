@@ -10,6 +10,7 @@ import { ContactsApi, Person, peopleContactsApi } from "../src/cleanup/people";
 import { CleanupAction, getScan, saveAction } from "../src/cleanup/store";
 import { duplicatePerson, hasName, newPerson, parseInput, personUpdate, toContact, userGroup, withLabel } from "../src/contacts/model";
 import { clearPlaceholder, getPlaceholders, markPlaceholder, prunePlaceholders } from "../src/contacts/placeholders";
+import { getKeptPhotos, setKeptPhoto } from "../src/contacts/keptPhotos";
 import { addContactLink } from "../src/contactLinks";
 import { getLookup } from "../src/linkLookups";
 import { answeredRevoked } from "../src/googleSignIn";
@@ -56,7 +57,7 @@ export function contactsRouter(contactsApi: (auth: OAuth2Client) => ContactsApi 
   const ids = (value: unknown): string[] =>
     Array.isArray(value) ? [...new Set(value.filter((id): id is string => typeof id === "string" && /^people\/[\w-]+$/.test(id)))].slice(0, maxBatch) : [];
   const contactId = (req: Request) => `people/${String(req.params.id)}`;
-  const view = (req: Request, person: Person): Contact => toContact(person, getPlaceholders(req.sessionID));
+  const view = (req: Request, person: Person): Contact => toContact(person, getPlaceholders(req.sessionID), getKeptPhotos(req.sessionID));
 
   router.param("id", (_req, res, next, id) => (/^[\w-]+$/.test(String(id)) ? next() : res.status(404).send({ error: "not_found" })));
 
@@ -71,7 +72,9 @@ export function contactsRouter(contactsApi: (auth: OAuth2Client) => ContactsApi 
     if (!api) return;
     try {
       const [people, labels] = await Promise.all([api.list(), api.groups()]);
-      const contacts = people.filter((p) => p.resourceName).map((p) => toContact(p, getPlaceholders(req.sessionID)));
+      const placeholders = getPlaceholders(req.sessionID);
+      const kept = getKeptPhotos(req.sessionID);
+      const contacts = people.filter((p) => p.resourceName).map((p) => toContact(p, placeholders, kept));
       prunePlaceholders(req.sessionID, new Map(contacts.map((c) => [c.id, c.photoUrl])));
       res.send({ contacts, labels: labels.sort((a, b) => a.name.localeCompare(b.name)) });
     } catch (e) {
@@ -233,7 +236,11 @@ export function contactsRouter(contactsApi: (auth: OAuth2Client) => ContactsApi 
       await beforeWrite(req);
       await api.setPhoto(contactId(req), bytes.toString("base64"));
       const person = await api.get(contactId(req));
-      markPlaceholder(req.sessionID, contactId(req), toContact(person).photoUrl);
+      // `?as=kept`: a photo the app keeps (issue #67); otherwise a placeholder.
+      const kept = req.query.as === "kept";
+      setKeptPhoto(req.sessionID, contactId(req), kept);
+      if (kept) clearPlaceholder(req.sessionID, contactId(req));
+      else markPlaceholder(req.sessionID, contactId(req), toContact(person).photoUrl);
       res.send(view(req, person));
     } catch (e) {
       failed(res, "Uploading a photo", e);
@@ -247,9 +254,27 @@ export function contactsRouter(contactsApi: (auth: OAuth2Client) => ContactsApi 
       await beforeWrite(req);
       await api.deletePhoto(contactId(req));
       clearPlaceholder(req.sessionID, contactId(req));
+      setKeptPhoto(req.sessionID, contactId(req), false);
       res.send(view(req, await api.get(contactId(req))));
     } catch (e) {
       failed(res, "Removing a photo", e);
+    }
+  });
+
+  // "Keep this photo" (issue #67): no sync or Find profiles replaces it.
+  router.put("/contacts/:id/keep_photo", async (req: Request, res: Response) => {
+    if (!jsonOnly(req, res)) return;
+    const api = google(req, res);
+    if (!api) return;
+    if (typeof req.body?.kept !== "boolean") return res.status(400).send({ error: "kept_required" });
+    try {
+      const person = await api.get(contactId(req));
+      if (req.body.kept && !toContact(person).hasPhoto) return res.status(409).send({ error: "no_photo" });
+      setKeptPhoto(req.sessionID, contactId(req), req.body.kept);
+      if (req.body.kept) clearPlaceholder(req.sessionID, contactId(req));
+      res.send(view(req, person));
+    } catch (e) {
+      failed(res, "Keeping a photo", e);
     }
   });
 

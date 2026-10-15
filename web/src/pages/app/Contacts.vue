@@ -2,7 +2,7 @@
 import { computed, onMounted, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
 import { useRouter } from "vue-router";
-import { ImageOff, ImageUp, Images, Link, MoreVertical, RefreshCw, Search, Tag, Trash2, UserPlus, UsersRound, GitMerge, X } from "lucide-vue-next";
+import { ImageOff, ImageUp, Images, Link, MoreVertical, RefreshCw, Search, Tag, Trash2, UserPlus, UsersRound, GitMerge, X, Lock } from "lucide-vue-next";
 
 import AppShell from "../../components/AppShell.vue";
 import ContactAvatar from "../../components/ContactAvatar.vue";
@@ -25,7 +25,7 @@ const contacts = ref<Contact[]>();
 const labels = ref<ContactLabel[]>([]);
 const loadError = ref(false);
 
-type Filter = "all" | "noPhoto" | "placeholder";
+type Filter = "all" | "noPhoto" | "placeholder" | "kept";
 const filter = ref<Filter>("noPhoto");
 const query = ref("");
 const label = ref("");
@@ -48,16 +48,18 @@ const counts = computed(() => ({
   all: contacts.value?.length ?? 0,
   noPhoto: contacts.value?.filter((c) => !c.hasPhoto).length ?? 0,
   placeholder: contacts.value?.filter((c) => c.placeholder).length ?? 0,
+  kept: contacts.value?.filter((c) => c.photoKept).length ?? 0,
 }));
 const tiles = [
   { key: "all", icon: UsersRound },
   { key: "noPhoto", icon: ImageOff },
   { key: "placeholder", icon: ImageUp },
+  { key: "kept", icon: Lock },
 ] as const;
 
 const filtered = computed(() =>
   (contacts.value ?? [])
-    .filter((c) => (filter.value === "noPhoto" ? !c.hasPhoto : filter.value === "placeholder" ? c.placeholder : true))
+    .filter((c) => (filter.value === "noPhoto" ? !c.hasPhoto : filter.value === "placeholder" ? c.placeholder : filter.value === "kept" ? c.photoKept : true))
     .filter((c) => !label.value || c.labels.includes(label.value))
     .filter((c) => matchesSearch(c, query.value))
     .sort((a, b) => (displayName(a) || "￿").localeCompare(displayName(b) || "￿", locale.value))
@@ -135,6 +137,18 @@ async function rowPhotoChosen(event: Event): Promise<void> {
   try {
     replace(await api.uploadPhoto(id, await shrinkImage(file)));
     notify(t("contacts.photoAdded"));
+  } catch (e) {
+    notifyError(t("contacts.errors.photo"), e);
+  }
+  busyRow.value = undefined;
+}
+
+// "Keep this photo" from a row's menu (issue #67).
+async function keepPhoto(contact: Contact, kept: boolean): Promise<void> {
+  busyRow.value = contact.id;
+  try {
+    replace(await api.keepPhoto(contact.id, kept));
+    notify(t(kept ? "contacts.keptOn" : "contacts.keptOff", { name: displayName(contact) }));
   } catch (e) {
     notifyError(t("contacts.errors.photo"), e);
   }
@@ -237,7 +251,7 @@ const uploading = ref(false);
     </template>
 
     <div v-if="contacts" class="flex flex-col gap-4">
-      <div class="grid grid-cols-3 gap-2 sm:gap-4" role="group" :aria-label="$t('contacts.filters')">
+      <div class="grid grid-cols-2 gap-2 sm:grid-cols-4 sm:gap-4" role="group" :aria-label="$t('contacts.filters')">
         <button
           v-for="tile in tiles"
           :key="tile.key"
@@ -316,7 +330,8 @@ const uploading = ref(false);
                         {{ displayName(contact) || $t("cleanup.noName") }}
                         <span v-for="id in contact.labels" :key="id" class="badge badge-ghost badge-xs">{{ labelName(id) }}</span>
                       </span>
-                      <span v-if="contact.placeholder" class="badge badge-warning badge-soft badge-xs">{{ $t("contacts.placeholder") }}</span>
+                      <span v-if="contact.photoKept" class="badge badge-info badge-soft badge-xs gap-1"><Lock class="size-3" />{{ $t("contacts.kept") }}</span>
+                      <span v-else-if="contact.placeholder" class="badge badge-warning badge-soft badge-xs">{{ $t("contacts.placeholder") }}</span>
                       <span v-else-if="!contact.hasPhoto" class="block text-[11px] text-base-content/50">{{ $t("contacts.noPhoto") }}</span>
                     </span>
                   </button>
@@ -335,6 +350,9 @@ const uploading = ref(false);
                     <summary class="btn btn-ghost btn-xs btn-square" :aria-label="$t('contacts.more', { name: displayName(contact) || '—' })"><MoreVertical class="size-3.5" /></summary>
                     <ul class="menu dropdown-content z-10 w-44 rounded-box border border-base-300 bg-base-100 p-1 shadow-lg">
                       <li><button type="button" @click="openEditor(contact)">{{ $t("contacts.edit") }}</button></li>
+                      <li v-if="contact.hasPhoto">
+                        <button type="button" @click="keepPhoto(contact, !contact.photoKept)">{{ contact.photoKept ? $t("contacts.allowReplacing") : $t("contacts.keepPhoto") }}</button>
+                      </li>
                       <li><button type="button" @click="duplicate(contact)">{{ $t("contacts.duplicate") }}</button></li>
                       <li>
                         <button type="button" class="text-error" @click="deleteSelected([contact.id])">{{ $t("contacts.delete") }}</button>

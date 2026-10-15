@@ -22,10 +22,13 @@ import { getPrefs } from "./cleanup/store";
 import { inferRegion, toE164Digits } from "./phone";
 import { SimpleContact } from "./interfaces";
 import { getPlaceholders, isPlaceholder } from "./contacts/placeholders";
+import { getKeptPhotos } from "./contacts/keptPhotos";
 
-/** Marks the contacts whose photo is a placeholder from the Contacts page. */
-export function withPlaceholders(contacts: SimpleContact[], placeholders: Record<string, string>): SimpleContact[] {
-  return contacts.map((c) => (isPlaceholder(placeholders, c.id, c.photoUrl) ? { ...c, placeholder: true } : c));
+/** Marks the contacts whose photo is a placeholder, or kept, from the Contacts page. */
+export function withPlaceholders(contacts: SimpleContact[], placeholders: Record<string, string>, kept: Set<string> = new Set()): SimpleContact[] {
+  return contacts.map((c) =>
+    c.hasPhoto && kept.has(c.id) ? { ...c, photoKept: true } : isPlaceholder(placeholders, c.id, c.photoUrl) ? { ...c, placeholder: true } : c
+  );
 }
 
 const knownSources: SourceId[] = ["whatsapp", "telegram", "gravatar", "links"];
@@ -78,7 +81,8 @@ export async function initSync(id: string, syncOptions: SyncOptions) {
         listContacts: async () =>
           withPlaceholders(
             withoutSharedNumbers(await listContacts(gAuth), getPrefs(id).sharedNumbers, inferRegion(whatsappClient?.info?.wid?.user)),
-            getPlaceholders(id)
+            getPlaceholders(id),
+            getKeptPhotos(id)
           ),
         currentPhoto: downloadContactPhoto,
         setPhoto: (contactId, photo) => updateContactPhoto(gAuth, contactId, photo),

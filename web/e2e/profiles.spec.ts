@@ -94,6 +94,24 @@ test("a contact that already has a photo keeps it unless a photo is picked by ha
   });
 });
 
+test("a kept photo: only the links, no photo offered (issue #67)", async ({ page }) => {
+  const davide = backend.profiles!.suggestions[0];
+  Object.assign(davide, { hasPhoto: true, photoKept: true, photoUrl: "/api/e2e-photos/7" });
+  backend.profiles!.suggestions = [davide];
+  await page.goto("/app/profiles");
+  const card = page.getByTestId("profile-card");
+  await expect(card).toContainText("This contact's photo is kept: only the links are added.");
+  await expect(card.getByRole("checkbox", { name: "Use this photo" })).toHaveCount(0);
+  await screenshot(page, "71c-profiles-kept-photo", { fullPage: false });
+  await card.getByRole("button", { name: "Link 2 profiles" }).click();
+  expect(backend.profileRequests.find((r) => r.route === "/link")!.body).toEqual({
+    contactId: "people/dg",
+    name: "Davide Gallo",
+    personIds: ["linkedin:davidegallo", "bluesky:dgallo.bsky.social"],
+    rejectIds: ["instagram:davide.gallo", "instagram:davegalloni"],
+  });
+});
+
 test("one at a time: keys tick profiles, link, and None of these; Linked has undo", async ({ page }) => {
   await page.goto("/app/profiles");
   await page.getByRole("button", { name: "One at a time" }).click();

@@ -52,7 +52,9 @@
   photo one click away: edit every field, add, duplicate, delete, merge and
   label them, add a profile link to anyone, and upload photos by hand, one at a
   time or many at once. A photo uploaded by hand is a placeholder: the next sync
-  replaces it as soon as a source has a real one.
+  replaces it as soon as a source has a real one. Or keep a photo: then no sync
+  and no Find profiles replaces it, while links to WhatsApp and social profiles
+  still work for that contact.
 - **Clean up.** Find duplicate contacts and merge them field by field, find
   numbers saved on different people, and add missing country codes. Every
   change is backed up and can be undone from History.
@@ -279,6 +281,7 @@ The app stays signed in between launches, unless you turn off
 | `history/cleanup/` | backups of merged contacts (all their fields and photos), for undo (kept 90 days) |
 | `cleanup.json` | clean-up choices, such as groups marked *Not duplicates* |
 | `placeholders.json` | which contacts have a photo uploaded by hand on the Contacts page, so a sync can replace it |
+| `kept-photos.json` | which contacts' photos are kept: the app never replaces them |
 | `profiles.json` | Find profiles: the people read from your exports, searches and scans, and your answers |
 | `update-pending.json` | for a moment while an update installs: what to do when it's done |
 | `logs/` | server logs |

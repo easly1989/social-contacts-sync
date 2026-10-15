@@ -247,3 +247,37 @@ test("prefix, middle name and suffix are editable, a double click opens a row, p
   await row(page, /Davide Gallo/).getByRole("checkbox").dblclick();
   await expect(editor).toBeHidden();
 });
+
+test("kept photos: from a row, the editor and an upload; never offered for replacing (issue #67)", async ({ page }) => {
+  await page.goto("/app/contacts");
+  await page.getByTestId("tile-all").click();
+  // From a row's menu.
+  await row(page, /Marco Rossi/).getByLabel("More for Marco Rossi").click();
+  await row(page, /Marco Rossi/).getByRole("button", { name: "Keep this photo" }).click();
+  await expect(page.getByRole("status").filter({ hasText: "Marco Rossi's photo is kept: the app won't replace it." })).toBeVisible();
+  expect(sent("/mr/keep_photo", "PUT")[0].body).toEqual({ kept: true });
+  await expect(row(page, /Marco Rossi/)).toContainText("Kept");
+
+  // From the editor: Elena's placeholder becomes a kept photo.
+  await row(page, /Elena Conti/).getByRole("button", { name: /Elena Conti/ }).click();
+  const editor = page.getByTestId("contact-editor");
+  await editor.getByRole("checkbox", { name: /Keep this photo/ }).check();
+  await expect(editor.getByTestId("kept-badge")).toBeVisible();
+  await expect(editor).not.toContainText("A photo you upload is a placeholder");
+  await screenshot(page, "64b-contacts-kept-editor", { fullPage: false });
+  await editor.getByRole("button", { name: "Close" }).first().click();
+  await page.getByTestId("tile-kept").click();
+  await expect(page.getByTestId("tile-kept")).toContainText("2");
+  await expect(page.getByRole("row", { name: /Elena Conti/ })).toBeVisible();
+  await expect(page.getByRole("row", { name: /Davide Gallo/ })).toHaveCount(0);
+
+  // Uploaded as kept photos.
+  await page.getByRole("button", { name: "Upload photos" }).click();
+  const dialog = page.getByTestId("photo-upload");
+  await dialog.getByTestId("upload-input").setInputFiles([image("Davide Gallo.jpg", 0)]);
+  await dialog.getByRole("radio", { name: /Kept photos/ }).check();
+  await screenshot(page, "64c-contacts-upload-kept", { fullPage: false });
+  await dialog.getByRole("button", { name: "Upload 1 photo" }).click();
+  await expect(dialog).toContainText("1 uploaded");
+  expect(backend.contacts.find((c) => c.id === "people/dg")!.photoKept).toBe(true);
+});

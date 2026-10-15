@@ -7,6 +7,7 @@ import { ContactsApi, peopleContactsApi } from "../src/cleanup/people";
 import { addContactLinks, removeContactLink } from "../src/contactLinks";
 import { toContact } from "../src/contacts/model";
 import { clearPlaceholder, getPlaceholders } from "../src/contacts/placeholders";
+import { getKeptPhotos } from "../src/contacts/keptPhotos";
 import { askDesktop, desktopMode } from "../src/desktop";
 import { answeredRevoked, expireGoogleSignIn, isRevokedSignIn } from "../src/googleSignIn";
 import { googleErrorMessage } from "../src/googleRetry";
@@ -104,7 +105,8 @@ export function profilesRouter(options: Options = {}): express.Router {
     const cached: { at: number; contacts: Contact[] } | undefined = getFromCache(req.sessionID, "profiles_contacts");
     if (!fresh && cached && Date.now() - cached.at < 2 * 60 * 1000) return cached.contacts;
     const placeholders = getPlaceholders(req.sessionID);
-    const list = (await api.list()).filter((p) => p.resourceName).map((p) => toContact(p, placeholders));
+    const kept = getKeptPhotos(req.sessionID);
+    const list = (await api.list()).filter((p) => p.resourceName).map((p) => toContact(p, placeholders, kept));
     setInCache(req.sessionID, "profiles_contacts", { at: Date.now(), contacts: list });
     return list;
   }
@@ -129,6 +131,7 @@ export function profilesRouter(options: Options = {}): express.Router {
         photoUrl: c.photoUrl,
         hasPhoto: c.hasPhoto,
         placeholder: c.placeholder,
+        photoKept: c.photoKept,
         detail: [c.phones[0]?.value, c.emails[0]?.value, c.company].filter(Boolean).join(" · ") || undefined,
         candidates,
       }));
@@ -255,11 +258,12 @@ export function profilesRouter(options: Options = {}): express.Router {
     const persons = request.personIds.map((id) => data.people.find((p) => p.id === id)).filter((p): p is SocialPerson => Boolean(p));
     if (!persons.length) throw Object.assign(new Error("not_found"), { status: 404 });
     const { contactId } = request;
-    const before = toContact(await api.get(contactId), getPlaceholders(sessionId));
+    const before = toContact(await api.get(contactId), getPlaceholders(sessionId), getKeptPhotos(sessionId));
     const added = await addContactLinks(api, contactId, persons.map((p) => p.url));
     let photoSet = false;
     let previousPhoto: string | null | undefined;
-    const photoPerson = persons.find((p) => p.id === request.photoFrom);
+    // A kept photo (issue #67) is never replaced: only the links are added.
+    const photoPerson = before.photoKept ? undefined : persons.find((p) => p.id === request.photoFrom);
     if (photoPerson) {
       const photo = await profilePhoto(photoPerson);
       if (photo) {
