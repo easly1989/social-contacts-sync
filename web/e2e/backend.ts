@@ -2,7 +2,7 @@ import { mkdirSync } from "fs";
 import path from "path";
 import { Page, Request, Route, WebSocketRoute, expect } from "@playwright/test";
 
-import { Contact, ContactLabel, TelegramState, CleanupActionSummary, CleanupScan, DesktopInfo, EventType, MergeRequest, GoogleAccount, GoogleStats, RunRecord, SessionStatus, UpdateCheck } from "../../interfaces/api";
+import { ProfilesOverview, Contact, ContactLabel, TelegramState, CleanupActionSummary, CleanupScan, DesktopInfo, EventType, MergeRequest, GoogleAccount, GoogleStats, RunRecord, SessionStatus, UpdateCheck } from "../../interfaces/api";
 import { avatars } from "./avatars";
 
 /**
@@ -61,6 +61,9 @@ export class FakeBackend {
   contacts: Contact[] = [];
   labels: ContactLabel[] = [];
   contactRequests: { method: string; route: string; body?: any; bytes?: number }[] = [];
+  /** Find profiles (issue #61): what the page reads, and every request it sends. */
+  profiles?: ProfilesOverview;
+  profileRequests: { route: string; body?: any; query?: string }[] = [];
   /** /api/status waits for this, to show what the page looks like while it loads. */
   statusGate?: Promise<void>;
   /** When false, Google sign-in "opens in the system browser" and nothing happens here. */
@@ -162,6 +165,7 @@ export class FakeBackend {
         return route.fulfill({ contentType: "image/jpeg", body: Buffer.from(avatar, "base64") });
       }
       if (pathname.startsWith("/api/contacts")) return this.contactsRoute(route, pathname, request);
+      if (pathname.startsWith("/api/profiles")) return this.profilesRoute(route, pathname, request);
       if (pathname.startsWith("/api/cleanup")) return this.cleanup(route, pathname, request);
       if (pathname.startsWith("/api/telegram")) return this.telegramRoute(route, pathname, request);
       if (pathname === "/api/check_purchase")
@@ -265,6 +269,56 @@ export class FakeBackend {
     if (undo) {
       const action = this.cleanupActions.find((a) => a.id === decodeURIComponent(undo[1]));
       if (action) action.undone = true;
+      return route.fulfill({ json: { ok: true } });
+    }
+    return route.fulfill({ status: 404, json: { error: "not_found" } });
+  }
+
+  private profilesRoute(route: Route, pathname: string, request: Request) {
+    const data = this.profiles!;
+    const sub = pathname.replace("/api/profiles", "") || "/";
+    const body = request.headers()["content-type"]?.startsWith("application/json") ? request.postDataJSON() : request.postData() ?? undefined;
+    if (sub !== "/") this.profileRequests.push({ route: sub, body, query: new URL(request.url()).search });
+    const drop = (contactId: string) => (data.suggestions = data.suggestions.filter((s) => s.contactId !== contactId));
+    if (sub === "/") return route.fulfill({ json: data });
+    if (sub === "/import") {
+      const network = new URL(request.url()).searchParams.get("network")!;
+      const source = data.sources.find((s) => s.network === network)!;
+      source.people += 312;
+      source.imported = new Date().toISOString();
+      return route.fulfill({ json: { read: 312, added: 312 } });
+    }
+    if (sub === "/search") {
+      Object.assign(data.search, { running: true, networks: body.networks, checked: 0, total: 781, found: {} });
+      return route.fulfill({ json: data.search });
+    }
+    if (sub === "/search/stop") {
+      data.search.running = false;
+      return route.fulfill({ json: data.search });
+    }
+    if (sub === "/link") {
+      const suggestion = data.suggestions.find((s) => s.contactId === body.contactId)!;
+      const person = suggestion.candidates.find((c) => c.person.id === body.personId)!.person;
+      const linked = { contactId: body.contactId, name: suggestion.name, person, at: new Date().toISOString(), photoSet: body.usePhoto };
+      data.linked.unshift(linked);
+      drop(body.contactId);
+      return route.fulfill({ json: { linked, photoWanted: body.usePhoto } });
+    }
+    if (sub === "/undo") {
+      data.linked.find((l) => l.contactId === body.contactId && l.person.id === body.personId)!.undone = true;
+      return route.fulfill({ json: { ok: true } });
+    }
+    if (sub === "/reject" || sub === "/skip") {
+      drop(body.contactId);
+      return route.fulfill({ json: { ok: true } });
+    }
+    const scan = /^\/scan\/(\w+)$/.exec(sub);
+    if (scan) {
+      const state = data.scans!.find((s) => s.network === body.network)!;
+      if (scan[1] === "login") state.loggedIn = true;
+      if (scan[1] === "logout") state.loggedIn = false;
+      if (scan[1] === "start") Object.assign(state, { running: true, read: 0 });
+      if (scan[1] === "stop") state.running = false;
       return route.fulfill({ json: { ok: true } });
     }
     return route.fulfill({ status: 404, json: { error: "not_found" } });

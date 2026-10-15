@@ -40,6 +40,12 @@
   review each one with the keyboard.
 - **Nothing changes without a way back.** Every sync has a report and can be
   undone, as a whole or one contact at a time.
+- **Find profiles.** Suggests the social profiles of your contacts, to confirm
+  one contact at a time: from your own Instagram and LinkedIn data exports, a
+  public search by name on Bluesky, Mastodon and GitHub, and, experimental and
+  off by default, a slow scan of your own followers, friends and connections
+  with your Instagram, Facebook or LinkedIn login (against those sites' terms:
+  your account may be limited or suspended).
 - **Contacts.** Every Google contact in one list, with the ones still without a
   photo one click away: edit every field, add, duplicate, delete, merge and
   label them, add a profile link to anyone, and upload photos by hand, one at a
@@ -263,6 +269,7 @@ The app stays signed in between launches, unless you turn off
 | `history/cleanup/` | backups of merged contacts (all their fields and photos), for undo (kept 90 days) |
 | `cleanup.json` | clean-up choices, such as groups marked *Not duplicates* |
 | `placeholders.json` | which contacts have a photo uploaded by hand on the Contacts page, so a sync can replace it |
+| `profiles.json` | Find profiles: the people read from your exports, searches and scans, and your answers |
 | `logs/` | server logs |
 
 **Settings** shows these folders and lets you sign out of Google, unlink

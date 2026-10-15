@@ -34,6 +34,7 @@ const routes: RouteRecordRaw[] = [
   { path: "/app/history/:id", component: () => import("./pages/app/RunReport.vue") },
   { path: "/app/cleanup", component: () => import("./pages/app/Cleanup.vue") },
   { path: "/app/contacts", component: () => import("./pages/app/Contacts.vue") },
+  { path: "/app/profiles", component: () => import("./pages/app/Profiles.vue") },
   { path: "/app/settings", redirect: "/app/settings/general" },
   { path: "/app/settings/:section", component: () => import("./pages/app/Settings.vue") },
   { path: "/options", redirect: "/app/sync" },

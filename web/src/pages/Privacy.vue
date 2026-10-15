@@ -29,7 +29,8 @@ const userDataPolicy = "https://developers.google.com/terms/api-services-user-da
         <li><code>config.env</code>: le credenziali del tuo progetto Google e le preferenze;</li>
         <li>gli accessi a Google e Telegram, cifrati con il portachiavi del sistema operativo, e la sessione di WhatsApp come dispositivo collegato;</li>
         <li>la cronologia delle sincronizzazioni e i backup della pulizia (foto e dati dei contatti modificati), conservati per 90 giorni per poterli annullare;</li>
-        <li>le scelte della pulizia (per esempio i gruppi segnati come «non duplicati»), quali contatti hanno una foto caricata a mano dalla pagina Contatti, e i log dell'app.</li>
+        <li>le scelte della pulizia (per esempio i gruppi segnati come «non duplicati»), quali contatti hanno una foto caricata a mano dalla pagina Contatti, e i log dell'app;</li>
+        <li>Trova profili: le persone lette dagli export che importi, dalle ricerche pubbliche e dalle scansioni col login, con le tue risposte; e, se accedi a Instagram, Facebook o LinkedIn per la scansione, la sessione di quel sito, tenuta separata dal resto dell'app.</li>
       </ul>
       <p>L'app si collega solo a:</p>
       <ul>
@@ -37,6 +38,8 @@ const userDataPolicy = "https://developers.google.com/terms/api-services-user-da
         <li><strong>WhatsApp Web</strong>, per leggere le foto profilo dei tuoi contatti;</li>
         <li><strong>Telegram</strong>, se accedi: legge solo i tuoi contatti Telegram esistenti e le loro foto, senza aggiungere nulla al tuo account;</li>
         <li><strong>Gravatar</strong>, se attivi questa sorgente: riceve l'hash SHA-256 degli indirizzi email dei contatti, non gli indirizzi;</li>
+        <li><strong>Bluesky, mastodon.social e GitHub</strong>, quando avvii la ricerca pubblica di Trova profili: l'app invia alla loro ricerca nome e cognome dei tuoi contatti, uno alla volta;</li>
+        <li><strong>Instagram, Facebook e LinkedIn</strong>, solo se vi accedi per la scansione di Trova profili: l'app legge lì i tuoi follower, amici o collegamenti, come fa la loro pagina;</li>
         <li><strong>i siti dei link ai profili</strong> salvati nei tuoi contatti (per esempio X, Telegram, YouTube, Bluesky, Mastodon, GitHub e, solo se lo attivi, Instagram, Facebook e LinkedIn), se attivi questa sorgente: l'app apre la pagina pubblica del profilo, senza accesso e senza inviare altri dati dei contatti, per leggerne la foto;</li>
         <li><strong>GitHub</strong>, per controllare se c'è una nuova versione;</li>
         <li><strong>Google (Chrome for Testing)</strong>, una sola volta, per scaricare un browser se non ne trova uno installato.</li>
@@ -89,7 +92,8 @@ const userDataPolicy = "https://developers.google.com/terms/api-services-user-da
         <li><code>config.env</code>: your own Google project's credentials and your preferences;</li>
         <li>your Google and Telegram sign-ins, encrypted with the operating system's keychain, and WhatsApp's linked-device session;</li>
         <li>sync history and clean-up backups (photos and data of the contacts that changed), kept for 90 days so they can be undone;</li>
-        <li>clean-up choices (such as groups marked "Not duplicates"), which contacts have a photo you uploaded by hand on the Contacts page, and the app's logs.</li>
+        <li>clean-up choices (such as groups marked "Not duplicates"), which contacts have a photo you uploaded by hand on the Contacts page, and the app's logs;</li>
+        <li>Find profiles: the people read from the exports you import, the public searches and the login scans, with your answers; and, if you log in to Instagram, Facebook or LinkedIn for the scan, that site's session, kept apart from the rest of the app.</li>
       </ul>
       <p>The app only connects to:</p>
       <ul>
@@ -97,6 +101,8 @@ const userDataPolicy = "https://developers.google.com/terms/api-services-user-da
         <li><strong>WhatsApp Web</strong>, to read your contacts' profile photos;</li>
         <li><strong>Telegram</strong>, when you sign in: it reads only your existing Telegram contacts and their photos, and adds nothing to your account;</li>
         <li><strong>Gravatar</strong>, when you turn that source on: it receives the SHA-256 hash of your contacts' email addresses, not the addresses;</li>
+        <li><strong>Bluesky, mastodon.social and GitHub</strong>, when you start Find profiles' public search: the app sends the first and last name of your contacts to their search, one at a time;</li>
+        <li><strong>Instagram, Facebook and LinkedIn</strong>, only if you log in to them for Find profiles' scan: the app reads your own followers, friends or connections there, as their page does;</li>
         <li><strong>the sites of the profile links</strong> saved on your contacts (for example X, Telegram, YouTube, Bluesky, Mastodon, GitHub and, only if you turn them on, Instagram, Facebook and LinkedIn), when you turn that source on: the app opens the profile's public page, without signing in and without sending any other contact data, to read its picture;</li>
         <li><strong>GitHub</strong>, to check for a new version;</li>
         <li><strong>Google (Chrome for Testing)</strong>, once, to download a browser if none is installed.</li>
