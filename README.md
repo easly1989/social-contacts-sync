@@ -66,8 +66,16 @@
 | Sync photos | Report and undo |
 |---|---|
 | ![Sync setup](docs/images/sync-setup.png) | ![Sync report](docs/images/sync-report.png) |
+| **Contacts** | **Edit every field, or keep a photo** |
+| ![Contacts](docs/images/contacts.png) | ![Contact editor](docs/images/contact-edit.png) |
+| **Find profiles** | **Where the profiles come from** |
+| ![Find profiles](docs/images/find-profiles.png) | ![Find profiles sources](docs/images/find-profiles-sources.png) |
+| **Add a profile link from a report** | **Updates with progress** |
+| ![Add a profile link](docs/images/report-add-link.png) | ![Update ready](docs/images/updates.png) |
 | **Clean up duplicates** | **Setup wizard** |
 | ![Clean up](docs/images/cleanup.png) | ![Google project setup](docs/images/setup-google.png) |
+
+What changed in each version: [CHANGELOG](CHANGELOG.md).
 
 <p align="center">
     <img src="docs/images/dashboard-dark.png" alt="Dark theme" width="560"/>
