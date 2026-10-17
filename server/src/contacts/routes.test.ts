@@ -158,6 +158,30 @@ test("a photo from a profile link is a real photo and saves the link", async (t)
   assert.equal(google.photos.get("people/c"), "TElOSw==");
 });
 
+test("a photo from a profile link follows that profile until unpinned or replaced by hand (issue #78)", async (t) => {
+  const { call } = await start(t, "contacts-78");
+  const fromLink = async () => {
+    const lookup = saveLookup("contacts-78", { photo: "TElOSw==", link: parseProfileLink("https://x.com/elena")! });
+    return call("POST", "/contacts/c/photo_from_link", { token: lookup.token });
+  };
+  const pinned = { source: "links", network: "X", matchedBy: "x.com/elena" };
+  assert.deepEqual((await fromLink()).json.photoFrom, pinned);
+  assert.deepEqual((await call("GET", "/contacts")).json.contacts[2].photoFrom, pinned);
+
+  // Unpinned: the photo stays.
+  const unpinned = await call("DELETE", "/contacts/c/pin");
+  assert.equal(unpinned.json.photoFrom, undefined);
+  assert.equal(unpinned.json.hasPhoto, true);
+
+  // A photo uploaded by hand, or removed, no longer follows the profile.
+  await fromLink();
+  assert.equal((await call("PUT", "/contacts/c/photo", Buffer.alloc(2048, 3), "image/jpeg")).json.photoFrom, undefined);
+  await fromLink();
+  await call("DELETE", "/contacts/c/photo");
+  await call("PUT", "/contacts/c/photo?as=kept", Buffer.alloc(2048, 4), "image/jpeg");
+  assert.equal((await call("GET", "/contacts")).json.contacts[2].photoFrom, undefined);
+});
+
 test("duplicate, labels, merge and delete with undo from History", async (t) => {
   const { google, call } = await start(t, "contacts-4");
   const copy = await call("POST", "/contacts/c/duplicate");

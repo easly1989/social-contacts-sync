@@ -1,7 +1,10 @@
 import crypto from "crypto";
 
-import { ContactResult, ReviewCandidate, RunRecord, SourceId, SyncCounters, SyncProgress } from "../../interfaces/api";
+import { ContactResult, PhotoPin, ReviewCandidate, RunRecord, SourceId, SyncCounters, SyncProgress } from "../../interfaces/api";
 import { SimpleContact } from "./interfaces";
+import { photoKey } from "./contacts/model";
+import { photoHash } from "./contacts/photoPins";
+import { parseProfileLink, shortLink } from "./sources/links";
 import { FoundPhoto, PhotoSource } from "./sources/types";
 import { Base64 } from "./types";
 import { googleErrorMessage } from "./googleRetry";
@@ -17,9 +20,12 @@ export type SyncMode = "fill" | "replace" | "review";
 export interface SyncTarget {
   listContacts(): Promise<SimpleContact[]>;
   currentPhoto(contact: SimpleContact): Promise<Base64 | null>;
-  setPhoto(contactId: string, photo: Base64): Promise<void>;
+  /** Resolves with Google's address for the new photo, when it gives one. */
+  setPhoto(contactId: string, photo: Base64): Promise<string | undefined | void>;
   /** Saves a profile link on the contact (a photo picked from a link in review). */
   addLink?(contactId: string, url: string): Promise<void>;
+  /** Saves where the contact's photo comes from (issue #78), or forgets it with `undefined`. */
+  savePin?(contactId: string, pin: PhotoPin | undefined): void | Promise<void>;
 }
 
 export interface SyncCallbacks {
@@ -80,6 +86,30 @@ async function allMatches(sources: PhotoSource[], contact: SimpleContact): Promi
   return found;
 }
 
+/** The photo of the source the contact is pinned to; for a profile, only that profile is read. */
+async function pinnedPhoto(sources: PhotoSource[], contact: SimpleContact, pin: PhotoPin): Promise<FoundPhoto | null> {
+  const source = sources.find((s) => s.id === pin.source);
+  if (!source) return null;
+  if (pin.source !== "links") return source.find(contact);
+  const urls = (contact.urls ?? []).filter((u) => {
+    const link = parseProfileLink(u);
+    return link && shortLink(link) === pin.matchedBy;
+  });
+  return urls.length ? source.find({ ...contact, urls }) : null;
+}
+
+/** A pin to where a photo the user picked came from. */
+function pinTo(photo: FoundPhoto, googleUrl: string | undefined | void): PhotoPin {
+  const key = photoKey(googleUrl || undefined);
+  return {
+    source: photo.source,
+    ...(photo.source === "links" ? { matchedBy: photo.matchedBy, ...(photo.network ? { network: photo.network } : {}) } : {}),
+    hash: photoHash(photo.photo),
+    ...(key ? { photoKey: key } : {}),
+    readAt: new Date().toISOString(),
+  };
+}
+
 export async function runSync(
   target: SyncTarget,
   sources: PhotoSource[],
@@ -117,11 +147,50 @@ export async function runSync(
     const result: ContactResult = { contactId: contact.id, name: contact.name, outcome: "noMatch" };
     const kept: RunPhotos = {};
     let image: Base64 | undefined;
+    const write = async (found: FoundPhoto, existing: Base64 | null) => {
+      await callbacks.beforeWrite?.();
+      const googleUrl = await target.setPhoto(contact.id, found.photo);
+      Object.assign(result, { outcome: existing ? "replaced" : "added", source: found.source, matchedBy: found.matchedBy });
+      Object.assign(kept, { photo: found.photo, previous: existing ?? undefined });
+      image = found.photo;
+      return googleUrl;
+    };
+
+    /** Follows the contact's pin (issue #78); false when it leaves the contact to the usual order. */
+    const followPin = async (pin: PhotoPin): Promise<boolean> => {
+      // A photo removed outside the app: the usual order may fill it.
+      if (pin.suspended) return contact.hasPhoto;
+      // Changed outside the app since it was applied: the user's choice, left alone.
+      if (pin.photoKey && photoKey(contact.photoUrl) !== pin.photoKey) {
+        if (!contact.hasPhoto) return false;
+        await target.savePin?.(contact.id, { ...pin, suspended: true });
+        return true;
+      }
+      const found = await pinnedPhoto(sources, contact, pin);
+      // Nothing there for now: the photo stays, even with Replace.
+      if (!found) return contact.hasPhoto;
+      const hash = photoHash(found.photo);
+      const readAt = new Date().toISOString();
+      // Unchanged, or brought over from an earlier link without a hash: recorded, not written.
+      if (contact.hasPhoto && (!pin.hash || pin.hash === hash)) {
+        const key = pin.photoKey ?? photoKey(contact.photoUrl);
+        await target.savePin?.(contact.id, { ...pin, hash, ...(key ? { photoKey: key } : {}), readAt });
+        return true;
+      }
+      const existing = contact.hasPhoto ? await target.currentPhoto(contact) : null;
+      const key = photoKey((await write(found, existing)) || undefined);
+      const { photoKey: _old, ...rest } = pin;
+      await target.savePin?.(contact.id, { ...rest, hash, ...(key ? { photoKey: key } : {}), readAt });
+      return true;
+    };
+
     try {
       // A kept photo is never replaced (issue #67), whatever the mode. A
       // placeholder uploaded by hand counts as no photo: a real one replaces it.
       if (contact.photoKept && contact.hasPhoto) {
         result.outcome = "alreadyHadPhoto";
+      } else if (mode !== "review" && contact.pin && (await followPin(contact.pin))) {
+        // Done by the pin.
       } else if (mode === "fill" && contact.hasPhoto && !contact.placeholder) {
         result.outcome = "alreadyHadPhoto";
       } else if (mode === "review") {
@@ -133,11 +202,8 @@ export async function runSync(
           if (!chosen) {
             result.outcome = "kept";
           } else {
-            await callbacks.beforeWrite?.();
-            await target.setPhoto(contact.id, chosen.photo);
-            Object.assign(result, { outcome: existing ? "replaced" : "added", source: chosen.source, matchedBy: chosen.matchedBy });
-            Object.assign(kept, { photo: chosen.photo, previous: existing ?? undefined });
-            image = chosen.photo;
+            const googleUrl = await write(chosen, existing);
+            await target.savePin?.(contact.id, pinTo(chosen, googleUrl));
             if (chosen.newLink && target.addLink) {
               await target.addLink(contact.id, chosen.newLink);
               result.addedLink = chosen.newLink;
@@ -147,12 +213,9 @@ export async function runSync(
       } else {
         const found = await firstMatch(sources, contact);
         if (found) {
-          const existing = contact.hasPhoto ? await target.currentPhoto(contact) : null;
-          await callbacks.beforeWrite?.();
-          await target.setPhoto(contact.id, found.photo);
-          Object.assign(result, { outcome: existing ? "replaced" : "added", source: found.source, matchedBy: found.matchedBy });
-          Object.assign(kept, { photo: found.photo, previous: existing ?? undefined });
-          image = found.photo;
+          await write(found, contact.hasPhoto ? await target.currentPhoto(contact) : null);
+          // Another source's photo: it no longer follows the pinned one.
+          if (contact.pin) await target.savePin?.(contact.id, undefined);
         }
       }
       // Nothing new, but the contact keeps the photo it has in Google: it

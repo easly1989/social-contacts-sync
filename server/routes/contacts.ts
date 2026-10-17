@@ -8,9 +8,11 @@ import { googleRateLimiter } from "../src/sync";
 import { executeMerge, MergeBackup, MergeError } from "../src/cleanup/merge";
 import { ContactsApi, Person, peopleContactsApi } from "../src/cleanup/people";
 import { CleanupAction, getScan, saveAction } from "../src/cleanup/store";
-import { duplicatePerson, hasName, newPerson, parseInput, personUpdate, toContact, userGroup, withLabel } from "../src/contacts/model";
+import { duplicatePerson, hasName, newPerson, parseInput, personUpdate, photoKey, toContact, userGroup, withLabel } from "../src/contacts/model";
 import { clearPlaceholder, getPlaceholders, markPlaceholder, prunePlaceholders } from "../src/contacts/placeholders";
 import { getKeptPhotos, setKeptPhoto } from "../src/contacts/keptPhotos";
+import { getPins, photoHash, setPin } from "../src/contacts/photoPins";
+import { networkNames, shortLink } from "../src/sources/links";
 import { addContactLink } from "../src/contactLinks";
 import { getLookup } from "../src/linkLookups";
 import { answeredRevoked } from "../src/googleSignIn";
@@ -57,7 +59,7 @@ export function contactsRouter(contactsApi: (auth: OAuth2Client) => ContactsApi 
   const ids = (value: unknown): string[] =>
     Array.isArray(value) ? [...new Set(value.filter((id): id is string => typeof id === "string" && /^people\/[\w-]+$/.test(id)))].slice(0, maxBatch) : [];
   const contactId = (req: Request) => `people/${String(req.params.id)}`;
-  const view = (req: Request, person: Person): Contact => toContact(person, getPlaceholders(req.sessionID), getKeptPhotos(req.sessionID));
+  const view = (req: Request, person: Person): Contact => toContact(person, getPlaceholders(req.sessionID), getKeptPhotos(req.sessionID), getPins(req.sessionID));
 
   router.param("id", (_req, res, next, id) => (/^[\w-]+$/.test(String(id)) ? next() : res.status(404).send({ error: "not_found" })));
 
@@ -74,7 +76,8 @@ export function contactsRouter(contactsApi: (auth: OAuth2Client) => ContactsApi 
       const [people, labels] = await Promise.all([api.list(), api.groups()]);
       const placeholders = getPlaceholders(req.sessionID);
       const kept = getKeptPhotos(req.sessionID);
-      const contacts = people.filter((p) => p.resourceName).map((p) => toContact(p, placeholders, kept));
+      const pins = getPins(req.sessionID);
+      const contacts = people.filter((p) => p.resourceName).map((p) => toContact(p, placeholders, kept, pins));
       prunePlaceholders(req.sessionID, new Map(contacts.map((c) => [c.id, c.photoUrl])));
       res.send({ contacts, labels: labels.sort((a, b) => a.name.localeCompare(b.name)) });
     } catch (e) {
@@ -239,6 +242,8 @@ export function contactsRouter(contactsApi: (auth: OAuth2Client) => ContactsApi 
       // `?as=kept`: a photo the app keeps (issue #67); otherwise a placeholder.
       const kept = req.query.as === "kept";
       setKeptPhoto(req.sessionID, contactId(req), kept);
+      // A photo chosen by hand no longer follows a source (issue #78).
+      setPin(req.sessionID, contactId(req), undefined);
       if (kept) clearPlaceholder(req.sessionID, contactId(req));
       else markPlaceholder(req.sessionID, contactId(req), toContact(person).photoUrl);
       res.send(view(req, person));
@@ -255,9 +260,22 @@ export function contactsRouter(contactsApi: (auth: OAuth2Client) => ContactsApi 
       await api.deletePhoto(contactId(req));
       clearPlaceholder(req.sessionID, contactId(req));
       setKeptPhoto(req.sessionID, contactId(req), false);
+      setPin(req.sessionID, contactId(req), undefined);
       res.send(view(req, await api.get(contactId(req))));
     } catch (e) {
       failed(res, "Removing a photo", e);
+    }
+  });
+
+  // "Unpin" (issue #78): the photo stays, and syncs go back to the usual source order.
+  router.delete("/contacts/:id/pin", async (req: Request, res: Response) => {
+    const api = google(req, res);
+    if (!api) return;
+    try {
+      setPin(req.sessionID, contactId(req), undefined);
+      res.send(view(req, await api.get(contactId(req))));
+    } catch (e) {
+      failed(res, "Unpinning a photo", e);
     }
   });
 
@@ -287,8 +305,17 @@ export function contactsRouter(contactsApi: (auth: OAuth2Client) => ContactsApi 
     if (!found) return res.status(410).send({ error: "lookup_expired" });
     try {
       await beforeWrite(req);
-      await api.setPhoto(contactId(req), found.photo);
+      const googleUrl = await api.setPhoto(contactId(req), found.photo);
       clearPlaceholder(req.sessionID, contactId(req));
+      // The photo now follows that profile (issue #78).
+      setPin(req.sessionID, contactId(req), {
+        source: "links",
+        matchedBy: shortLink(found.link),
+        network: networkNames[found.link.network],
+        hash: photoHash(found.photo),
+        photoKey: photoKey(googleUrl),
+        readAt: new Date().toISOString(),
+      });
       await addContactLink(api, contactId(req), found.link.url);
       res.send(view(req, await api.get(contactId(req))));
     } catch (e) {

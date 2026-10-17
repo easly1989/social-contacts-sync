@@ -1,7 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { SyncProgress } from "../../interfaces/api";
+import { PhotoPin, SyncProgress } from "../../interfaces/api";
+import { photoHash } from "./contacts/photoPins";
 import { SimpleContact } from "./interfaces";
 import { PhotoSource } from "./sources/types";
 import { runSync, SyncCallbacks, SyncTarget } from "./syncEngine";
@@ -200,4 +201,120 @@ test("contacts are shuffled by default but all processed", async () => {
   const { target } = fakeTarget();
   const { run } = await runSync(target, [whatsapp], "fill", callbacks().callbacks);
   assert.deepEqual(run.results.map((r) => r.contactId).sort(), contacts.map((c) => c.id).sort());
+});
+
+// Photo pins (issue #78): a photo picked from a source follows that source.
+const pinWa: PhotoSource = { id: "whatsapp", find: async (c) => (c.numbers.includes("+391") ? { photo: "wa-Pia", source: "whatsapp", matchedBy: "+391" } : null) };
+const pinGr: PhotoSource = { id: "gravatar", find: async (c) => (c.emails?.length ? { photo: "gr-Pia", source: "gravatar", matchedBy: c.emails[0] } : null) };
+const pia = (pin: PhotoPin | undefined, c: Partial<SimpleContact> = {}): SimpleContact => ({
+  id: "c/pia",
+  name: "Pia",
+  numbers: ["+391"],
+  emails: ["pia@example.com"],
+  hasPhoto: true,
+  photoUrl: "https://photos.example/c/pia/v1=s100",
+  pin,
+  ...c,
+});
+function pinTarget(contact: SimpleContact) {
+  const writes: [string, string][] = [];
+  const pins: [string, PhotoPin | undefined][] = [];
+  const target: SyncTarget = {
+    listContacts: async () => [contact],
+    currentPhoto: async () => "old",
+    setPhoto: async (id, photo) => {
+      writes.push([id, photo]);
+      return "https://photos.example/c/pia/v2=s100";
+    },
+    savePin: (id, pin) => void pins.push([id, pin]),
+  };
+  return { target, writes, pins };
+}
+const at = "2026-10-01T00:00:00.000Z";
+const grPin: PhotoPin = { source: "gravatar", hash: photoHash("gr-old"), photoKey: "https://photos.example/c/pia/v1", readAt: at };
+
+test("pins: the pinned source wins over the order and its new photo is applied, in fill mode too", async () => {
+  const { target, writes, pins } = pinTarget(pia(grPin));
+  const { run } = await runSync(target, [pinWa, pinGr], "fill", callbacks().callbacks);
+  assert.deepEqual(writes, [["c/pia", "gr-Pia"]]);
+  assert.equal(run.results[0].outcome, "replaced");
+  assert.equal(run.results[0].source, "gravatar");
+  assert.equal(pins.length, 1);
+  assert.deepEqual({ ...pins[0][1], readAt: at }, { source: "gravatar", hash: photoHash("gr-Pia"), photoKey: "https://photos.example/c/pia/v2", readAt: at });
+});
+
+test("pins: an unchanged photo is not written again", async () => {
+  const { target, writes } = pinTarget(pia({ ...grPin, hash: photoHash("gr-Pia") }));
+  const { run } = await runSync(target, [pinWa, pinGr], "replace", callbacks().callbacks);
+  assert.deepEqual(writes, []);
+  assert.equal(run.results[0].outcome, "alreadyHadPhoto");
+});
+
+test("pins: a photo changed outside the app suspends the pin and is left alone, also by Replace", async () => {
+  const { target, writes, pins } = pinTarget(pia(grPin, { photoUrl: "https://photos.example/c/pia/v9=s100" }));
+  await runSync(target, [pinWa, pinGr], "replace", callbacks().callbacks);
+  assert.deepEqual(writes, []);
+  assert.deepEqual(pins, [["c/pia", { ...grPin, suspended: true }]]);
+
+  const suspended = pinTarget(pia({ ...grPin, suspended: true }, { photoUrl: "https://photos.example/c/pia/v9=s100" }));
+  const { run } = await runSync(suspended.target, [pinWa, pinGr], "replace", callbacks().callbacks);
+  assert.deepEqual(suspended.writes, []);
+  assert.equal(run.results[0].outcome, "alreadyHadPhoto");
+});
+
+test("pins: when the pinned source has nothing, the photo stays, also with Replace", async () => {
+  const { target, writes, pins } = pinTarget(pia(grPin));
+  const { run } = await runSync(target, [pinWa], "replace", callbacks().callbacks);
+  assert.deepEqual(writes, []);
+  assert.deepEqual(pins, []);
+  assert.equal(run.results[0].outcome, "alreadyHadPhoto");
+});
+
+test("pins: a photo removed outside the app is filled by the usual order, which ends the pin", async () => {
+  for (const pin of [grPin, { ...grPin, suspended: true }]) {
+    const { target, writes, pins } = pinTarget(pia(pin, { hasPhoto: false, photoUrl: undefined }));
+    await runSync(target, [pinWa, pinGr], "fill", callbacks().callbacks);
+    assert.deepEqual(writes, [["c/pia", "wa-Pia"]]);
+    assert.deepEqual(pins, [["c/pia", undefined]]);
+  }
+});
+
+test("pins: a kept photo is never written, pinned or not", async () => {
+  const { target, writes } = pinTarget(pia(grPin, { photoKept: true }));
+  await runSync(target, [pinWa, pinGr], "replace", callbacks().callbacks);
+  assert.deepEqual(writes, []);
+});
+
+test("pins: a pin brought over from an earlier link records the photo without writing it", async () => {
+  const { target, writes, pins } = pinTarget(pia({ source: "gravatar", readAt: at }));
+  await runSync(target, [pinWa, pinGr], "fill", callbacks().callbacks);
+  assert.deepEqual(writes, []);
+  assert.equal(pins[0][1]?.hash, photoHash("gr-Pia"));
+});
+
+test("pins: a profile pin reads only that profile", async () => {
+  const asked: string[][] = [];
+  const profiles: PhotoSource = {
+    id: "links",
+    find: async (c) => (asked.push(c.urls ?? []), c.urls?.length ? { photo: `photo of ${c.urls[0]}`, source: "links", matchedBy: c.urls[0].replace(/^https:\/\/(www\.)?/, "") } : null),
+  };
+  const pin: PhotoPin = { source: "links", matchedBy: "x.com/pia", network: "X", hash: photoHash("old"), readAt: at };
+  const { target, writes } = pinTarget(pia(pin, { photoUrl: undefined, hasPhoto: false, urls: ["https://www.instagram.com/pia/", "https://x.com/pia"] }));
+  await runSync(target, [pinWa, profiles], "fill", callbacks().callbacks);
+  assert.deepEqual(asked, [["https://x.com/pia"]]);
+  assert.deepEqual(writes, [["c/pia", "photo of https://x.com/pia"]]);
+});
+
+test("pins: the photo picked in review is pinned to its source", async () => {
+  const { target, pins } = pinTarget(pia(undefined, { hasPhoto: false, photoUrl: undefined }));
+  const candidate = { photo: "ig-Pia", source: "links" as const, matchedBy: "instagram.com/pia", network: "Instagram" };
+  await runSync(target, [pinWa], "review", callbacks({ review: async () => candidate }).callbacks);
+  assert.deepEqual({ ...pins[0][1], readAt: at }, {
+    source: "links",
+    matchedBy: "instagram.com/pia",
+    network: "Instagram",
+    hash: photoHash("ig-Pia"),
+    photoKey: "https://photos.example/c/pia/v2",
+    readAt: at,
+  });
 });

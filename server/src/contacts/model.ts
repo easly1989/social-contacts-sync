@@ -1,4 +1,4 @@
-import { Contact, ContactAddress, ContactField, ContactInput } from "../../../interfaces/api";
+import { Contact, ContactAddress, ContactField, ContactInput, PhotoPin } from "../../../interfaces/api";
 import { contactEntries, restorable, writable } from "../cleanup/merge";
 import { ownPhotoUrl, Person, updateHeader } from "../cleanup/people";
 
@@ -22,7 +22,12 @@ export function photoKey(url: string | undefined | null): string | undefined {
   return url ? url.replace(/[?#].*$/, "").replace(/=[^/=]*$/, "") : undefined;
 }
 
-export function toContact(person: Person, placeholders: Record<string, string> = {}, kept: Set<string> = new Set()): Contact {
+/** What the editor shows of a pin (issue #78). */
+function pickPin({ source, network, matchedBy, suspended }: PhotoPin): Contact["photoFrom"] {
+  return { source, ...(network ? { network } : {}), ...(matchedBy ? { matchedBy } : {}), ...(suspended ? { suspended } : {}) };
+}
+
+export function toContact(person: Person, placeholders: Record<string, string> = {}, kept: Set<string> = new Set(), pins: Record<string, PhotoPin> = {}): Contact {
   const name = contactEntries(person.names)[0];
   const org = contactEntries(person.organizations)[0];
   const date = contactEntries(person.birthdays).find((b) => b.date?.month && b.date.day)?.date;
@@ -68,6 +73,7 @@ export function toContact(person: Person, placeholders: Record<string, string> =
     photoUrl,
     ...(placeholder ? { placeholder } : {}),
     ...(photoKept ? { photoKept } : {}),
+    ...(photoUrl && pins[id] ? { photoFrom: pickPin(pins[id]) } : {}),
     updatedAt,
   };
 }

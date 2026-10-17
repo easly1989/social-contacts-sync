@@ -384,7 +384,7 @@ export class FakeBackend {
       for (const c of changed) c.labels = body.add ? [...new Set([...c.labels, body.label])] : c.labels.filter((l) => l !== body.label);
       return route.fulfill({ json: { contacts: changed } });
     }
-    const one = /^\/api\/contacts\/([\w-]+)(?:\/(duplicate|photo|photo_from_link|keep_photo))?$/.exec(pathname);
+    const one = /^\/api\/contacts\/([\w-]+)(?:\/(duplicate|photo|photo_from_link|keep_photo|pin))?$/.exec(pathname);
     const contact = one && find(one[1]);
     if (!one || !contact) return route.fulfill({ status: 404, json: { error: "not_found" } });
     if (one[2] === "duplicate") {
@@ -394,11 +394,18 @@ export class FakeBackend {
     }
     const kept = new URL(request.url()).searchParams.get("as") === "kept";
     if (one[2] === "keep_photo") Object.assign(contact, { photoKept: body.kept || undefined, placeholder: body.kept ? undefined : contact.placeholder });
+    else if (one[2] === "pin") contact.photoFrom = undefined;
     else if (one[2] === "photo" && method === "PUT")
-      Object.assign(contact, { hasPhoto: true, placeholder: kept ? undefined : true, photoKept: kept || undefined, photoUrl: `/api/e2e-photos/${this.contactRequests.length}`, updatedAt: now() });
-    else if (one[2] === "photo") Object.assign(contact, { hasPhoto: false, placeholder: undefined, photoKept: undefined, photoUrl: undefined, updatedAt: now() });
+      Object.assign(contact, { hasPhoto: true, placeholder: kept ? undefined : true, photoKept: kept || undefined, photoFrom: undefined, photoUrl: `/api/e2e-photos/${this.contactRequests.length}`, updatedAt: now() });
+    else if (one[2] === "photo") Object.assign(contact, { hasPhoto: false, placeholder: undefined, photoKept: undefined, photoFrom: undefined, photoUrl: undefined, updatedAt: now() });
     else if (one[2] === "photo_from_link") {
-      Object.assign(contact, { hasPhoto: true, placeholder: undefined, photoUrl: "/api/e2e-photos/3", updatedAt: now() });
+      Object.assign(contact, {
+        hasPhoto: true,
+        placeholder: undefined,
+        photoFrom: { source: "links", network: "Instagram", matchedBy: "instagram.com/elena.conti.ph" },
+        photoUrl: "/api/e2e-photos/3",
+        updatedAt: now(),
+      });
       if (!contact.urls.some((u) => u.value === "https://instagram.com/elena.conti.ph")) contact.urls.push({ value: "https://instagram.com/elena.conti.ph", type: "profile" });
     } else if (method === "PUT") {
       if (body.updatedAt !== contact.updatedAt) return route.fulfill({ status: 409, json: { error: "changed", contact } });

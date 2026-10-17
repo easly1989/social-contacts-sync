@@ -5,8 +5,9 @@ import { AddressInfo } from "net";
 
 import { ProfileScanState, SocialPerson } from "../../../interfaces/api";
 import { profilesRouter, ScanNetwork } from "../../routes/profiles";
-import { setInCache } from "../cache";
+import { deleteFromCache, setInCache } from "../cache";
 import { setKeptPhoto } from "../contacts/keptPhotos";
+import { getPins, photoHash, setPin } from "../contacts/photoPins";
 import { FakeContacts } from "../cleanup/fakeContacts";
 import { Person } from "../cleanup/people";
 
@@ -97,10 +98,15 @@ test("import, search and scan feed one review queue; link with photo, then undo"
   overview = (await call("GET", "/profiles")).json;
   assert.deepEqual(overview.suggestions.map((s: any) => s.name), ["Davide Gallo"]);
   assert.equal(overview.linked[0].person.id, "instagram:elena_conti");
+  // The photo now follows that profile (issue #78).
+  const pin = getPins("profiles-1")["people/ec"];
+  assert.deepEqual([pin.source, pin.network, pin.matchedBy, pin.hash], ["links", "Instagram", "instagram.com/elena_conti", photoHash(jpeg.toString("base64"))]);
+  assert.ok(pin.photoKey);
 
   assert.deepEqual(await call("POST", "/profiles/undo", { contactId: "people/ec", personId: "instagram:elena_conti" }), { status: 200, json: { ok: true } });
   assert.deepEqual(google.people.get("people/ec")!.urls, []);
   assert.equal(google.photos.get("people/ec"), "T0xE");
+  assert.equal(getPins("profiles-1")["people/ec"], undefined);
 
   // "None of these" and "Skip".
   await call("POST", "/profiles/reject", { contactId: "people/dg", personIds: ["bluesky:dgallo.bsky.social"] });
@@ -159,4 +165,18 @@ test("a kept photo is never replaced from Find profiles; the links are added (is
   assert.equal(linked.json.photoSet, false);
   assert.equal(google.photos.get("people/ec"), "T0xE");
   assert.deepEqual(google.people.get("people/ec")!.urls, [{ value: "https://instagram.com/elena_conti", type: "profile" }]);
+});
+
+test("links with a photo from before pins become pins once (issue #78)", async (t) => {
+  const { call } = await start(t, "profiles-78");
+  await call("POST", "/profiles/scan/start", { network: "instagram", acceptRisk: true });
+  await call("POST", "/profiles/link", { contactId: "people/ec", personIds: ["instagram:elena_conti"], photoFrom: "instagram:elena_conti" });
+  // As if the link was made by an older version: no pins saved yet.
+  deleteFromCache("profiles-78", "photo_pins");
+  const pins = getPins("profiles-78");
+  assert.deepEqual(Object.keys(pins), ["people/ec"]);
+  assert.deepEqual([pins["people/ec"].matchedBy, pins["people/ec"].network, pins["people/ec"].hash], ["instagram.com/elena_conti", "Instagram", undefined]);
+  // Unpinned, it stays unpinned.
+  setPin("profiles-78", "people/ec", undefined);
+  assert.deepEqual(getPins("profiles-78"), {});
 });

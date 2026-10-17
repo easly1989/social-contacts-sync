@@ -15,7 +15,9 @@ import { parseInstagramExport, parseLinkedInConnections } from "../src/profiles/
 import { candidatesFor } from "../src/profiles/match";
 import { runSearch, SearchNetwork, searchNetworks } from "../src/profiles/search";
 import { loadProfiles, mergePeople, ProfilesData, saveProfiles, StoredLinked } from "../src/profiles/store";
-import { downloadImage, lookupProfileLink, parseProfileLink } from "../src/sources/links";
+import { downloadImage, lookupProfileLink, networkNames, parseProfileLink, shortLink } from "../src/sources/links";
+import { photoKey } from "../src/contacts/model";
+import { getPins, photoHash, setPin } from "../src/contacts/photoPins";
 
 // Find profiles (issue #61): suggestions from exports, a public search and,
 // in the desktop app, a scan of the user's own followers with their login.
@@ -268,9 +270,22 @@ export function profilesRouter(options: Options = {}): express.Router {
       const photo = await profilePhoto(photoPerson);
       if (photo) {
         previousPhoto = before.hasPhoto ? await api.photo(await api.get(contactId)) : null;
-        await api.setPhoto(contactId, photo);
+        const googleUrl = await api.setPhoto(contactId, photo);
         clearPlaceholder(sessionId, contactId);
         photoSet = true;
+        // The photo now follows this profile (issue #78).
+        const link = parseProfileLink(photoPerson.url);
+        const key = photoKey(googleUrl);
+        if (link) {
+          setPin(sessionId, contactId, {
+            source: "links",
+            matchedBy: shortLink(link),
+            network: networkNames[link.network],
+            hash: photoHash(photo),
+            ...(key ? { photoKey: key } : {}),
+            readAt: new Date().toISOString(),
+          });
+        }
       }
     }
     const at = new Date().toISOString();
@@ -414,6 +429,8 @@ export function profilesRouter(options: Options = {}): express.Router {
       if (entry.photoSet) {
         if (entry.previousPhoto) await api.setPhoto(entry.contactId, entry.previousPhoto);
         else await api.deletePhoto(entry.contactId);
+        const link = parseProfileLink(entry.person.url);
+        if (link && getPins(req.sessionID)[entry.contactId]?.matchedBy === shortLink(link)) setPin(req.sessionID, entry.contactId, undefined);
       }
       entry.undone = true;
       entry.previousPhoto = undefined;

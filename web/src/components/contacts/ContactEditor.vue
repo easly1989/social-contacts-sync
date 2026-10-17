@@ -128,6 +128,24 @@ async function setKept(kept: boolean): Promise<void> {
   busy.value = undefined;
 }
 
+// The source the photo follows (issue #78): a profile's network, or the source's own name.
+const sourceNames: Record<string, string> = { whatsapp: "WhatsApp", telegram: "Telegram", gravatar: "Gravatar" };
+const photoFrom = computed(() => {
+  const from = current.value?.photoFrom;
+  return from && !isKept.value ? { ...from, name: from.network ?? sourceNames[from.source] ?? from.source } : undefined;
+});
+
+async function unpin(): Promise<void> {
+  if (!current.value) return;
+  busy.value = "photo";
+  try {
+    updated(await api.unpinPhoto(current.value.id));
+  } catch (e) {
+    error.value = withGoogleDetail(t("contacts.errors.photo"), e);
+  }
+  busy.value = undefined;
+}
+
 async function choosePhoto(event: Event): Promise<void> {
   const file = (event.target as HTMLInputElement).files?.[0];
   (event.target as HTMLInputElement).value = "";
@@ -336,7 +354,15 @@ onBeforeUnmount(() => {
                 <span class="mt-0.5 block text-xs text-base-content/60">{{ $t("contacts.keepPhotoHint") }}</span>
               </span>
             </label>
-            <p v-if="!isKept" class="text-xs text-base-content/60">{{ $t("contacts.placeholderHint") }}</p>
+            <div v-if="photoFrom" class="flex items-start gap-3 rounded-xl border border-base-300 p-3 text-sm" data-testid="photo-from">
+              <Link class="mt-0.5 size-4 shrink-0" :class="photoFrom.suspended ? 'text-warning' : 'text-primary'" />
+              <span class="flex-1">
+                {{ photoFrom.suspended ? $t("contacts.photoFromSuspended", { source: photoFrom.name }) : $t("contacts.photoFrom", { source: photoFrom.name }) }}
+                <span v-if="photoFrom.matchedBy" class="block text-xs text-base-content/60">{{ photoFrom.matchedBy }}</span>
+              </span>
+              <button type="button" class="btn btn-ghost btn-sm shrink-0" :disabled="Boolean(busy)" @click="unpin">{{ $t("contacts.unpin") }}</button>
+            </div>
+            <p v-else-if="!isKept" class="text-xs text-base-content/60">{{ $t("contacts.placeholderHint") }}</p>
           </div>
         </div>
 
