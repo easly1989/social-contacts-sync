@@ -13,32 +13,78 @@ test.beforeEach(async ({ page }) => {
   await backend.install();
 });
 
-test("settings: profile links are ready, and the unofficial networks are opt-in", async ({ page }) => {
+const linkNetworksSent = () => new URL(backend.requested("/api/init_sync")!.url()).searchParams.get("link_networks")!.split(",");
+
+test("Sources: linked profiles one row per network, each with its toggle (issue #83)", async ({ page }) => {
+  // Settings points to Sync › Sources; the old switch is gone.
   await page.goto("/app/settings/sources");
   const links = page.getByTestId("settings-source-links");
   await expect(links).toContainText("Profile links");
   await expect(links).toContainText("Ready");
   await expect(links.getByRole("list", { name: "Networks read" }).getByRole("listitem")).toHaveText(["X", "Telegram", "YouTube", "Bluesky", "Mastodon", "GitHub"]);
-  const optIn = links.getByRole("checkbox", { name: /Also try Instagram, Facebook and LinkedIn/ });
-  await expect(optIn).not.toBeChecked();
+  await expect(links.getByRole("checkbox")).toHaveCount(0);
   await links.scrollIntoViewIfNeeded();
   await screenshot(page, "27-settings-links");
+  await links.getByRole("link", { name: "Choose networks" }).click();
+  await expect(page).toHaveURL(/\/app\/sync\?tab=sources$/);
 
-  await optIn.check();
+  const group = page.getByTestId("source-links");
+  await expect(group).toContainText("257 profiles on 233 contacts");
+  const rows = page.getByTestId("link-networks").getByRole("listitem");
+  // The networks with the most profiles first.
+  await expect(rows.first()).toContainText("Instagram");
+  await expect(page.getByTestId("network-instagram")).toContainText("142 profiles · public preview, unofficial");
+  await expect(page.getByTestId("network-bluesky")).toContainText("12 profiles · public, no login");
+  await expect(page.getByTestId("network-x")).toContainText("No profiles linked");
+  await expect(page.getByTestId("network-x").getByRole("checkbox")).toBeDisabled();
+  // Before issue #83 the three were off on the web unless turned on in Settings: still off.
+  await expect(page.getByRole("checkbox", { name: "Instagram profiles" })).not.toBeChecked();
+  await expect(page.getByRole("checkbox", { name: "GitHub profiles" })).toBeChecked();
+  await group.scrollIntoViewIfNeeded();
+  await screenshot(page, "70b-sync-sources-networks");
+
+  await page.getByRole("checkbox", { name: "Instagram profiles" }).check();
+  await page.getByRole("checkbox", { name: "GitHub profiles" }).uncheck();
+  // Collapsible, so the list stays short.
+  await group.getByRole("button", { name: "Hide networks" }).click();
+  await expect(page.getByTestId("link-networks")).toBeHidden();
+
   await page.reload();
-  await expect(page.getByTestId("settings-source-links").getByRole("checkbox", { name: /Also try/ })).toBeChecked();
-  await page.emulateMedia({ colorScheme: "dark" });
-  await screenshot(page, "28-settings-links-dark");
-
-  // The sync sends the choice.
-  await page.goto("/app/sync?tab=sources");
-  await expect(page.getByTestId("source-links")).toContainText("Uses the profile links saved on your Google contacts");
   await page.getByRole("tab", { name: "Run" }).click();
   await page.getByRole("button", { name: "Start sync" }).click();
   await expect.poll(() => backend.requested("/api/init_sync")).toBeTruthy();
   const query = new URL(backend.requested("/api/init_sync")!.url()).searchParams;
   expect(query.get("sources")).toContain("links");
-  expect(query.get("links_best_effort")).toBe("true");
+  expect(linkNetworksSent()).toContain("instagram");
+  expect(linkNetworksSent()).not.toContain("github");
+  expect(linkNetworksSent()).not.toContain("facebook");
+  expect(query.get("links_best_effort")).toBeNull();
+});
+
+test("Sources: the old Settings switch, turned on, carries over to the three networks (issue #83)", async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem("scs.links.bestEffort", "true"));
+  await page.goto("/app/sync?tab=sources");
+  for (const name of ["Instagram", "Facebook", "LinkedIn"]) await expect(page.getByRole("checkbox", { name: `${name} profiles` })).toBeChecked();
+  await page.getByRole("tab", { name: "Run" }).click();
+  await page.getByRole("button", { name: "Start sync" }).click();
+  await expect.poll(() => backend.requested("/api/init_sync")).toBeTruthy();
+  expect(linkNetworksSent()).toEqual(expect.arrayContaining(["instagram", "facebook", "linkedin", "github", "bluesky"]));
+});
+
+test("Sources, desktop: the three are read with the login and on; WhatsApp and Telegram connect in place (issue #83)", async ({ page }) => {
+  Object.assign(backend.status, { desktop: true, setupDone: true, googleConfigured: true, whatsappConnected: false, telegramConnected: false, telegramAvailable: true });
+  await page.goto("/app/sync?tab=sources");
+  await expect(page.getByTestId("network-instagram")).toContainText("142 profiles · read one by one with your login · oldest read");
+  await expect(page.getByTestId("network-linkedin")).toContainText("may show as a profile visit");
+  await expect(page.getByRole("checkbox", { name: "Instagram profiles" })).toBeChecked();
+
+  await page.getByRole("button", { name: "Connect WhatsApp" }).click();
+  await expect(page.getByTestId("sources-whatsapp-link")).toBeVisible();
+  await expect.poll(() => backend.requested("/api/init_whatsapp")).toBeTruthy();
+  await page.getByRole("button", { name: "Connect Telegram" }).click();
+  const telegram = page.getByTestId("sources-telegram-link");
+  await expect(telegram.getByLabel("Phone number")).toBeVisible();
+  await screenshot(page, "70c-sync-sources-connect");
 });
 
 test("desktop: Find photo says when the app isn't signed in, and sends the LinkedIn setting (issue #80)", async ({ page }) => {

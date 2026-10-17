@@ -12,7 +12,7 @@ import { PhotoSource } from "./sources/types";
 import { whatsappSource } from "./sources/whatsapp";
 import { gravatarSource } from "./sources/gravatar";
 import { telegramSource } from "./sources/telegram";
-import { linksSource, LinksSourceOptions } from "./sources/links";
+import { linksSource, LinksSourceOptions, Network, networkNames, publicNetworks } from "./sources/links";
 import { loadProfiles, storedProfilePhotos } from "./profiles/store";
 import { TelegramConnection } from "./telegram";
 import { telegramConnection } from "./telegramSession";
@@ -64,6 +64,12 @@ export function readsCap(options: SyncOptions): number {
   return Number(process.env.SCS_PROFILE_READS) || defaultRereadCap;
 }
 
+/** The profile link networks turned on in Sync › Sources (issue #83), else the public ones. */
+export function linkNetworks(options: SyncOptions): Set<Network> {
+  if (options.link_networks === undefined) return new Set(publicNetworks);
+  return new Set(options.link_networks.split(",").map((n) => n.trim() as Network).filter((n) => n in networkNames));
+}
+
 /** Sources asked for, in priority order, that are usable in this session. */
 export function requestedSources(
   options: SyncOptions,
@@ -78,7 +84,8 @@ export function requestedSources(
   return ids.flatMap((id) => {
     if (id === "whatsapp") return whatsapp ? [whatsappSource(whatsapp)] : [];
     if (id === "telegram") return telegram ? [telegramSource(telegram)] : [];
-    if (id === "links") return [linksSource({ bestEffort: options.links_best_effort === "true", storedPhoto })];
+    // The desktop app reads Instagram, Facebook and LinkedIn with the login only: never as an anonymous visitor.
+    if (id === "links") return [linksSource({ networks: linkNetworks(options), bestEffort: process.env.SCS_DESKTOP !== "1", storedPhoto })];
     return [gravatarSource()];
   });
 }
@@ -105,9 +112,8 @@ export async function initSync(id: string, syncOptions: SyncOptions) {
   const reads = getReads(id);
   const scanned = storedProfilePhotos(loadProfiles(id).people);
   const desktop = process.env.SCS_DESKTOP === "1";
-  // The desktop app reads Instagram, Facebook and LinkedIn with the login only: never as an anonymous visitor.
-  const options = desktop ? { ...syncOptions, links_best_effort: "false" } : syncOptions;
-  let sources = requestedSources(options, whatsappClient, telegramConnection(id), (link) => reads[link.url]?.photoUrl ?? scanned(link));
+  const networks = linkNetworks(syncOptions);
+  let sources = requestedSources(syncOptions, whatsappClient, telegramConnection(id), (link) => reads[link.url]?.photoUrl ?? scanned(link));
   const rereads =
     desktop && sources.some((s) => s.id === "links")
       ? rereading(
@@ -117,7 +123,7 @@ export async function initSync(id: string, syncOptions: SyncOptions) {
             reads,
             readsCap(syncOptions),
             // A LinkedIn read may show as a profile visit: only while the setting is on (issue #80).
-            rereadNetworks.filter((n) => n !== "linkedin" || syncOptions.linkedin_rereads !== "false")
+            rereadNetworks.filter((n) => networks.has(n) && (n !== "linkedin" || syncOptions.linkedin_rereads !== "false"))
           ),
           (network, handle) => askDesktop("social-profile", { network, handle }, 60_000),
           {

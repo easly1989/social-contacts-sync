@@ -196,6 +196,18 @@ test("each linked profile is its own candidate, and a photo already read comes f
   assert.deepEqual(await grey.findAll!({ ...anna, urls: ["instagram.com/anna"] }), []);
 });
 
+test("a network turned off in Sources is left out, even the photo read with it (issue #83)", async () => {
+  const web = fakeWeb({
+    "https://scontent.cdninstagram.com/anna.jpg": { body: jpeg, type: "image/jpeg" },
+    "https://x.com/anna": { body: page("https://pbs.twimg.com/profile_images/2/anna_200x200.jpg") },
+    "https://pbs.twimg.com/profile_images/2/anna_400x400.jpg": { body: jpeg, type: "image/jpeg" },
+  });
+  const anna = { id: "anna", numbers: [], hasPhoto: false, urls: ["https://instagram.com/anna", "https://x.com/anna", "https://github.com/anna"] };
+  const source = linksSource({ networks: new Set(["github"]), bestEffort: true, fetchImpl: web.fetchImpl, pacer: noWait, storedPhoto: (link) => (link.network === "instagram" ? "https://scontent.cdninstagram.com/anna.jpg" : undefined) });
+  assert.deepEqual(await source.findAll!(anna), []);
+  assert.deepEqual(web.requests, ["https://api.github.com/users/anna"]);
+});
+
 test("only public sites by name are called", async () => {
   assert.equal(parseProfileLink("https://192.168.1.1/@admin"), undefined);
   assert.equal(parseProfileLink("https://localhost/@me"), undefined);

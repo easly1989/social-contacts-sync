@@ -224,7 +224,7 @@ test("web: only the sections that apply, without desktop calls", async ({ page }
 
   // No login reads on the web: the anonymous visits stay a choice, and LinkedIn's setting isn't there (issue #80).
   await nav.getByRole("link", { name: "Sources" }).click();
-  await expect(page.getByText("Also try Instagram, Facebook and LinkedIn")).toBeVisible();
+  await expect(page.getByTestId("settings-link-networks")).toContainText("is chosen in Sync › Sources");
   await expect(page.getByTestId("settings-social-logins")).toHaveCount(0);
   await expect(page.getByTestId("settings-linkedin-rereads")).toHaveCount(0);
   expect(backend.count("/api/profiles/logins")).toBe(0);

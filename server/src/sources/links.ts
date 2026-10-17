@@ -8,13 +8,17 @@ import { FoundPhoto, PhotoSource } from "./types";
   page's public preview image (og:image) or a network's public API. No
   sign-in, ever. Instagram, Facebook and LinkedIn don't allow automated
   access and quickly ask to sign in, so the sync only tries them when the
-  user turns them on (`bestEffort`), and slowly.
+  user turns them on (`bestEffort`), and slowly. Each network can be turned
+  off in Sync › Sources (`networks`, issue #83).
 */
 
 export type Network = "x" | "telegram" | "youtube" | "bluesky" | "mastodon" | "github" | "instagram" | "facebook" | "linkedin";
 
 /** Networks tried only when the user turns them on. */
 export const bestEffortNetworks: ReadonlySet<Network> = new Set(["instagram", "facebook", "linkedin"]);
+
+/** Networks read without signing in, turned on until the user says otherwise. */
+export const publicNetworks: readonly Network[] = ["x", "telegram", "youtube", "bluesky", "mastodon", "github"];
 
 export const networkNames: Record<Network, string> = {
   x: "X",
@@ -251,7 +255,9 @@ export function contactLinks(contact: SimpleContact): ProfileLink[] {
 }
 
 export interface LinksSourceOptions {
-  /** Also visit Instagram, Facebook and LinkedIn pages, which turn anonymous visitors away. */
+  /** The networks turned on; the others are left out entirely. Default: all. */
+  networks?: ReadonlySet<Network>;
+  /** Visit Instagram, Facebook and LinkedIn pages (when turned on), which turn anonymous visitors away. */
   bestEffort?: boolean;
   /** The photo address Find profiles read with this profile (a scan or an export), if any (issue #77). */
   storedPhoto?: (link: ProfileLink) => string | undefined;
@@ -271,6 +277,7 @@ export function linksSource(options: LinksSourceOptions = {}): PhotoSource {
   const blocked = new Set<Network>();
 
   async function photoOf(link: ProfileLink): Promise<FoundPhoto | null> {
+    if (options.networks && !options.networks.has(link.network)) return null;
     const found = (photo: Base64): FoundPhoto => ({ photo, source: "links", matchedBy: shortLink(link), network: networkNames[link.network] });
     const stored = options.storedPhoto?.(link);
     if (stored && !isPlaceholder(stored)) {
