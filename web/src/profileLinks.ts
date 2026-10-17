@@ -14,23 +14,31 @@ export function lookupError(e: unknown, t: (key: string, values?: Record<string,
   return ["unsupported_link", "no_photo", "signin_required", "unreachable"].includes(code ?? "") ? t(`links.errors.${code}`, { network }) : t("links.errors.unknown");
 }
 
-const key = "scs.links.bestEffort";
-
-function stored(): boolean {
+/** A yes/no choice kept in this browser. */
+function storedFlag(key: string, fallback: boolean) {
+  let initial = fallback;
   try {
-    return localStorage.getItem(key) === "true";
-  } catch {
-    return false;
-  }
-}
-
-/** Also try Instagram, Facebook and LinkedIn during syncs. Off by default. */
-export const bestEffortLinks = ref(stored());
-
-watch(bestEffortLinks, (on) => {
-  try {
-    localStorage.setItem(key, String(on));
+    const value = localStorage.getItem(key);
+    if (value !== null) initial = value === "true";
   } catch {
     // Only a convenience.
   }
-});
+  const flag = ref(initial);
+  watch(flag, (on) => {
+    try {
+      localStorage.setItem(key, String(on));
+    } catch {
+      // Only a convenience.
+    }
+  });
+  return flag;
+}
+
+/** Also try Instagram, Facebook and LinkedIn during syncs. Off by default. */
+export const bestEffortLinks = storedFlag("scs.links.bestEffort", false);
+
+/** Desktop: read pinned LinkedIn profiles one by one with the login (issue #80). On by default. */
+export const linkedinRereads = storedFlag("scs.links.linkedinRereads", true);
+
+/** The first-time notice about LinkedIn reads was answered. */
+export const linkedinNoticeSeen = storedFlag("scs.links.linkedinNoticeSeen", false);

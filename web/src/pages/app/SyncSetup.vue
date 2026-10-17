@@ -10,6 +10,7 @@ import SourceBadge from "../../components/SourceBadge.vue";
 import { api } from "../../api";
 import { number } from "../../format";
 import { isDesktop } from "../../settings";
+import { linkedinNoticeSeen, linkedinRereads } from "../../profileLinks";
 import { sourceInfo } from "../../sources";
 import { GoogleStats, SessionStatus, SourceId } from "../../../../interfaces/api";
 
@@ -81,9 +82,27 @@ const estimate = computed(() => {
   return Math.max(1, Math.ceil((candidates * 1.5) / 60));
 });
 
-function start(): void {
+function go(): void {
   const params = new URLSearchParams({ mode: prefs.value.mode, sources: selected.value.join(",") });
   router.push(`/app/sync/run?${params}`);
+}
+
+// The first sync that would read LinkedIn profiles with the login says so once (issue #80).
+const linkedinNotice = ref<HTMLDialogElement>();
+const pinnedLinkedin = ref(0);
+async function start(): Promise<void> {
+  if (isDesktop.value && linkedinRereads.value && !linkedinNoticeSeen.value && selected.value.includes("links")) {
+    pinnedLinkedin.value = (await api.pinnedProfiles().catch(() => ({ linkedin: 0 }))).linkedin ?? 0;
+    if (pinnedLinkedin.value) return linkedinNotice.value?.showModal();
+  }
+  go();
+}
+
+function answerNotice(keepReading: boolean): void {
+  linkedinRereads.value = keepReading;
+  linkedinNoticeSeen.value = true;
+  linkedinNotice.value?.close();
+  go();
 }
 
 onMounted(async () => {
@@ -187,5 +206,18 @@ onMounted(async () => {
         <p class="flex gap-2 px-1 text-xs text-base-content/50"><Info class="size-4 shrink-0" />{{ $t("syncSetup.rateNote") }}</p>
       </div>
     </div>
+
+    <dialog ref="linkedinNotice" class="modal" aria-labelledby="linkedin-notice-title" data-testid="linkedin-notice">
+      <div class="modal-box">
+        <h3 id="linkedin-notice-title" class="text-lg font-bold">{{ $t("links.linkedinNoticeTitle") }}</h3>
+        <p class="mt-2 text-sm text-base-content/70">{{ $t("links.linkedinNoticeText", { count: pinnedLinkedin }, pinnedLinkedin) }}</p>
+        <p class="mt-2 text-xs text-base-content/60">{{ $t("links.linkedinNoticeHint") }}</p>
+        <div class="modal-action flex-wrap">
+          <button type="button" class="btn btn-ghost" @click="answerNotice(false)">{{ $t("links.linkedinTurnOff") }}</button>
+          <button type="button" class="btn btn-primary" @click="answerNotice(true)">{{ $t("links.linkedinGotIt") }}</button>
+        </div>
+      </div>
+      <form method="dialog" class="modal-backdrop"><button tabindex="-1" aria-hidden="true">{{ $t("common.cancel") }}</button></form>
+    </dialog>
   </AppShell>
 </template>

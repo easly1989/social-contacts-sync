@@ -8,7 +8,7 @@ import TelegramLink from "../TelegramLink.vue";
 import WhatsAppLink from "../WhatsAppLink.vue";
 import { api } from "../../api";
 import { isDesktop } from "../../settings";
-import { bestEffortLinks, bestEffortNetworks, stableNetworks } from "../../profileLinks";
+import { bestEffortLinks, bestEffortNetworks, linkedinRereads, stableNetworks } from "../../profileLinks";
 import { SessionStatus } from "../../../../interfaces/api";
 
 const status = ref<SessionStatus>();
@@ -105,6 +105,13 @@ onUnmounted(() => window.clearInterval(poll));
             <span class="mt-2 flex flex-wrap gap-1.5">
               <span v-for="n in bestEffortNetworks" :key="n" class="inline-flex items-center gap-1 rounded-full border border-base-300 px-2 py-0.5 text-xs text-base-content/60"><FlaskConical class="size-3" />{{ n }}</span>
             </span>
+          </span>
+        </label>
+        <label v-if="isDesktop" class="flex cursor-pointer items-start gap-3 rounded-xl border border-base-300 p-3" data-testid="settings-linkedin-rereads">
+          <input v-model="linkedinRereads" type="checkbox" class="toggle toggle-primary toggle-sm mt-0.5" />
+          <span class="flex-1">
+            <span class="block text-sm font-medium">{{ $t("links.linkedinRereads") }}</span>
+            <span class="mt-1 block text-xs text-base-content/60">{{ $t("links.linkedinRereadsText") }}</span>
           </span>
         </label>
         <p class="flex gap-1.5 text-xs text-base-content/50"><Info class="mt-px size-3.5 shrink-0" />{{ $t("links.settingsHint") }}</p>

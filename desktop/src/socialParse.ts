@@ -142,7 +142,18 @@ export function profilePageUrl(network: string, handle: string): string | undefi
     if (/^\d+$/.test(handle)) return `https://www.facebook.com/profile.php?id=${handle}`;
     return /^[\w.]{5,50}$/.test(handle) ? `https://www.facebook.com/${handle}` : undefined;
   }
+  if (network === "linkedin") return /^[\w%-]{2,100}$/.test(handle) ? `https://www.linkedin.com/in/${handle}/` : undefined;
   return undefined;
+}
+
+/** /voyager/api/identity/dash/profiles?q=memberIdentity: the profile with that handle; undefined when it isn't there. */
+export function linkedinProfile(json: unknown, handle: string): ProfileRead | undefined {
+  const data = json as { included?: unknown[]; elements?: unknown[]; data?: { elements?: unknown[] } };
+  const entities = [...(data?.included ?? []), ...(data?.elements ?? []), ...(data?.data?.elements ?? [])] as Record<string, unknown>[];
+  const profile = entities.find((e) => typeof e?.publicIdentifier === "string" && e.publicIdentifier.toLowerCase() === handle.toLowerCase());
+  if (!profile) return undefined;
+  const name = [text(profile.firstName), text(profile.lastName)].filter(Boolean).join(" ") || undefined;
+  return { name, photoUrl: linkedinPhoto(profile.profilePicture) };
 }
 
 /** /api/v1/users/web_profile_info/?username=…: undefined when there's no such profile. */

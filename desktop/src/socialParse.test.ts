@@ -11,6 +11,7 @@ import {
   instagramProfile,
   isAbortedLoad,
   linkedinPage,
+  linkedinProfile,
   pause,
   profilePageUrl,
 } from "./socialParse";
@@ -66,7 +67,25 @@ test("profile addresses the desktop app reads (issue #79): only a plain handle",
   assert.equal(profilePageUrl("facebook", "100012345"), "https://www.facebook.com/profile.php?id=100012345");
   assert.equal(profilePageUrl("instagram", "../accounts"), undefined);
   assert.equal(profilePageUrl("facebook", "a/b"), undefined);
-  assert.equal(profilePageUrl("linkedin", "davidegallo"), undefined);
+  assert.equal(profilePageUrl("linkedin", "davidegallo"), "https://www.linkedin.com/in/davidegallo/");
+  assert.equal(profilePageUrl("linkedin", "../feed"), undefined);
+  assert.equal(profilePageUrl("x", "davide"), undefined);
+});
+
+test("one LinkedIn profile (issue #80): the profile asked for, with its largest picture", () => {
+  const picture = { displayImageReference: { vectorImage: { rootUrl: "https://media.licdn.com/dms/image/d/", artifacts: [{ width: 200, fileIdentifyingUrlPathSegment: "200.jpg" }, { width: 800, fileIdentifyingUrlPathSegment: "800.jpg" }] } } };
+  const answer = {
+    data: { "*elements": ["urn:li:fsd_profile:1"] },
+    included: [
+      { $type: "com.linkedin.voyager.dash.identity.profile.Profile", publicIdentifier: "someone-else", firstName: "Someone", profilePicture: picture },
+      { $type: "com.linkedin.voyager.dash.identity.profile.Profile", publicIdentifier: "DavideGallo", firstName: "Davide", lastName: "Gallo", profilePicture: picture },
+    ],
+  };
+  assert.deepEqual(linkedinProfile(answer, "davidegallo"), { name: "Davide Gallo", photoUrl: "https://media.licdn.com/dms/image/d/800.jpg" });
+  // Without a picture: the name only. Not in the answer: nothing.
+  assert.deepEqual(linkedinProfile({ elements: [{ publicIdentifier: "davidegallo", firstName: "Davide" }] }, "davidegallo"), { name: "Davide", photoUrl: undefined });
+  assert.equal(linkedinProfile(answer, "nobody"), undefined);
+  assert.equal(linkedinProfile("nope", "davidegallo"), undefined);
 });
 
 test("LinkedIn connections: profiles from `included`, with the largest picture", () => {

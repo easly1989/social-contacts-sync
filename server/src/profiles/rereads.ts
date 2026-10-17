@@ -7,7 +7,8 @@ import { parseProfileLink, ProfileLink } from "../sources/links";
 import { PhotoSource } from "../sources/types";
 
 /*
-  Pinned Instagram and Facebook profiles read again (issue #79): in the
+  Pinned Instagram, Facebook and LinkedIn profiles read again (issues #79
+  and #80; LinkedIn only when the user leaves it on): in the
   desktop app a sync asks for each one's photo address with the user's own
   login, one profile every few seconds, the ones read longest ago first, up
   to a cap per network. A network stops at its first limit or sign-in page;
@@ -16,8 +17,8 @@ import { PhotoSource } from "../sources/types";
   scan read.
 */
 
-export type RereadNetwork = "instagram" | "facebook";
-const rereadNetworks: readonly string[] = ["instagram", "facebook"];
+export type RereadNetwork = "instagram" | "facebook" | "linkedin";
+export const rereadNetworks: readonly RereadNetwork[] = ["instagram", "facebook", "linkedin"];
 
 /** Profiles read again per network and sync unless the environment says otherwise. */
 export const defaultRereadCap = 100;
@@ -60,17 +61,23 @@ export interface RereadPlan {
   waiting: Partial<Record<RereadNetwork, number>>;
 }
 
-/** Which pinned profiles this sync reads again: per network, those read longest ago (never read first), up to the cap. */
-export function planRereads(pins: Record<string, PhotoPin>, reads: Record<string, StoredRead>, cap: number): RereadPlan {
+/** Pinned profiles that can be read with the login, by network (suspended pins aren't followed). */
+export function pinnedProfiles(pins: Record<string, PhotoPin>, networks: readonly RereadNetwork[] = rereadNetworks): Map<RereadNetwork, string[]> {
   const byNetwork = new Map<RereadNetwork, string[]>();
   for (const pin of Object.values(pins)) {
     if (pin.source !== "links" || !pin.matchedBy || pin.suspended) continue;
     const link = parseProfileLink(`https://${pin.matchedBy}`);
-    if (!link || !rereadNetworks.includes(link.network)) continue;
+    if (!link || !networks.includes(link.network as RereadNetwork)) continue;
     const urls = byNetwork.get(link.network as RereadNetwork) ?? [];
     if (!urls.includes(link.url)) urls.push(link.url);
     byNetwork.set(link.network as RereadNetwork, urls);
   }
+  return byNetwork;
+}
+
+/** Which pinned profiles this sync reads again: per network, those read longest ago (never read first), up to the cap. */
+export function planRereads(pins: Record<string, PhotoPin>, reads: Record<string, StoredRead>, cap: number, networks: readonly RereadNetwork[] = rereadNetworks): RereadPlan {
+  const byNetwork = pinnedProfiles(pins, networks);
   const plan: RereadPlan = { selected: new Set(), waiting: {} };
   for (const [network, urls] of byNetwork) {
     urls.sort((a, b) => (reads[a]?.readAt ?? "").localeCompare(reads[b]?.readAt ?? ""));
@@ -131,7 +138,7 @@ export function rereading(inner: PhotoSource, plan: RereadPlan, read: ReadProfil
     },
     report() {
       const report: RunReads = {};
-      for (const network of ["instagram", "facebook"] as const) {
+      for (const network of rereadNetworks) {
         const planned = [...plan.selected].filter((url) => parseProfileLink(url)?.network === network);
         const entry = stats[network];
         // After a stop, the planned profiles not read wait for the next sync.

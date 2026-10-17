@@ -25,7 +25,7 @@ const search = ref("");
 const undoing = ref(false);
 let poll: number | undefined;
 
-const networkNames = { instagram: "Instagram", facebook: "Facebook" };
+const networkNames = { instagram: "Instagram", facebook: "Facebook", linkedin: "LinkedIn" };
 function readsText(network: keyof typeof networkNames, reads?: ProfileReadsReport): string {
   if (!reads) return "";
   const name = networkNames[network];

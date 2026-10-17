@@ -2,7 +2,7 @@ import { mkdirSync } from "fs";
 import path from "path";
 import { Page, Request, Route, WebSocketRoute, expect } from "@playwright/test";
 
-import { ProfilesOverview, Contact, ContactLabel, TelegramState, CleanupActionSummary, CleanupScan, DesktopInfo, EventType, MergeRequest, GoogleAccount, GoogleStats, RunRecord, SessionStatus, UpdateCheck } from "../../interfaces/api";
+import { PinnedProfiles, ProfilesOverview, Contact, ContactLabel, TelegramState, CleanupActionSummary, CleanupScan, DesktopInfo, EventType, MergeRequest, GoogleAccount, GoogleStats, RunRecord, SessionStatus, UpdateCheck } from "../../interfaces/api";
 import { avatars } from "./avatars";
 
 /**
@@ -65,6 +65,8 @@ export class FakeBackend {
   /** Find profiles (issue #61): what the page reads, and every request it sends. */
   profiles?: ProfilesOverview;
   profileRequests: { route: string; body?: any; query?: string }[] = [];
+  /** Desktop: pinned profiles each network could read again (issue #80). */
+  pinnedProfiles: PinnedProfiles = {};
   /** /api/status waits for this, to show what the page looks like while it loads. */
   statusGate?: Promise<void>;
   /** When false, Google sign-in "opens in the system browser" and nothing happens here. */
@@ -280,6 +282,7 @@ export class FakeBackend {
   }
 
   private profilesRoute(route: Route, pathname: string, request: Request) {
+    if (pathname === "/api/profiles/pinned") return route.fulfill({ json: this.pinnedProfiles });
     const data = this.profiles!;
     const sub = pathname.replace("/api/profiles", "") || "/";
     const body = request.headers()["content-type"]?.startsWith("application/json") ? request.postDataJSON() : request.postData() ?? undefined;

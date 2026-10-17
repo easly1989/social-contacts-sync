@@ -180,3 +180,11 @@ test("links with a photo from before pins become pins once (issue #78)", async (
   setPin("profiles-78", "people/ec", undefined);
   assert.deepEqual(getPins("profiles-78"), {});
 });
+
+test("pinned profiles each network could read again (issue #80)", async (t) => {
+  const { call } = await start(t, "profiles-80");
+  setPin("profiles-80", "people/ec", { source: "links", matchedBy: "instagram.com/elena_conti", readAt: "2026-10-01T00:00:00.000Z" });
+  setPin("profiles-80", "people/dg", { source: "links", matchedBy: "linkedin.com/in/davidegallo", readAt: "2026-10-01T00:00:00.000Z" });
+  setPin("profiles-80", "people/m", { source: "whatsapp", readAt: "2026-10-01T00:00:00.000Z" });
+  assert.deepEqual(await call("GET", "/profiles/pinned"), { status: 200, json: { instagram: 1, linkedin: 1 } });
+});

@@ -130,6 +130,57 @@ test("desktop: Google account and sources can be signed out and unlinked, and co
   expect(new URL(backend.requested("/api/google_auth_start")!.url()).searchParams.get("return")).toBe("/app/settings/google");
 });
 
+test("desktop: LinkedIn reads are on by default, said once before a sync, and can be turned off (issue #80)", async ({ page }) => {
+  backend.pinnedProfiles = { instagram: 4, linkedin: 3 };
+  const initSync = () => backend.requests.filter((r) => new URL(r.url()).pathname === "/api/init_sync").map((r) => new URL(r.url()).searchParams.get("linkedin_rereads"));
+
+  // The setting, on by default, explains the visit.
+  await page.goto("/app/settings/sources");
+  const setting = page.getByTestId("settings-linkedin-rereads");
+  await expect(setting.getByRole("checkbox")).toBeChecked();
+  await expect(setting).toContainText("LinkedIn may show this to the person as a profile visit from you.");
+  await setting.scrollIntoViewIfNeeded();
+  await screenshot(page, "26b-settings-linkedin-rereads", { fullPage: false });
+
+  // The first sync with profile links says so.
+  await page.goto("/app/sync");
+  await page.getByRole("button", { name: "Start sync" }).click();
+  const notice = page.getByTestId("linkedin-notice");
+  await expect(notice).toBeVisible();
+  await expect(notice).toContainText("This sync checks the 3 LinkedIn profiles your contacts' photos come from, with your LinkedIn login.");
+  await screenshot(page, "26-linkedin-notice", { fullPage: false });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await screenshot(page, "26c-linkedin-notice-phone", { fullPage: false });
+  await notice.getByRole("button", { name: "Turn off for LinkedIn" }).click();
+  await expect(page).toHaveURL(/\/app\/sync\/run/);
+  await expect.poll(initSync).toEqual(["false"]);
+
+  // Never again; and the setting is off.
+  await page.goto("/app/sync");
+  await page.getByRole("button", { name: "Start sync" }).click();
+  await expect(page).toHaveURL(/\/app\/sync\/run/);
+  await expect(page.getByTestId("linkedin-notice")).toBeHidden();
+  await page.goto("/app/settings/sources");
+  await expect(page.getByTestId("settings-linkedin-rereads").getByRole("checkbox")).not.toBeChecked();
+});
+
+test("desktop: Got it keeps LinkedIn reads on; no notice without pinned LinkedIn profiles (issue #80)", async ({ page }) => {
+  const initSync = () => backend.requests.filter((r) => new URL(r.url()).pathname === "/api/init_sync").map((r) => new URL(r.url()).searchParams.get("linkedin_rereads"));
+  // Nothing pinned to LinkedIn: no notice.
+  await page.goto("/app/sync");
+  await page.getByRole("button", { name: "Start sync" }).click();
+  await expect(page).toHaveURL(/\/app\/sync\/run/);
+  await expect.poll(initSync).toEqual(["true"]);
+
+  backend.pinnedProfiles = { linkedin: 1 };
+  await page.goto("/app/sync");
+  await page.getByRole("button", { name: "Start sync" }).click();
+  await expect(page.getByTestId("linkedin-notice")).toContainText("This sync checks the LinkedIn profile your contact's photo comes from");
+  await page.getByTestId("linkedin-notice").getByRole("button", { name: "Got it" }).click();
+  await expect(page).toHaveURL(/\/app\/sync\/run/);
+  await expect.poll(initSync).toEqual(["true", "true"]);
+});
+
 test("about: credits, donations and licence", async ({ page }) => {
   await page.goto("/app/settings/about");
   await expect(page.getByTestId("about-version")).toContainText("Version 1.0.0 · Windows portable · What's new");

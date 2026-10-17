@@ -11,6 +11,7 @@ import {
   instagramProfile,
   isAbortedLoad,
   linkedinPage,
+  linkedinProfile,
   pause,
   ProfileRead,
   profilePageUrl,
@@ -277,6 +278,18 @@ export async function socialProfile(network: ScanNetwork, handle: string): Promi
       if (answer.status === 404) return { missing: true };
       if (answer.status !== 200) return { stopped: `error:${answer.status}` };
       const profile = instagramProfile(JSON.parse(answer.body));
+      return profile ? { profile } : { missing: true };
+    }
+    if (network === "linkedin") {
+      const csrf = (await cookie("linkedin", "JSESSIONID"))?.replace(/"/g, "");
+      if (!csrf) return { stopped: "signin" };
+      const path = `/voyager/api/identity/dash/profiles?q=memberIdentity&memberIdentity=${encodeURIComponent(handle)}`;
+      const answer = await pageFetch(win, path, { "csrf-token": csrf, "x-restli-protocol-version": "2.0.0", accept: "application/vnd.linkedin.normalized+json+2.1" });
+      const blocked = blockedReason(answer.status, answer.url, answer.body);
+      if (blocked) return { stopped: blocked };
+      if (answer.status === 404) return { missing: true };
+      if (answer.status !== 200) return { stopped: `error:${answer.status}` };
+      const profile = linkedinProfile(JSON.parse(answer.body), handle);
       return profile ? { profile } : { missing: true };
     }
     await load(win, url);

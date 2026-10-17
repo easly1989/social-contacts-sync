@@ -25,7 +25,7 @@ import { SimpleContact } from "./interfaces";
 import { getPlaceholders, isPlaceholder } from "./contacts/placeholders";
 import { getKeptPhotos } from "./contacts/keptPhotos";
 import { getPins, setPin } from "./contacts/photoPins";
-import { defaultRereadCap, getReads, planRereads, rereading, saveReads } from "./profiles/rereads";
+import { defaultRereadCap, getReads, planRereads, rereading, rereadNetworks, saveReads } from "./profiles/rereads";
 import { askDesktop } from "./desktop";
 
 /** Marks the contacts whose photo is a placeholder, or kept, from the Contacts page, and the source each photo follows. */
@@ -98,7 +98,13 @@ export async function initSync(id: string, syncOptions: SyncOptions) {
     process.env.SCS_DESKTOP === "1" && sources.some((s) => s.id === "links")
       ? rereading(
           sources.find((s) => s.id === "links")!,
-          planRereads(getPins(id), reads, Number(process.env.SCS_PROFILE_READS) || defaultRereadCap),
+          planRereads(
+            getPins(id),
+            reads,
+            Number(process.env.SCS_PROFILE_READS) || defaultRereadCap,
+            // A LinkedIn read may show as a profile visit: only while the setting is on (issue #80).
+            rereadNetworks.filter((n) => n !== "linkedin" || syncOptions.linkedin_rereads !== "false")
+          ),
           (network, handle) => askDesktop("social-profile", { network, handle }, 60_000),
           {
             record: (url, read) => {
