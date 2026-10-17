@@ -142,7 +142,7 @@ test("report: kept Google photos aren't 'no photo found', and an error stays one
   await expect(page.getByTestId("count-kept-google")).toHaveText("Nothing new found, kept the photo they have in Google: 1");
   await expect(page.getByRole("tab", { name: "No photo found (1)" })).toBeVisible();
   await page.getByRole("tab", { name: "Errors (1)" }).click();
-  const error = page.getByRole("row").nth(1).locator(".line-clamp-2");
+  const error = page.getByRole("row").nth(1).locator(".line-clamp-2:visible");
   await expect(error).toContainText("Google had a temporary problem (502)");
   expect(await error.evaluate((el) => el.getBoundingClientRect().height)).toBeLessThan(50);
   await screenshot(page, "25d-report-kept-and-error");
