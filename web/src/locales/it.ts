@@ -786,6 +786,7 @@ const it: typeof en = {
       finish: "Completa la configurazione",
       ready: "Nessuna sorgente collegata | 1 sorgente collegata | {count} sorgenti collegate",
       unavailable: "Instagram, Facebook e X non si possono leggere tramite il tuo account, perché non offrono un modo ufficiale. Funzionano invece i link ai profili salvati nei contatti.",
+      unavailableDesktop: "X non si può leggere tramite il tuo account, perché non offre un modo ufficiale; funzionano invece i suoi link ai profili. Instagram, Facebook e LinkedIn si leggono con l'accesso che fai in Trova profili.",
     },
   },
   contribute: {

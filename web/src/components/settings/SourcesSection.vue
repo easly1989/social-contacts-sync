@@ -133,6 +133,6 @@ onUnmounted(() => window.clearInterval(poll));
         <p class="flex gap-1.5 text-xs text-base-content/50"><Info class="mt-px size-3.5 shrink-0" />{{ $t("links.settingsHint") }}</p>
       </div>
     </div>
-    <p class="flex items-start gap-1.5 pt-4 text-xs text-base-content/50"><Info class="mt-px size-3.5 shrink-0" />{{ $t("setup.sources.unavailable") }}</p>
+    <p class="flex items-start gap-1.5 pt-4 text-xs text-base-content/50"><Info class="mt-px size-3.5 shrink-0" />{{ $t(isDesktop ? "setup.sources.unavailableDesktop" : "setup.sources.unavailable") }}</p>
   </SettingsCard>
 </template>

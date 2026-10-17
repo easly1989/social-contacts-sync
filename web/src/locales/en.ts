@@ -784,6 +784,7 @@ export default {
       finish: "Finish setup",
       ready: "No source connected yet | 1 source connected | {count} sources connected",
       unavailable: "Instagram, Facebook and X can't be read through your account, as they offer no official way to. Profile links saved on your contacts work instead.",
+      unavailableDesktop: "X can't be read through your account, as it offers no official way to; its profile links work instead. Instagram, Facebook and LinkedIn are read with the login you make in Find profiles.",
     },
   },
   contribute: {
