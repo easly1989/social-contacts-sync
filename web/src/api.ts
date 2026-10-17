@@ -77,7 +77,8 @@ export const api = {
   cleanupActions: () => get<CleanupActionSummary[]>("/api/cleanup/actions"),
   undoCleanup: (id: string) => post(`/api/cleanup/actions/${encodeURIComponent(id)}/undo`),
   // Profile links (issue #51).
-  linkLookup: (url: string) => post<LinkLookup>("/api/links/lookup", { url }),
+  /** `linkedin`: whether the desktop app may read LinkedIn with the login (issue #80). */
+  linkLookup: (url: string, linkedin: boolean) => post<LinkLookup>("/api/links/lookup", { url, linkedin }),
   saveRunLink: (runId: string, index: number, token: string) =>
     post<{ result: ContactResult; counters: SyncCounters }>(`/api/runs/${encodeURIComponent(runId)}/results/${index}/link`, { token }),
   // The Contacts page (issue #55).

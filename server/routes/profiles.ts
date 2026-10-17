@@ -18,7 +18,7 @@ import { loadProfiles, mergePeople, ProfilesData, saveProfiles, StoredLinked } f
 import { downloadImage, lookupProfileLink, networkNames, parseProfileLink, shortLink } from "../src/sources/links";
 import { photoKey } from "../src/contacts/model";
 import { getPins, photoHash, setPin } from "../src/contacts/photoPins";
-import { pinnedProfiles } from "../src/profiles/rereads";
+import { desktopReader, lookupWithLogin, pinnedProfiles, ReadProfile, readsWithLogin, RereadNetwork } from "../src/profiles/rereads";
 
 // Find profiles (issue #61): suggestions from exports, a public search and,
 // in the desktop app, a scan of the user's own followers with their login.
@@ -49,6 +49,8 @@ interface Options {
   desktop?: SocialDesktop | null;
   fetchImpl?: typeof fetch;
   sleep?: (ms: number) => Promise<void>;
+  /** The desktop app's login reads; undefined in the web version. */
+  loginReader?: () => ReadProfile | undefined;
 }
 
 /** What the desktop app read, checked like any link: known profile addresses only. */
@@ -279,7 +281,7 @@ export function profilesRouter(options: Options = {}): express.Router {
     // A kept photo (issue #67) is never replaced: only the links are added.
     const photoPerson = before.photoKept ? undefined : persons.find((p) => p.id === request.photoFrom);
     if (photoPerson) {
-      const photo = await profilePhoto(photoPerson);
+      const photo = await profilePhoto(sessionId, photoPerson, true);
       if (photo) {
         previousPhoto = before.hasPhoto ? await api.photo(await api.get(contactId)) : null;
         const googleUrl = await api.setPhoto(contactId, photo);
@@ -320,14 +322,23 @@ export function profilesRouter(options: Options = {}): express.Router {
     return { linked, photoSet };
   }
 
-  /** The profile's photo: the one read with it, else the one its page shows now. */
-  async function profilePhoto(person: SocialPerson): Promise<string | null> {
+  /**
+   * The profile's photo: the one read with it, else the one its page shows
+   * now. The desktop app reads Instagram and Facebook with the login when
+   * linking (`withLogin`), never anonymously, and never LinkedIn from here
+   * (a read may show as a visit).
+   */
+  async function profilePhoto(sessionId: string, person: SocialPerson, withLogin = false): Promise<string | null> {
     const fetchImpl = options.fetchImpl ?? fetch;
-    return (
-      (person.photoUrl ? await downloadImage(person.photoUrl, person.network, fetchImpl).catch(() => null) : null) ??
-      (await lookupProfileLink(person.url, { fetchImpl }).catch(() => null))?.photo ??
-      null
-    );
+    const stored = person.photoUrl ? await downloadImage(person.photoUrl, person.network, fetchImpl).catch(() => null) : null;
+    if (stored) return stored;
+    const link = parseProfileLink(person.url);
+    const reader = link && readsWithLogin(link.network) ? (options.loginReader ?? desktopReader)() : undefined;
+    if (link && reader) {
+      if (!withLogin || link.network === "linkedin") return null;
+      return (await lookupWithLogin(sessionId, link as typeof link & { network: RereadNetwork }, reader, { fetchImpl, sleep: options.sleep }).catch(() => null))?.photo ?? null;
+    }
+    return (await lookupProfileLink(person.url, { fetchImpl }).catch(() => null))?.photo ?? null;
   }
 
   const strings = (value: unknown) => (Array.isArray(value) ? value.filter((v): v is string => typeof v === "string").slice(0, 50) : []);
@@ -419,7 +430,8 @@ export function profilesRouter(options: Options = {}): express.Router {
     let cached = photoCache.get(id);
     // A miss is tried again after ten minutes.
     if (!cached || (!cached.bytes && Date.now() - cached.at > 10 * 60 * 1000)) {
-      const photo = await profilePhoto(person).catch(() => null);
+      // A preview: never a login read, which would run for every card shown.
+      const photo = await profilePhoto(req.sessionID, person).catch(() => null);
       cached = { at: Date.now(), bytes: photo ? Buffer.from(photo, "base64") : undefined };
       photoCache.set(id, cached);
       while (photoCache.size > 2000) photoCache.delete(photoCache.keys().next().value!);

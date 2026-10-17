@@ -3,7 +3,8 @@ import path from "path";
 
 import { PhotoPin, ProfileReadsReport } from "../../../interfaces/api";
 import { getFromCache, setInCache } from "../cache";
-import { parseProfileLink, ProfileLink } from "../sources/links";
+import { askDesktop } from "../desktop";
+import { downloadImage, LinkBlockedError, LinkPhoto, parseProfileLink, ProfileLink } from "../sources/links";
 import { PhotoSource } from "../sources/types";
 
 /*
@@ -168,3 +169,54 @@ export function rereading(inner: PhotoSource, plan: RereadPlan, read: ReadProfil
 }
 
 export type RunReads = Partial<Record<RereadNetwork, ProfileReadsReport>>;
+
+/** Whether the desktop app reads this network with the login (never anonymously). */
+export const readsWithLogin = (network: string): network is RereadNetwork => rereadNetworks.includes(network as RereadNetwork);
+
+/** The desktop app's reader, or undefined in the web version, which has no login reads. */
+export function desktopReader(): ReadProfile | undefined {
+  return process.env.SCS_DESKTOP === "1" ? (network, handle) => askDesktop("social-profile", { network, handle }, 60_000) : undefined;
+}
+
+/** The app has no login for the site, or the site wants it again. */
+export class LoginNeededError extends Error {
+  constructor(public network: RereadNetwork) {
+    super(`No login for ${network}`);
+  }
+}
+
+// One lookup by hand every 3–7 seconds per session and site; after a limit or sign-in page the site rests a while.
+const lastLookup = new Map<string, number>();
+const restingUntil = new Map<string, number>();
+const rest = 30 * 60 * 1000;
+
+/**
+ * A link's photo read with the login (the explicit "Find photo", and
+ * linking in Find profiles): recorded like a sync's reads.
+ */
+export async function lookupWithLogin(
+  sessionId: string,
+  link: ProfileLink & { network: RereadNetwork },
+  read: ReadProfile,
+  options: { fetchImpl?: typeof fetch; sleep?: (ms: number) => Promise<void>; random?: () => number; now?: () => number } = {}
+): Promise<LinkPhoto | null> {
+  const now = options.now ?? Date.now;
+  const key = `${sessionId}:${link.network}`;
+  if ((restingUntil.get(key) ?? 0) > now()) throw new LinkBlockedError(link.network);
+  const wait = (lastLookup.get(key) ?? 0) + 3000 + 4000 * (options.random ?? Math.random)() - now();
+  if (lastLookup.has(key) && wait > 0) await (options.sleep ?? ((ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms))))(wait);
+  lastLookup.set(key, now());
+  const answer = await read(link.network, link.handle);
+  if (answer.stopped === "notSignedIn") throw new LoginNeededError(link.network);
+  if (answer.stopped === "signin" || answer.stopped === "limited") {
+    restingUntil.set(key, now() + rest);
+    if (answer.stopped === "signin") throw new LoginNeededError(link.network);
+    throw new LinkBlockedError(link.network);
+  }
+  if (answer.stopped) throw new Error(`Reading ${link.url} stopped: ${answer.stopped}`);
+  const reads = getReads(sessionId);
+  reads[link.url] = { ...answer.profile, readAt: new Date(now()).toISOString() };
+  saveReads(sessionId, reads);
+  const photo = answer.profile?.photoUrl ? await downloadImage(answer.profile.photoUrl, link.network, options.fetchImpl) : null;
+  return photo ? { photo, link } : null;
+}

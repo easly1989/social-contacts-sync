@@ -8,6 +8,8 @@ import { profilesRouter, ScanNetwork } from "../../routes/profiles";
 import { deleteFromCache, setInCache } from "../cache";
 import { setKeptPhoto } from "../contacts/keptPhotos";
 import { getPins, photoHash, setPin } from "../contacts/photoPins";
+import { ReadProfile } from "./rereads";
+import { loadProfiles, mergePeople, saveProfiles } from "./store";
 import { FakeContacts } from "../cleanup/fakeContacts";
 import { Person } from "../cleanup/people";
 
@@ -19,7 +21,7 @@ const people: Person[] = [
 ];
 const jpeg = Buffer.alloc(2048, 9);
 
-async function start(t: { after(fn: () => void): void }, sessionId: string) {
+async function start(t: { after(fn: () => void): void }, sessionId: string, loginReader?: ReadProfile) {
   delete process.env.SCS_DESKTOP; // in memory
   const google = new FakeContacts(people, { "people/ec": "T0xE" });
   const scanned: SocialPerson[] = [{ id: "instagram:elena_conti", network: "instagram", url: "https://instagram.com/elena_conti", handle: "elena_conti", name: "Elena Conti", photoUrl: "https://scontent.cdninstagram.com/e.jpg", source: "scan", relation: "follower" }];
@@ -42,7 +44,7 @@ async function start(t: { after(fn: () => void): void }, sessionId: string) {
     (req as unknown as { sessionID: string }).sessionID = sessionId;
     next();
   });
-  app.use("/api", profilesRouter({ contactsApi: () => google, desktop, fetchImpl, sleep: async () => {} }));
+  app.use("/api", profilesRouter({ contactsApi: () => google, desktop, fetchImpl, sleep: async () => {}, loginReader: () => loginReader }));
   setInCache(sessionId, "gauth", {});
   const server = app.listen(0, "127.0.0.1");
   await new Promise((resolve) => server.once("listening", resolve));
@@ -179,6 +181,22 @@ test("links with a photo from before pins become pins once (issue #78)", async (
   // Unpinned, it stays unpinned.
   setPin("profiles-78", "people/ec", undefined);
   assert.deepEqual(getPins("profiles-78"), {});
+});
+
+test("desktop: linking reads an Instagram photo with the login; a preview never does (issue #80)", async (t) => {
+  const asked: string[] = [];
+  const { call, google } = await start(t, "profiles-80b", async (network, handle) => (asked.push(`${network}:${handle}`), { profile: { photoUrl: "https://scontent.cdninstagram.com/fresh.jpg" } }));
+  // Read from an export: no photo with it.
+  const data = loadProfiles("profiles-80b");
+  mergePeople(data, [{ id: "instagram:anna.m", network: "instagram", url: "https://instagram.com/anna.m", handle: "anna.m", source: "export" }]);
+  saveProfiles("profiles-80b", data);
+
+  assert.equal((await call("GET", "/profiles/photo?id=instagram:anna.m")).status, 404);
+  assert.deepEqual(asked, []);
+  const linked = await call("POST", "/profiles/link", { contactId: "people/m", personIds: ["instagram:anna.m"], photoFrom: "instagram:anna.m" });
+  assert.equal(linked.json.photoSet, true);
+  assert.deepEqual(asked, ["instagram:anna.m"]);
+  assert.equal(google.photos.get("people/m"), jpeg.toString("base64"));
 });
 
 test("pinned profiles each network could read again (issue #80)", async (t) => {

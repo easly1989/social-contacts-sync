@@ -7,12 +7,17 @@ import { OAuth2Client } from "../src/gapi";
 import { getLookup, saveLookup, sessionPacer } from "../src/linkLookups";
 import { getRun, setRunPhoto, updateRun } from "../src/runs";
 import { LinkBlockedError, LinkPhoto, lookupProfileLink, networkNames, parseProfileLink, Pacer, shortLink } from "../src/sources/links";
+import { desktopReader, LoginNeededError, lookupWithLogin, ReadProfile, readsWithLogin, RereadNetwork } from "../src/profiles/rereads";
 
 type Lookup = (url: string, options: { pacer?: Pacer }) => Promise<LinkPhoto | null>;
 
 // Profile links (issue #51): look up a link's photo, and save it with the
 // link on a contact from the report.
-export function linksRouter(contactsApi: (auth: OAuth2Client) => ContactsApi = peopleContactsApi, lookup: Lookup = lookupProfileLink): express.Router {
+export function linksRouter(
+  contactsApi: (auth: OAuth2Client) => ContactsApi = peopleContactsApi,
+  lookup: Lookup = lookupProfileLink,
+  loginReader: () => ReadProfile | undefined = desktopReader
+): express.Router {
   const router = express.Router();
 
   router.post("/links/lookup", async (req: Request, res: Response) => {
@@ -21,11 +26,15 @@ export function linksRouter(contactsApi: (auth: OAuth2Client) => ContactsApi = p
     const link = parseProfileLink(url);
     if (!link) return res.status(400).send({ error: "unsupported_link" });
     const network = networkNames[link.network];
+    // The desktop app reads Instagram, Facebook and LinkedIn with the login only, and LinkedIn while the setting allows it.
+    const reader = readsWithLogin(link.network) ? loginReader() : undefined;
+    if (reader && link.network === "linkedin" && req.body?.linkedin === false) return res.status(409).send({ error: "linkedin_off", network });
     try {
-      const found = await lookup(link.url, { pacer: sessionPacer(req.sessionID) });
+      const found = reader ? await lookupWithLogin(req.sessionID, link as typeof link & { network: RereadNetwork }, reader) : await lookup(link.url, { pacer: sessionPacer(req.sessionID) });
       if (!found) return res.status(404).send({ error: "no_photo", network });
       res.send(saveLookup(req.sessionID, found));
     } catch (e) {
+      if (e instanceof LoginNeededError) return res.status(409).send({ error: "login_needed", network });
       if (e instanceof LinkBlockedError) return res.status(409).send({ error: "signin_required", network });
       console.error(`Looking up ${link.url} failed:`, e);
       res.status(502).send({ error: "unreachable", network });
