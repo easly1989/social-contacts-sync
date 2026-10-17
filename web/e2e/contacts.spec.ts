@@ -302,6 +302,7 @@ test("a photo from a profile follows it until the user stops it; a changed one i
   await expect(from).toBeHidden();
   expect(sent("/lg/pin", "DELETE")).toHaveLength(1);
   await expect(editor).toContainText("A photo you upload is a placeholder");
+  await screenshot(page, "78c-contacts-photo-unpinned", { fullPage: false });
   page.once("dialog", (d) => d.accept()); // the unsaved link
   await editor.getByRole("button", { name: "Close" }).first().click();
 
@@ -309,4 +310,7 @@ test("a photo from a profile follows it until the user stops it; a changed one i
   await row(page, /Marco Rossi/).getByRole("button", { name: /Marco Rossi/ }).click();
   await expect(editor.getByTestId("photo-from")).toContainText("Photo from Facebook, paused: it was changed outside the app");
   await screenshot(page, "78b-contacts-photo-from-paused", { fullPage: false });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(editor.getByTestId("photo-from")).toBeVisible();
+  await screenshot(page, "78d-contacts-photo-from-phone", { fullPage: false });
 });

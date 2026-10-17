@@ -354,13 +354,13 @@ onBeforeUnmount(() => {
                 <span class="mt-0.5 block text-xs text-base-content/60">{{ $t("contacts.keepPhotoHint") }}</span>
               </span>
             </label>
-            <div v-if="photoFrom" class="flex items-start gap-3 rounded-xl border border-base-300 p-3 text-sm" data-testid="photo-from">
+            <div v-if="photoFrom" class="flex flex-wrap items-start gap-x-3 gap-y-1 rounded-xl border border-base-300 p-3 text-sm" data-testid="photo-from">
               <Link class="mt-0.5 size-4 shrink-0" :class="photoFrom.suspended ? 'text-warning' : 'text-primary'" />
-              <span class="flex-1">
+              <span class="min-w-0 flex-1 basis-40">
                 {{ photoFrom.suspended ? $t("contacts.photoFromSuspended", { source: photoFrom.name }) : $t("contacts.photoFrom", { source: photoFrom.name }) }}
                 <span v-if="photoFrom.matchedBy" class="block text-xs text-base-content/60">{{ photoFrom.matchedBy }}</span>
               </span>
-              <button type="button" class="btn btn-ghost btn-sm shrink-0" :disabled="Boolean(busy)" @click="unpin">{{ $t("contacts.unpin") }}</button>
+              <button type="button" class="btn btn-ghost btn-sm ml-auto shrink-0" :disabled="Boolean(busy)" @click="unpin">{{ $t("contacts.unpin") }}</button>
             </div>
             <p v-else-if="!isKept" class="text-xs text-base-content/60">{{ $t("contacts.placeholderHint") }}</p>
           </div>
