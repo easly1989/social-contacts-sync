@@ -4,9 +4,9 @@ import assert from "node:assert/strict";
 import { PhotoPin } from "../../../interfaces/api";
 import { photoHash } from "../contacts/photoPins";
 import { SimpleContact } from "../interfaces";
-import { linksSource, Pacer } from "../sources/links";
+import { LinkBlockedError, linksSource, Pacer, parseProfileLink, ProfileLink } from "../sources/links";
 import { runSync, SyncTarget } from "../syncEngine";
-import { planRereads, ReadProfile, rereading, StoredRead } from "./rereads";
+import { getReads, LoginNeededError, lookupWithLogin, planRereads, ReadProfile, rereading, StoredRead } from "./rereads";
 
 // Pinned Instagram and Facebook profiles read again with the login (issue #79), against a fake desktop app.
 const at = (minute: number) => `2026-10-01T00:${String(minute).padStart(2, "0")}:00.000Z`;
@@ -112,6 +112,30 @@ test("links that aren't pinned are read with the login too, with what the cap le
   // Bruno's photo from the login read; Carla's from the address a scan read.
   assert.deepEqual(writes, ["c/bruno", "c/carla"]);
   assert.deepEqual(report, { instagram: { read: 2, waiting: 0 } });
+});
+
+test("a link looked up by hand with the login: paced, recorded, and a limit rests the site (issue #80)", async () => {
+  delete process.env.SCS_DESKTOP; // reads kept in memory
+  let clock = 1_000_000;
+  const waits: number[] = [];
+  const answers: Awaited<ReturnType<ReadProfile>>[] = [{ profile: { photoUrl: "https://cdn.example/v2.jpg" } }, { stopped: "limited" }, { profile: {} }];
+  const options = { fetchImpl, now: () => clock, random: () => 0.5, sleep: async (ms: number) => void (waits.push(ms), (clock += ms)) };
+  const reader: ReadProfile = async () => answers.shift()!;
+  const anna = parseProfileLink("https://instagram.com/anna") as ProfileLink & { network: "instagram" };
+
+  const found = await lookupWithLogin("lookup-80", anna, reader, options);
+  assert.equal(found?.photo, image(2).toString("base64"));
+  assert.equal(getReads("lookup-80")["https://instagram.com/anna"].photoUrl, "https://cdn.example/v2.jpg");
+  // The next waits for the rest of the 3–7 seconds; Instagram limits, so it rests.
+  await assert.rejects(lookupWithLogin("lookup-80", anna, reader, options), LinkBlockedError);
+  assert.deepEqual(waits, [5000]);
+  await assert.rejects(lookupWithLogin("lookup-80", anna, reader, options), LinkBlockedError);
+  assert.equal(answers.length, 1); // not asked while resting
+  clock += 31 * 60 * 1000;
+  assert.equal(await lookupWithLogin("lookup-80", anna, reader, options), null); // a profile without a photo
+
+  // No login in the app.
+  await assert.rejects(lookupWithLogin("lookup-80b", anna, async () => ({ stopped: "notSignedIn" }), options), LoginNeededError);
 });
 
 test("a missing profile keeps the photo a scan read", async () => {

@@ -42,6 +42,30 @@ test("settings: profile links are ready, and the unofficial networks are opt-in"
   expect(query.get("links_best_effort")).toBe("true");
 });
 
+test("desktop: Find photo says when the app isn't signed in, and sends the LinkedIn setting (issue #80)", async ({ page }) => {
+  Object.assign(backend.status, { desktop: true, setupDone: true, googleConfigured: true });
+  const run = backend.runs[0];
+  backend.linkFailures["https://www.facebook.com/francesco.greco"] = { status: 409, json: { error: "login_needed", network: "Facebook" } };
+  backend.linkFailures["https://www.linkedin.com/in/francesco"] = { status: 409, json: { error: "linkedin_off", network: "LinkedIn" } };
+  await page.goto(`/app/history/${run.id}`);
+  await page.getByRole("tab", { name: "No photo found (2)" }).click();
+  await page.getByRole("row", { name: /Francesco Greco/ }).getByRole("button", { name: "Add profile link" }).click();
+  const field = page.getByLabel("Profile link for Francesco Greco");
+
+  await field.fill("https://www.facebook.com/francesco.greco");
+  await page.getByRole("button", { name: "Find photo" }).click();
+  await expect(page.getByRole("alert")).toHaveText("The app isn't signed in to Facebook. Sign in from Find profiles, then try again.");
+  await screenshot(page, "26e-report-login-needed", { fullPage: false });
+  await field.fill("https://www.linkedin.com/in/francesco");
+  await page.getByRole("button", { name: "Find photo" }).click();
+  await expect(page.getByRole("alert")).toHaveText("Reading LinkedIn profiles is turned off in Settings, Sources.");
+  const sent = backend.requests.filter((r) => new URL(r.url()).pathname === "/api/links/lookup").map((r) => r.postDataJSON());
+  expect(sent).toEqual([
+    { url: "https://www.facebook.com/francesco.greco", linkedin: true },
+    { url: "https://www.linkedin.com/in/francesco", linkedin: true },
+  ]);
+});
+
 test("report: add a profile link to a contact without a photo", async ({ page }) => {
   const run = backend.runs[0];
   backend.linkFailures["https://example.com/francesco"] = { status: 400, json: { error: "unsupported_link" } };

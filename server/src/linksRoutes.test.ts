@@ -9,10 +9,11 @@ import { removeContactLink } from "./contactLinks";
 import { FakeContacts } from "./cleanup/fakeContacts";
 import { getRun, getRunPhoto, saveRun } from "./runs";
 import { LinkBlockedError, parseProfileLink } from "./sources/links";
+import { ReadProfile } from "./profiles/rereads";
 
 // Profile links from the report (issue #51), against the fake address book,
 // which applies Google's rules for updateContact.
-async function start(t: { after(fn: () => void): void }, sessionId: string) {
+async function start(t: { after(fn: () => void): void }, sessionId: string, loginReader?: ReadProfile) {
   delete process.env.SCS_DESKTOP; // runs in memory
   const google = new FakeContacts([
     { resourceName: "people/elena", names: [{ displayName: "Elena Conti" }], phoneNumbers: [{ value: "+39 340 111 2222" }], urls: [{ value: "https://elena.example.com" }] },
@@ -34,7 +35,8 @@ async function start(t: { after(fn: () => void): void }, sessionId: string) {
         if (url.includes("blocked")) throw new LinkBlockedError("linkedin");
         if (url.includes("nopic")) return null;
         return { photo: "TElOSw==", link: parseProfileLink(url)! };
-      }
+      },
+      () => loginReader
     )
   );
   setInCache(sessionId, "gauth", {});
@@ -71,6 +73,22 @@ test("lookup: unsupported links, profiles without a photo and sites asking to si
   assert.deepEqual(await post("/links/lookup", { url: "https://www.linkedin.com/in/blocked" }), { status: 409, json: { error: "signin_required", network: "LinkedIn" } });
   // The link is normalized before the lookup.
   assert.deepEqual(lookups, ["https://x.com/nopic", "https://linkedin.com/in/blocked"]);
+});
+
+test("desktop: Instagram, Facebook and LinkedIn links are looked up with the login, never anonymously (issue #80)", async (t) => {
+  const asked: string[] = [];
+  const { post, lookups } = await start(t, "links-80", async (network, handle) => {
+    asked.push(`${network}:${handle}`);
+    return network === "facebook" ? { stopped: "notSignedIn" } : { profile: { name: "Someone" } };
+  });
+  assert.deepEqual(await post("/links/lookup", { url: "https://www.facebook.com/davide.gallo" }), { status: 409, json: { error: "login_needed", network: "Facebook" } });
+  assert.deepEqual(await post("/links/lookup", { url: "https://instagram.com/anna", linkedin: false }), { status: 404, json: { error: "no_photo", network: "Instagram" } });
+  // LinkedIn while its setting is off: not read at all.
+  assert.deepEqual(await post("/links/lookup", { url: "https://linkedin.com/in/davidegallo", linkedin: false }), { status: 409, json: { error: "linkedin_off", network: "LinkedIn" } });
+  // Other sites stay anonymous.
+  await post("/links/lookup", { url: "https://x.com/nopic" });
+  assert.deepEqual(asked, ["facebook:davide.gallo", "instagram:anna"]);
+  assert.deepEqual(lookups, ["https://x.com/nopic"]);
 });
 
 test("report: save a link and its photo on a contact, then undo it", async (t) => {

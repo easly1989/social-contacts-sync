@@ -375,6 +375,8 @@ const it: typeof en = {
       no_photo: "{network} non mostra una foto profilo per questo link.",
       signin_required: "{network} ha chiesto l'accesso o sta limitando le richieste. Riprova più tardi.",
       unreachable: "Impossibile contattare {network}. Controlla la connessione e riprova.",
+      login_needed: "L'app non ha l'accesso a {network}. Accedi da Trova profili, poi riprova.",
+      linkedin_off: "La lettura dei profili LinkedIn è disattivata in Impostazioni, Sorgenti.",
       unknown: "Non ha funzionato. Riprova.",
     },
   },

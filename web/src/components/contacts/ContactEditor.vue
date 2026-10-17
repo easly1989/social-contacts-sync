@@ -7,7 +7,7 @@ import ContactAvatar from "../ContactAvatar.vue";
 import PhotoZoom from "../PhotoZoom.vue";
 import { api, ApiError, withGoogleDetail } from "../../api";
 import { composedName, displayName, shrinkImage } from "../../contactTools";
-import { lookupError } from "../../profileLinks";
+import { linkedinRereads, lookupError } from "../../profileLinks";
 import { Contact, ContactAddress, ContactField, ContactInput, ContactLabel, LinkLookup } from "../../../../interfaces/api";
 
 // The Contacts page's editor (issue #55): every field Google keeps, in a
@@ -211,7 +211,7 @@ async function findPhoto(index: number): Promise<void> {
   linkError.value = undefined;
   found.value = undefined;
   try {
-    found.value = { index, lookup: await api.linkLookup(url) };
+    found.value = { index, lookup: await api.linkLookup(url, linkedinRereads.value) };
   } catch (e) {
     linkError.value = { index, message: lookupError(e, t) };
   }

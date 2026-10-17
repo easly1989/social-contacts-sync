@@ -373,6 +373,8 @@ export default {
       no_photo: "{network} shows no profile picture for this link.",
       signin_required: "{network} asked to sign in or is limiting requests. Try again later.",
       unreachable: "Couldn't reach {network}. Check your connection and try again.",
+      login_needed: "The app isn't signed in to {network}. Sign in from Find profiles, then try again.",
+      linkedin_off: "Reading LinkedIn profiles is turned off in Settings, Sources.",
       unknown: "That didn't work. Please try again.",
     },
   },

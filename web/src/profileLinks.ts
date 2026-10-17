@@ -11,7 +11,7 @@ export const bestEffortNetworks = ["Instagram", "Facebook", "LinkedIn"];
 export function lookupError(e: unknown, t: (key: string, values?: Record<string, unknown>) => string): string {
   const code = e instanceof ApiError ? e.code : undefined;
   const network = e instanceof ApiError ? String(e.body?.network ?? "") : "";
-  return ["unsupported_link", "no_photo", "signin_required", "unreachable"].includes(code ?? "") ? t(`links.errors.${code}`, { network }) : t("links.errors.unknown");
+  return ["unsupported_link", "no_photo", "signin_required", "unreachable", "login_needed", "linkedin_off"].includes(code ?? "") ? t(`links.errors.${code}`, { network }) : t("links.errors.unknown");
 }
 
 /** A yes/no choice kept in this browser. */

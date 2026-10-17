@@ -4,7 +4,7 @@ import { useI18n } from "vue-i18n";
 import { Link } from "lucide-vue-next";
 
 import { api } from "../api";
-import { lookupError } from "../profileLinks";
+import { linkedinRereads, lookupError } from "../profileLinks";
 import { LinkLookup } from "../../../interfaces/api";
 
 // Looks up the profile picture behind a pasted link (issue #51), for the
@@ -22,7 +22,7 @@ async function find(): Promise<void> {
   busy.value = true;
   error.value = undefined;
   try {
-    emit("found", await api.linkLookup(url.value.trim()));
+    emit("found", await api.linkLookup(url.value.trim(), linkedinRereads.value));
   } catch (e) {
     error.value = lookupError(e, t);
   }
