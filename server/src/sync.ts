@@ -12,7 +12,8 @@ import { PhotoSource } from "./sources/types";
 import { whatsappSource } from "./sources/whatsapp";
 import { gravatarSource } from "./sources/gravatar";
 import { telegramSource } from "./sources/telegram";
-import { linksSource, shortLink } from "./sources/links";
+import { linksSource, LinksSourceOptions, shortLink } from "./sources/links";
+import { loadProfiles, storedProfilePhotos } from "./profiles/store";
 import { getLookup } from "./linkLookups";
 import { addContactLink } from "./contactLinks";
 import { peopleContactsApi } from "./cleanup/people";
@@ -44,7 +45,12 @@ export function syncMode(options: SyncOptions): SyncMode {
 }
 
 /** Sources asked for, in priority order, that are usable in this session. */
-export function requestedSources(options: SyncOptions, whatsapp: Client | undefined, telegram?: TelegramConnection): PhotoSource[] {
+export function requestedSources(
+  options: SyncOptions,
+  whatsapp: Client | undefined,
+  telegram?: TelegramConnection,
+  storedPhoto?: LinksSourceOptions["storedPhoto"]
+): PhotoSource[] {
   const ids = (options.sources ?? "whatsapp")
     .split(",")
     .map((s) => s.trim())
@@ -52,7 +58,7 @@ export function requestedSources(options: SyncOptions, whatsapp: Client | undefi
   return ids.flatMap((id) => {
     if (id === "whatsapp") return whatsapp ? [whatsappSource(whatsapp)] : [];
     if (id === "telegram") return telegram ? [telegramSource(telegram)] : [];
-    if (id === "links") return [linksSource({ bestEffort: options.links_best_effort === "true" })];
+    if (id === "links") return [linksSource({ bestEffort: options.links_best_effort === "true", storedPhoto })];
     return [gravatarSource()];
   });
 }
@@ -88,7 +94,7 @@ export async function initSync(id: string, syncOptions: SyncOptions) {
         setPhoto: (contactId, photo) => updateContactPhoto(gAuth, contactId, photo),
         addLink: async (contactId, url) => void (await addContactLink(peopleContactsApi(gAuth), contactId, url)),
       },
-      requestedSources(syncOptions, whatsappClient, telegramConnection(id)),
+      requestedSources(syncOptions, whatsappClient, telegramConnection(id), storedProfilePhotos(loadProfiles(id).people)),
       mode,
       {
         progress: (update) => sendEvent(ws, EventType.SyncProgress, update),

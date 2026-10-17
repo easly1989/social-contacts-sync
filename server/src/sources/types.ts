@@ -9,6 +9,8 @@ export interface FoundPhoto {
   matchedBy: string;
   /** A profile link to save on the contact when this photo is used. */
   newLink?: string;
+  /** The profile's network, for photos from a profile link: "Instagram", "X"… */
+  network?: string;
 }
 
 /** Somewhere profile photos can be looked up for a Google contact. */
@@ -18,4 +20,6 @@ export interface PhotoSource {
   prepare?(): Promise<void>;
   /** The contact's photo, or null when this source has none. Throws on failures. */
   find(contact: SimpleContact): Promise<FoundPhoto | null>;
+  /** Every photo it has for the contact, for review (one per linked profile). Defaults to `find`. */
+  findAll?(contact: SimpleContact): Promise<FoundPhoto[]>;
 }

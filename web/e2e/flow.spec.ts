@@ -139,6 +139,39 @@ test("review mode offers every source's photo and sends the choice", async ({ pa
     .toEqual({ type: EventType.SyncPhotoConfirm, data: { accept: true, choice: 1 } });
 });
 
+test("review mode: each linked profile is its own candidate, labelled with its network (issue #77)", async ({ page }) => {
+  backend.status.whatsappConnected = true;
+  backend.status.googleConnected = true;
+  await page.goto("/app/sync/run?mode=review&sources=whatsapp,links");
+  await expect.poll(() => backend.requested("/api/init_sync")).toBeTruthy();
+
+  await backend.send(EventType.SyncProgress, { progress: 0, syncCount: 0, totalContacts: 1, checked: 0, counters: counters({}), isManualSync: true });
+  await backend.send(EventType.SyncConfirm, {
+    existingPhoto: null,
+    newPhoto: avatars[5],
+    contactName: "Davide Gallo",
+    candidates: [
+      { photo: avatars[5], source: "whatsapp", matchedBy: "+39 338 555 0412" },
+      { photo: avatars[2], source: "links", matchedBy: "instagram.com/davide.gallo", network: "Instagram" },
+      { photo: avatars[8], source: "links", matchedBy: "bsky.app/profile/dgallo.bsky.social", network: "Bluesky" },
+    ],
+  });
+  const review = page.getByTestId("review");
+  const radios = review.getByRole("radio");
+  await expect(radios).toHaveCount(3);
+  await expect(radios.nth(1)).toHaveAccessibleName("2. Instagram");
+  await expect(radios.nth(1)).toContainText("Instagram");
+  await expect(radios.nth(2)).toContainText("Bluesky");
+  await page.keyboard.press("3");
+  await expect(radios.nth(2)).toHaveAttribute("aria-checked", "true");
+  await screenshot(page, "07b-review-profiles");
+
+  await page.keyboard.press("Enter");
+  await expect
+    .poll(() => backend.received.find((e) => e.type === EventType.SyncPhotoConfirm))
+    .toEqual({ type: EventType.SyncPhotoConfirm, data: { accept: true, choice: 2 } });
+});
+
 test("review mode: keep the current photo from the keyboard", async ({ page }) => {
   backend.status.googleConnected = true;
   await page.goto("/app/sync/run?mode=review");

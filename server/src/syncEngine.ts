@@ -70,6 +70,10 @@ async function firstMatch(sources: PhotoSource[], contact: SimpleContact): Promi
 async function allMatches(sources: PhotoSource[], contact: SimpleContact): Promise<FoundPhoto[]> {
   const found: FoundPhoto[] = [];
   for (const source of sources) {
+    if (source.findAll) {
+      found.push(...(await source.findAll(contact)));
+      continue;
+    }
     const photo = await source.find(contact);
     if (photo) found.push(photo);
   }

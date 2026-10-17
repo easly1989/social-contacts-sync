@@ -79,7 +79,7 @@ function onReview(request: ReviewRequest): void {
 // "None of these?": the photo behind a profile link becomes one more candidate.
 function onLinkFound(lookup: LinkLookup): void {
   if (!review.value) return;
-  review.value.candidates.push({ photo: lookup.photo, source: "links", matchedBy: lookup.url.replace(/^https:\/\//, "") });
+  review.value.candidates.push({ photo: lookup.photo, source: "links", matchedBy: lookup.url.replace(/^https:\/\//, ""), network: lookup.network });
   choice.value = review.value.candidates.length - 1;
   linkTokens.value[choice.value] = lookup.token;
 }
@@ -188,7 +188,7 @@ onUnmounted(() => {
                 type="button"
                 role="radio"
                 :aria-checked="choice === index"
-                :aria-label="`${index + 1}. ${candidate.source}`"
+                :aria-label="`${index + 1}. ${candidate.network ?? candidate.source}`"
                 class="text-center"
                 @click="choice = index"
               >
@@ -196,7 +196,7 @@ onUnmounted(() => {
                   <img :src="photo(candidate.photo)" alt="" class="size-36 rounded-full object-cover" />
                   <span v-if="choice === index" class="absolute -right-1 -top-1 grid size-7 place-items-center rounded-full bg-primary text-primary-content"><Check class="size-4" /></span>
                 </span>
-                <span class="mt-2 flex items-center justify-center gap-1.5"><kbd class="kbd kbd-xs">{{ index + 1 }}</kbd><SourceBadge :source="candidate.source" /></span>
+                <span class="mt-2 flex items-center justify-center gap-1.5"><kbd class="kbd kbd-xs">{{ index + 1 }}</kbd><SourceBadge :source="candidate.source" :label="candidate.network" /></span>
                 <span v-if="candidate.source === 'links'" class="mt-1 block max-w-44 truncate text-[11px] text-base-content/50">{{ candidate.matchedBy }}</span>
               </button>
             </div>
@@ -207,7 +207,7 @@ onUnmounted(() => {
           <span class="flex items-center gap-1.5"><Keyboard class="size-4" />{{ $t("sync.review.shortcuts") }}:</span>
           <span><kbd class="kbd kbd-xs">←</kbd> {{ $t("sync.review.keep") }}</span>
           <span><kbd class="kbd kbd-xs">Enter</kbd> {{ $t("sync.review.use") }}</span>
-          <span><kbd class="kbd kbd-xs">1</kbd>–<kbd class="kbd kbd-xs">3</kbd> {{ $t("syncRun.pick") }}</span>
+          <span v-if="review.candidates.length > 1"><kbd class="kbd kbd-xs">1</kbd>–<kbd class="kbd kbd-xs">{{ Math.min(review.candidates.length, 9) }}</kbd> {{ $t("syncRun.pick") }}</span>
           <span><kbd class="kbd kbd-xs">S</kbd> {{ $t("syncRun.skip") }}</span>
         </div>
         <div class="mt-6 border-t border-base-300 pt-5" data-testid="review-link">
