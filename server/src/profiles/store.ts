@@ -3,6 +3,7 @@ import path from "path";
 
 import { ProfileLinked, SocialNetwork, SocialPerson } from "../../../interfaces/api";
 import { getFromCache, setInCache } from "../cache";
+import { ProfileLink, parseProfileLink } from "../sources/links";
 import { Base64 } from "../types";
 
 /*
@@ -78,4 +79,10 @@ export function mergePeople(data: ProfilesData, incoming: SocialPerson[]): numbe
   }
   data.people = [...byId.values()];
   return added;
+}
+
+/** The photo address read with each known person, by profile (issue #77): the sync uses it before visiting the page. */
+export function storedProfilePhotos(people: SocialPerson[]): (link: ProfileLink) => string | undefined {
+  const byUrl = new Map(people.flatMap((p) => (p.photoUrl ? [[parseProfileLink(p.url)?.url ?? p.url, p.photoUrl] as const] : [])));
+  return (link) => byUrl.get(link.url);
 }

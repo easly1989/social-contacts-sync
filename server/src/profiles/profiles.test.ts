@@ -5,6 +5,8 @@ import { Contact, SocialPerson } from "../../../interfaces/api";
 import { parseInstagramExport, parseLinkedInConnections } from "./imports";
 import { candidatesFor, contactWords, scoreMatch } from "./match";
 import { runSearch, searchNetwork } from "./search";
+import { storedProfilePhotos } from "./store";
+import { parseProfileLink } from "../sources/links";
 
 const contact = (id: string, extra: Partial<Contact>): Contact => ({ id, phones: [], emails: [], urls: [], addresses: [], labels: [], hasPhoto: false, ...extra });
 
@@ -113,4 +115,15 @@ test("the public search: exact names only, slowly, and a site that limits is lef
   assert.deepEqual(requests.map((u) => new URL(u).hostname), ["mastodon.social", "public.api.bsky.app"]);
   assert.deepEqual(searched.bluesky, ["people/old", "people/dg"]);
   assert.deepEqual(waits, [1500, 1000]);
+});
+
+test("the photos read with each person, by their normalized profile address (issue #77)", () => {
+  const people = [
+    { id: "instagram:anna", network: "instagram", url: "https://instagram.com/anna", handle: "anna", photoUrl: "https://scontent.cdninstagram.com/anna.jpg", source: "scan" },
+    { id: "github:bo", network: "github", url: "https://github.com/bo", handle: "bo", source: "search" },
+  ] as SocialPerson[];
+  const photoOf = storedProfilePhotos(people);
+  assert.equal(photoOf(parseProfileLink("https://www.instagram.com/anna/?hl=it")!), "https://scontent.cdninstagram.com/anna.jpg");
+  assert.equal(photoOf(parseProfileLink("https://github.com/bo")!), undefined);
+  assert.equal(photoOf(parseProfileLink("https://x.com/anna")!), undefined);
 });

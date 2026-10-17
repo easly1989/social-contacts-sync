@@ -244,40 +244,72 @@ export async function lookupProfileLink(raw: string, options: { fetchImpl?: Fetc
   return photo ? { photo, link } : null;
 }
 
-/** The contact's profile links that this sync may try. */
-export function contactLinks(contact: SimpleContact, bestEffort: boolean): ProfileLink[] {
-  return (contact.urls ?? [])
-    .map(parseProfileLink)
-    .filter((l): l is ProfileLink => Boolean(l) && (bestEffort || !bestEffortNetworks.has(l!.network)));
+/** The contact's profile links, in the order they are saved, each profile once. */
+export function contactLinks(contact: SimpleContact): ProfileLink[] {
+  const links = (contact.urls ?? []).map(parseProfileLink).filter((l): l is ProfileLink => Boolean(l));
+  return links.filter((l, i) => links.findIndex((other) => other.url === l.url) === i);
+}
+
+export interface LinksSourceOptions {
+  /** Also visit Instagram, Facebook and LinkedIn pages, which turn anonymous visitors away. */
+  bestEffort?: boolean;
+  /** The photo address Find profiles read with this profile (a scan or an export), if any (issue #77). */
+  storedPhoto?: (link: ProfileLink) => string | undefined;
+  fetchImpl?: Fetch;
+  pacer?: Pacer;
 }
 
 /**
- * The sync source. A site that asks to sign in, or limits requests, is
- * skipped for the rest of the sync: retrying would only make it worse.
+ * The sync source: one photo per linked profile. A photo already read with
+ * the profile comes first, then its public page. A site that asks to sign
+ * in, or limits requests, is skipped for the rest of the sync: retrying
+ * would only make it worse.
  */
-export function linksSource(options: { bestEffort?: boolean; fetchImpl?: Fetch; pacer?: Pacer } = {}): PhotoSource {
+export function linksSource(options: LinksSourceOptions = {}): PhotoSource {
   const fetchImpl = options.fetchImpl ?? fetch;
   const pacer = options.pacer ?? new Pacer();
   const blocked = new Set<Network>();
+
+  async function photoOf(link: ProfileLink): Promise<FoundPhoto | null> {
+    const found = (photo: Base64): FoundPhoto => ({ photo, source: "links", matchedBy: shortLink(link), network: networkNames[link.network] });
+    const stored = options.storedPhoto?.(link);
+    if (stored && !isPlaceholder(stored)) {
+      // Image servers' addresses expire: that's not the site turning us away.
+      const photo = await downloadImage(stored, link.network, fetchImpl).catch(() => null);
+      if (photo) return found(photo);
+    }
+    if (blocked.has(link.network) || (bestEffortNetworks.has(link.network) && !options.bestEffort)) return null;
+    try {
+      const lookup = await lookupProfileLink(link.url, { fetchImpl, pacer });
+      return lookup ? found(lookup.photo) : null;
+    } catch (e) {
+      if (e instanceof LinkBlockedError) {
+        blocked.add(link.network);
+        console.warn(`${e.message}; skipping it for the rest of this sync.`);
+        return null;
+      }
+      // A link that doesn't answer is not the contact's failure.
+      console.warn(`Profile link ${shortLink(link)} failed:`, e instanceof Error ? e.message : e);
+      return null;
+    }
+  }
+
   return {
     id: "links",
-    async find(contact): Promise<FoundPhoto | null> {
-      for (const link of contactLinks(contact, Boolean(options.bestEffort))) {
-        if (blocked.has(link.network)) continue;
-        try {
-          const found = await lookupProfileLink(link.url, { fetchImpl, pacer });
-          if (found) return { photo: found.photo, source: "links", matchedBy: shortLink(link) };
-        } catch (e) {
-          if (e instanceof LinkBlockedError) {
-            blocked.add(link.network);
-            console.warn(`${e.message}; skipping it for the rest of this sync.`);
-            continue;
-          }
-          // A link that doesn't answer is not the contact's failure.
-          console.warn(`Profile link ${shortLink(link)} failed:`, e instanceof Error ? e.message : e);
-        }
+    async find(contact) {
+      for (const link of contactLinks(contact)) {
+        const photo = await photoOf(link);
+        if (photo) return photo;
       }
       return null;
+    },
+    async findAll(contact) {
+      const photos: FoundPhoto[] = [];
+      for (const link of contactLinks(contact)) {
+        const photo = await photoOf(link);
+        if (photo) photos.push(photo);
+      }
+      return photos;
     },
   };
 }

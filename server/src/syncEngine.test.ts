@@ -126,6 +126,29 @@ test("review mode offers every source's photo and applies the choice", async () 
   assert.deepEqual(run.counters, { added: 1, replaced: 0, kept: 2, alreadyHadPhoto: 0, noMatch: 1, errors: 0 });
 });
 
+test("review offers every photo a source has, one per linked profile (issue #77)", async () => {
+  const { target } = fakeTarget();
+  const profiles: PhotoSource = {
+    id: "links",
+    find: async () => assert.fail("review asks for every profile"),
+    findAll: async (c) =>
+      c.name === "Ada"
+        ? [
+            { photo: "ig-Ada", source: "links", matchedBy: "instagram.com/ada", network: "Instagram" },
+            { photo: "bsky-Ada", source: "links", matchedBy: "bsky.app/profile/ada", network: "Bluesky" },
+          ]
+        : [],
+  };
+  const offered: string[][] = [];
+  const { callbacks: cb } = callbacks({ review: async ({ candidates }) => (offered.push(candidates.map((c) => c.photo)), 2) });
+  const { run } = await runSync(target, [whatsapp, profiles], "review", cb, { shuffle: false });
+  assert.deepEqual(offered[0], ["wa-Ada", "ig-Ada", "bsky-Ada"]);
+  assert.deepEqual(
+    run.results.find((r) => r.contactId === "c/ada"),
+    { contactId: "c/ada", name: "Ada", outcome: "added", source: "links", matchedBy: "bsky.app/profile/ada", hasPhoto: true, hasPrevious: false }
+  );
+});
+
 test("review: a photo looked up from a profile link is used and its link saved", async () => {
   const { target, writes } = fakeTarget();
   const links: [string, string][] = [];

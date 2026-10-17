@@ -130,17 +130,20 @@ test("requests to the same site are spaced out", async () => {
 
 test("the sync source: unofficial networks only when turned on, and a blocked site is skipped", async () => {
   const contact = (id: string, urls: string[]) => ({ id, numbers: [], hasPhoto: false, urls });
-  assert.deepEqual(contactLinks(contact("a", ["https://instagram.com/a", "https://x.com/a", "https://example.com"]), false).map((l) => l.network), ["x"]);
-  assert.deepEqual(contactLinks(contact("a", ["https://instagram.com/a", "https://x.com/a"]), true).map((l) => l.network), ["instagram", "x"]);
+  assert.deepEqual(contactLinks(contact("a", ["https://instagram.com/a", "https://x.com/a", "https://example.com"])).map((l) => l.network), ["instagram", "x"]);
 
   const web = fakeWeb({
     "https://instagram.com/anna": { finalUrl: "https://www.instagram.com/accounts/login/" },
     "https://x.com/anna": { body: page("https://pbs.twimg.com/profile_images/2/anna_200x200.jpg") },
     "https://pbs.twimg.com/profile_images/2/anna_400x400.jpg": { body: jpeg, type: "image/jpeg" },
   });
+  const off = linksSource({ fetchImpl: web.fetchImpl, pacer: noWait });
+  assert.equal(await off.find(contact("ivy", ["https://instagram.com/anna"])), null);
+  assert.deepEqual(web.requests, []);
+
   const source = linksSource({ bestEffort: true, fetchImpl: web.fetchImpl, pacer: noWait });
   const found = await source.find(contact("anna", ["https://www.instagram.com/anna/", "https://x.com/anna"]));
-  assert.deepEqual(found, { photo: jpeg.toString("base64"), source: "links", matchedBy: "x.com/anna" });
+  assert.deepEqual(found, { photo: jpeg.toString("base64"), source: "links", matchedBy: "x.com/anna", network: "X" });
   // Instagram asked to sign in: the next contact doesn't try it again.
   web.requests.length = 0;
   assert.equal(await source.find(contact("bea", ["https://instagram.com/bea"])), null);
@@ -148,6 +151,49 @@ test("the sync source: unofficial networks only when turned on, and a blocked si
   // Contacts without links cost nothing.
   assert.equal(await source.find(contact("carl", [])), null);
   assert.deepEqual(web.requests, []);
+});
+
+test("each linked profile is its own candidate, and a photo already read comes first (issue #77)", async () => {
+  const other = Buffer.alloc(3000, 9);
+  const web = fakeWeb({
+    "https://scontent.cdninstagram.com/anna.jpg": { body: jpeg, type: "image/jpeg" },
+    "https://media.licdn.com/expired.jpg": { status: 403, type: "text/html" },
+    "https://linkedin.com/in/anna": { body: page("https://media.licdn.com/anna-now.jpg") },
+    "https://media.licdn.com/anna-now.jpg": { body: other, type: "image/jpeg" },
+    "https://x.com/anna": { body: page("https://pbs.twimg.com/profile_images/2/anna_200x200.jpg") },
+    "https://pbs.twimg.com/profile_images/2/anna_400x400.jpg": { body: other, type: "image/jpeg" },
+  });
+  const stored: Record<string, string> = {
+    "https://instagram.com/anna": "https://scontent.cdninstagram.com/anna.jpg",
+    "https://linkedin.com/in/anna": "https://media.licdn.com/expired.jpg",
+  };
+  const anna = { id: "anna", numbers: [], hasPhoto: false, urls: ["https://www.instagram.com/anna/", "https://www.linkedin.com/in/anna", "https://x.com/anna"] };
+
+  // Unofficial networks off: Instagram still gives the photo read with it, without visiting
+  // its page; LinkedIn's address expired and its page isn't tried.
+  const source = linksSource({ fetchImpl: web.fetchImpl, pacer: noWait, storedPhoto: (link) => stored[link.url] });
+  assert.deepEqual(await source.findAll!(anna), [
+    { photo: jpeg.toString("base64"), source: "links", matchedBy: "instagram.com/anna", network: "Instagram" },
+    { photo: other.toString("base64"), source: "links", matchedBy: "x.com/anna", network: "X" },
+  ]);
+  assert.ok(!web.requests.includes("https://instagram.com/anna"));
+  assert.ok(!web.requests.includes("https://linkedin.com/in/anna"));
+  // Fill in and Replace take the first profile only.
+  web.requests.length = 0;
+  assert.equal((await source.find(anna))?.matchedBy, "instagram.com/anna");
+  assert.deepEqual(web.requests, ["https://scontent.cdninstagram.com/anna.jpg"]);
+
+  // Turned on: an expired address falls back to the page, and doesn't count as a block.
+  const on = linksSource({ bestEffort: true, fetchImpl: web.fetchImpl, pacer: noWait, storedPhoto: (link) => stored[link.url] });
+  const all = await on.findAll!(anna);
+  assert.deepEqual(all.map((f) => f.network), ["Instagram", "LinkedIn", "X"]);
+  assert.equal(all[1].photo, other.toString("base64"));
+
+  // A profile saved twice is one candidate; a stored generic avatar isn't a photo.
+  const twice = { ...anna, urls: ["instagram.com/anna", "https://www.instagram.com/anna/?hl=it"] };
+  assert.equal((await source.findAll!(twice)).length, 1);
+  const grey = linksSource({ fetchImpl: web.fetchImpl, pacer: noWait, storedPhoto: () => "https://scontent.cdninstagram.com/44884218_345707102882519_2446069589734326272_n.jpg" });
+  assert.deepEqual(await grey.findAll!({ ...anna, urls: ["instagram.com/anna"] }), []);
 });
 
 test("only public sites by name are called", async () => {

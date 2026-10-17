@@ -51,6 +51,8 @@ export interface ReviewCandidate {
   photo: string;
   source: SourceId;
   matchedBy: string;
+  /** For a profile link, its network: "Instagram", "X"… (issue #77). */
+  network?: string;
 }
 
 /** Payload of EventType.SyncConfirm (review mode). */
