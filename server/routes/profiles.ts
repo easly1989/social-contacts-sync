@@ -19,6 +19,7 @@ import { downloadImage, lookupProfileLink, networkNames, parseProfileLink, short
 import { photoKey } from "../src/contacts/model";
 import { getPins, photoHash, setPin } from "../src/contacts/photoPins";
 import { desktopReader, lookupWithLogin, pinnedProfiles, ReadProfile, readsWithLogin, RereadNetwork } from "../src/profiles/rereads";
+import { cachedPhoto, cachePhoto } from "../src/profiles/photoCache";
 
 // Find profiles (issue #61): suggestions from exports, a public search and,
 // in the desktop app, a scan of the user's own followers with their login.
@@ -117,9 +118,16 @@ export function profilesRouter(options: Options = {}): express.Router {
   }
   const forget = (req: Request) => setInCache(req.sessionID, "profiles_contacts", undefined);
 
+  /** The profiles already on the contact that were read with a photo (issue #81): photo candidates too. */
+  function linkedPeople(data: ProfilesData): (contact: Contact) => SocialPerson[] {
+    const byUrl = new Map(data.people.flatMap((p) => (p.photoUrl ? [[parseProfileLink(p.url)?.url ?? p.url, p] as const] : [])));
+    return (contact) => [...new Set(contact.urls.flatMap((u) => byUrl.get(parseProfileLink(u.value)?.url ?? "") ?? []))];
+  }
+
   function suggestions(data: ProfilesData, list: Contact[]): ProfileSuggestion[] {
     const linked = new Set(data.linked.filter((l) => !l.undone).map((l) => l.person.id));
     const skipped = new Set(data.skipped);
+    const onContact = linkedPeople(data);
     return list
       .map((c) => ({ contact: c, candidates: candidatesFor(c, data.people, { rejected: data.rejected, linked }) }))
       .filter((s) => s.candidates.length)
@@ -139,6 +147,7 @@ export function profilesRouter(options: Options = {}): express.Router {
         photoKept: c.photoKept,
         detail: [c.phones[0]?.value, c.emails[0]?.value, c.company].filter(Boolean).join(" · ") || undefined,
         candidates,
+        linked: onContact(c).filter((p) => !candidates.some((s) => s.person.id === p.id)),
       }));
   }
 
@@ -180,6 +189,19 @@ export function profilesRouter(options: Options = {}): express.Router {
   // Desktop: which sites the app is signed in to, without reading the address book (issue #80).
   router.get("/profiles/logins", async (req: Request, res: Response) => {
     res.send((await scanStates(req, loadProfiles(req.sessionID))) ?? []);
+  });
+
+  // How many contacts wait in To review, for the sidebar (issue #81). No profiles read yet: none, without asking Google.
+  router.get("/profiles/count", async (req: Request, res: Response) => {
+    const data = loadProfiles(req.sessionID);
+    if (!data.people.length) return res.send({ count: 0 });
+    const api = google(req, res);
+    if (!api) return;
+    try {
+      res.send({ count: suggestions(data, await contacts(req, api)).length });
+    } catch (e) {
+      failed(req, res, "Counting profiles to review", e);
+    }
   });
 
   router.get("/profiles", async (req: Request, res: Response) => {
@@ -271,17 +293,22 @@ export function profilesRouter(options: Options = {}): express.Router {
    */
   async function linkContact(sessionId: string, api: ContactsApi, request: ProfileLinkRequest): Promise<{ linked: StoredLinked[]; photoSet: boolean }> {
     const data = loadProfiles(sessionId);
+    const notFound = () => Object.assign(new Error("not_found"), { status: 404 });
     const persons = request.personIds.map((id) => data.people.find((p) => p.id === id)).filter((p): p is SocialPerson => Boolean(p));
-    if (!persons.length) throw Object.assign(new Error("not_found"), { status: 404 });
+    if (!persons.length && !request.photoFrom) throw notFound();
     const { contactId } = request;
     const before = toContact(await api.get(contactId), getPlaceholders(sessionId), getKeptPhotos(sessionId));
+    // The photo comes from a ticked profile or one already on the contact (issue #81).
+    const photoOffered = [...persons, ...linkedPeople(data)(before)].find((p) => p.id === request.photoFrom);
+    if (!persons.length && !photoOffered) throw notFound();
     const added = await addContactLinks(api, contactId, persons.map((p) => p.url));
     let photoSet = false;
     let previousPhoto: string | null | undefined;
     // A kept photo (issue #67) is never replaced: only the links are added.
-    const photoPerson = before.photoKept ? undefined : persons.find((p) => p.id === request.photoFrom);
+    const photoPerson = before.photoKept ? undefined : photoOffered;
     if (photoPerson) {
-      const photo = await profilePhoto(sessionId, photoPerson, true);
+      // What the card showed, when the site's address for it has expired.
+      const photo = (await profilePhoto(sessionId, photoPerson, true)) ?? cachedPhoto(photoPerson)?.toString("base64") ?? null;
       if (photo) {
         previousPhoto = before.hasPhoto ? await api.photo(await api.get(contactId)) : null;
         const googleUrl = await api.setPhoto(contactId, photo);
@@ -303,7 +330,7 @@ export function profilesRouter(options: Options = {}): express.Router {
       }
     }
     const at = new Date().toISOString();
-    const linked = persons.map(
+    const linked = (photoSet && photoPerson && !persons.includes(photoPerson) ? [...persons, photoPerson] : persons).map(
       (person): StoredLinked => ({
         contactId,
         name: before.name ?? request.name ?? "",
@@ -346,8 +373,9 @@ export function profilesRouter(options: Options = {}): express.Router {
     const contactId = typeof body?.contactId === "string" && /^people\/[\w-]+$/.test(body.contactId) ? body.contactId : undefined;
     // `personId` and `usePhoto`: one profile, as before.
     const personIds = typeof body?.personId === "string" ? [body.personId] : strings(body?.personIds);
-    if (!contactId || !personIds.length) return undefined;
     const photoFrom = typeof body?.photoFrom === "string" ? body.photoFrom : body?.usePhoto === true ? personIds[0] : undefined;
+    // Only a photo, from a profile already on the contact, is a request too (issue #81).
+    if (!contactId || (!personIds.length && !photoFrom)) return undefined;
     const name = typeof body?.name === "string" ? body.name.slice(0, 120) : undefined;
     return { contactId, personIds, photoFrom, rejectIds: strings(body?.rejectIds), name };
   }
@@ -393,7 +421,7 @@ export function profilesRouter(options: Options = {}): express.Router {
         try {
           const { linked } = await linkContact(sessionId, api, request);
           state.contacts++;
-          state.profiles += linked.length;
+          state.profiles += linked.filter((l) => request.personIds.includes(l.person.id)).length;
         } catch (e) {
           state.failed.push({ contactId: request.contactId, name: request.name ?? request.contactId, error: googleErrorMessage(e) });
           // Without the sign-in, the rest would fail the same way.
@@ -420,25 +448,31 @@ export function profilesRouter(options: Options = {}): express.Router {
   /*
     A profile's photo, through this server (issue #65): Instagram's image
     servers refuse to be shown in another page, and their addresses expire.
-    Kept in memory for the session.
+    Kept for 90 days (photoCache.ts).
   */
-  const photoCache = new Map<string, { at: number; bytes?: Buffer }>();
+  const misses = new Map<string, number>();
   router.get("/profiles/photo", async (req: Request, res: Response) => {
     const id = String(req.query.id ?? "");
     const person = loadProfiles(req.sessionID).people.find((p) => p.id === id);
     if (!person) return res.status(404).send({ error: "not_found" });
-    let cached = photoCache.get(id);
-    // A miss is tried again after ten minutes.
-    if (!cached || (!cached.bytes && Date.now() - cached.at > 10 * 60 * 1000)) {
+    let bytes = cachedPhoto(person);
+    // A miss is tried again after ten minutes, or when the profile is read again.
+    const miss = `${id} ${person.photoUrl ?? ""}`;
+    if (!bytes && Date.now() - (misses.get(miss) ?? 0) > 10 * 60 * 1000) {
       // A preview: never a login read, which would run for every card shown.
       const photo = await profilePhoto(req.sessionID, person).catch(() => null);
-      cached = { at: Date.now(), bytes: photo ? Buffer.from(photo, "base64") : undefined };
-      photoCache.set(id, cached);
-      while (photoCache.size > 2000) photoCache.delete(photoCache.keys().next().value!);
+      bytes = photo ? Buffer.from(photo, "base64") : undefined;
+      if (bytes) {
+        cachePhoto(person, bytes);
+        misses.delete(miss);
+      } else {
+        misses.set(miss, Date.now());
+        while (misses.size > 2000) misses.delete(misses.keys().next().value!);
+      }
     }
-    if (!cached.bytes) return res.status(404).send({ error: "no_photo" });
+    if (!bytes) return res.status(404).send({ error: "no_photo" });
     res.set("Cache-Control", "private, max-age=86400");
-    res.type(imageType(cached.bytes)).send(cached.bytes);
+    res.type(imageType(bytes)).send(bytes);
   });
 
   router.post("/profiles/undo", async (req: Request, res: Response) => {

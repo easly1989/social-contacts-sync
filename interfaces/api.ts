@@ -432,6 +432,8 @@ export interface ProfileSuggestion {
   photoKept?: boolean;
   detail?: string;
   candidates: ProfileCandidate[];
+  /** Profiles already on the contact, read with a photo: photo candidates too (issue #81). */
+  linked?: SocialPerson[];
 }
 
 export interface ProfileLinked {

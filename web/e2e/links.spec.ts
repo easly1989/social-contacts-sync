@@ -54,7 +54,7 @@ test("desktop: Find photo says when the app isn't signed in, and sends the Linke
 
   await field.fill("https://www.facebook.com/francesco.greco");
   await page.getByRole("button", { name: "Find photo" }).click();
-  await expect(page.getByRole("alert")).toHaveText("The app isn't signed in to Facebook. Sign in from Find profiles, then try again.");
+  await expect(page.getByRole("alert")).toHaveText("The app isn't signed in to Facebook. Sign in from Sync › Sources, then try again.");
   await screenshot(page, "26e-report-login-needed", { fullPage: false });
   await page.setViewportSize({ width: 390, height: 844 });
   await page.getByRole("alert").scrollIntoViewIfNeeded();

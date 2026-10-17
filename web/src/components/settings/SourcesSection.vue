@@ -111,7 +111,7 @@ onUnmounted(() => window.clearInterval(poll));
               <Check v-if="n.loggedIn" class="size-3 text-success" /><CircleDashed v-else class="size-3" />{{ networkNames[n.network] }} · {{ n.loggedIn ? $t("links.signedIn") : $t("links.notSignedIn") }}
             </li>
           </ul>
-          <router-link v-if="logins.some((n) => !n.loggedIn)" to="/app/profiles" class="btn btn-sm mt-3">{{ $t("links.signInFromProfiles") }}</router-link>
+          <router-link v-if="logins.some((n) => !n.loggedIn)" to="/app/sync?tab=sources" class="btn btn-sm mt-3">{{ $t("links.signInFromProfiles") }}</router-link>
         </div>
         <label v-else class="flex cursor-pointer items-start gap-3 rounded-xl border border-base-300 p-3">
           <input v-model="bestEffortLinks" type="checkbox" class="toggle toggle-primary toggle-sm mt-0.5" />

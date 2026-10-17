@@ -143,9 +143,9 @@ test("desktop: LinkedIn reads are on by default, said once before a sync, and ca
   const logins = page.getByTestId("settings-social-logins");
   await expect(logins).toContainText("Instagram · signed in");
   await expect(logins).toContainText("Facebook · not signed in");
-  await expect(logins.getByRole("link", { name: "Sign in from Find profiles" })).toHaveAttribute("href", "/app/profiles");
+  await expect(logins.getByRole("link", { name: "Sign in from Sync › Sources" })).toHaveAttribute("href", "/app/sync?tab=sources");
   await expect(page.getByText("Also try Instagram, Facebook and LinkedIn")).toHaveCount(0);
-  await expect(page.getByText("Instagram, Facebook and LinkedIn are read with the login you make in Find profiles.")).toBeVisible();
+  await expect(page.getByText("Instagram, Facebook and LinkedIn are read with the login you make in Sync › Sources.")).toBeVisible();
   await screenshot(page, "26d-settings-sources");
   await setting.scrollIntoViewIfNeeded();
   await screenshot(page, "26b-settings-linkedin-rereads", { fullPage: false });

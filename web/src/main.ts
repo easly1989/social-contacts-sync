@@ -28,13 +28,14 @@ const routes: RouteRecordRaw[] = [
   { path: "/gauth", component: () => import("./pages/GoogleAuth.vue") },
   // The app (issue #21); the old flow's last steps now live there.
   { path: "/app", component: () => import("./pages/app/Dashboard.vue") },
-  { path: "/app/sync", component: () => import("./pages/app/SyncSetup.vue") },
+  { path: "/app/sync", component: () => import("./pages/app/Sync.vue") },
   { path: "/app/sync/run", component: () => import("./pages/app/SyncRun.vue") },
   { path: "/app/history", component: () => import("./pages/app/History.vue") },
   { path: "/app/history/:id", component: () => import("./pages/app/RunReport.vue") },
   { path: "/app/cleanup", component: () => import("./pages/app/Cleanup.vue") },
   { path: "/app/contacts", component: () => import("./pages/app/Contacts.vue") },
-  { path: "/app/profiles", component: () => import("./pages/app/Profiles.vue") },
+  // Find profiles is part of Sync (issue #81).
+  { path: "/app/profiles", redirect: (to) => ({ path: "/app/sync", query: { tab: to.query.tab === "sources" ? "sources" : "review" } }) },
   { path: "/app/settings", redirect: "/app/settings/general" },
   { path: "/app/settings/:section", component: () => import("./pages/app/Settings.vue") },
   { path: "/options", redirect: "/app/sync" },

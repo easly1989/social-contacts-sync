@@ -100,6 +100,8 @@ export const api = {
   applyLabel: (contactIds: string[], label: string, add: boolean) => post<{ contacts: Contact[] }>("/api/contacts/labels/apply", { contactIds, label, add }),
   // Find profiles (issue #61).
   profiles: () => get<ProfilesOverview>("/api/profiles"),
+  /** Contacts waiting in Sync's To review (issue #81). */
+  profilesCount: () => get<{ count: number }>("/api/profiles/count"),
   /** Desktop: pinned profiles each network could read again with the login (issue #80). */
   pinnedProfiles: () => get<PinnedProfiles>("/api/profiles/pinned"),
   /** Desktop: which sites the app is signed in to. */
@@ -111,7 +113,6 @@ export const api = {
   linkProfiles: (request: ProfileLinkRequest) => post<{ linked: ProfileLinked[]; photoWanted: boolean; photoSet: boolean }>("/api/profiles/link", request),
   linkProfilesInBulk: (items: ProfileLinkRequest[]) => post<ProfileBulkState>("/api/profiles/link_many", { items }),
   stopBulkLink: () => post<ProfileBulkState>("/api/profiles/link_many/stop"),
-  undoProfile: (contactId: string, personId: string) => post("/api/profiles/undo", { contactId, personId }),
   rejectProfiles: (contactId: string, personIds: string[]) => post("/api/profiles/reject", { contactId, personIds }),
   skipProfiles: (contactId: string) => post("/api/profiles/skip", { contactId }),
   profileScan: (action: "login" | "logout" | "start" | "stop", network: SocialNetwork, acceptRisk = false) =>

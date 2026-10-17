@@ -62,7 +62,7 @@ export class FakeBackend {
   contacts: Contact[] = [];
   labels: ContactLabel[] = [];
   contactRequests: { method: string; route: string; body?: any; bytes?: number }[] = [];
-  /** Find profiles (issue #61): what the page reads, and every request it sends. */
+  /** Sync's To review and Sources (issues #61, #81): what the page reads, and every request it sends. */
   profiles?: ProfilesOverview;
   profileRequests: { route: string; body?: any; query?: string }[] = [];
   /** Desktop: pinned profiles each network could read again (issue #80). */
@@ -290,6 +290,7 @@ export class FakeBackend {
   private profilesRoute(route: Route, pathname: string, request: Request) {
     if (pathname === "/api/profiles/pinned") return route.fulfill({ json: this.pinnedProfiles });
     if (pathname === "/api/profiles/logins") return route.fulfill({ json: this.socialLogins });
+    if (pathname === "/api/profiles/count") return route.fulfill({ json: { count: this.profiles?.suggestions.length ?? 0 } });
     const data = this.profiles!;
     const sub = pathname.replace("/api/profiles", "") || "/";
     const body = request.headers()["content-type"]?.startsWith("application/json") ? request.postDataJSON() : request.postData() ?? undefined;
@@ -331,10 +332,6 @@ export class FakeBackend {
     if (sub === "/link_many/stop") {
       Object.assign(data.bulk!, { running: false, stopped: true });
       return route.fulfill({ json: data.bulk });
-    }
-    if (sub === "/undo") {
-      data.linked.find((l) => l.contactId === body.contactId && l.person.id === body.personId)!.undone = true;
-      return route.fulfill({ json: { ok: true } });
     }
     if (sub === "/reject" || sub === "/skip") {
       drop(body.contactId);

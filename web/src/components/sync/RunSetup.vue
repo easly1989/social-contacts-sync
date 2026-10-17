@@ -4,9 +4,8 @@ import { useRouter } from "vue-router";
 import { useI18n } from "vue-i18n";
 import { ChevronDown, ChevronUp, GripVertical, Info, RefreshCw, ShieldCheck } from "lucide-vue-next";
 
-import AppShell from "../../components/AppShell.vue";
-import SourceMark from "../../components/SourceMark.vue";
-import SourceBadge from "../../components/SourceBadge.vue";
+import SourceMark from "../SourceMark.vue";
+import SourceBadge from "../SourceBadge.vue";
 import { api } from "../../api";
 import { number } from "../../format";
 import { isDesktop } from "../../settings";
@@ -14,7 +13,7 @@ import { linkedinNoticeSeen, linkedinRereads } from "../../profileLinks";
 import { sourceInfo } from "../../sources";
 import { GoogleStats, SessionStatus, SourceId } from "../../../../interfaces/api";
 
-// Mockup 3.1 in issue #8.
+// Mockup 3.1 in issue #8: Sync photos, now the Run tab of the Sync page (issue #81) until issue #82 rebuilds it.
 type Mode = "fill" | "replace" | "review";
 const modes: Mode[] = ["fill", "replace", "review"];
 const prefsKey = "scs.syncSetup";
@@ -112,7 +111,7 @@ onMounted(async () => {
 </script>
 
 <template>
-  <AppShell :title="$t('syncSetup.title')" :subtitle="$t('syncSetup.subtitle')">
+  <div>
     <div class="grid gap-5 xl:grid-cols-[1fr_320px]">
       <div class="space-y-5">
         <section class="rounded-box border border-base-300 bg-base-100 p-6">
@@ -219,5 +218,5 @@ onMounted(async () => {
       </div>
       <form method="dialog" class="modal-backdrop"><button tabindex="-1" aria-hidden="true">{{ $t("common.cancel") }}</button></form>
     </dialog>
-  </AppShell>
+  </div>
 </template>
