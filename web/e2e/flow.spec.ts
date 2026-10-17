@@ -57,7 +57,7 @@ test("full flow: WhatsApp QR, Google sign-in, sync setup, progress, done", async
   // Google's callback returns to /options, which is now the app's sync page.
   await page.getByRole("button", { name: "Sign in with Google" }).click();
   await expect(page).toHaveURL(/\/app\/sync$/);
-  await expect(page.getByRole("heading", { name: "Sync photos" })).toBeVisible();
+  await expect(page.getByRole("tab", { name: "Run" })).toHaveAttribute("aria-selected", "true");
   await page.getByRole("radio", { name: /Replace all photos/ }).check();
   await screenshot(page, "04-sync-setup");
 

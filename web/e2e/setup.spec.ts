@@ -212,7 +212,7 @@ test.describe("desktop guards", () => {
   test("a finished setup opens the app", async ({ page }) => {
     Object.assign(backend.status, { googleConfigured: true, googleConnected: true, whatsappConnected: true });
     await page.goto("/options");
-    await expect(page.getByRole("heading", { name: "Sync photos" })).toBeVisible();
+    await expect(page.getByRole("tab", { name: "Run" })).toHaveAttribute("aria-selected", "true");
   });
 });
 

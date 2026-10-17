@@ -117,7 +117,7 @@ export function sampleContacts(): Contact[] {
   ];
 }
 
-/** Find profiles (issue #61), shaped like its mockups. */
+/** Sync's To review and Sources (issues #61, #81), shaped like their mockups. */
 export function sampleProfiles(): ProfilesOverview {
   const photo = (i: number) => `/api/e2e-photos/${i}`;
   const p = (extra: Partial<SocialPerson> & Pick<SocialPerson, "id" | "network" | "url">): SocialPerson => ({ source: "export", ...extra });

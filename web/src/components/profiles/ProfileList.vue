@@ -1,17 +1,17 @@
 <script setup lang="ts">
 import { computed, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
-import { Link, Square } from "lucide-vue-next";
+import { Check, Square } from "lucide-vue-next";
 
 import ProfileCard from "./ProfileCard.vue";
 import { api } from "../../api";
 import { number } from "../../format";
-import { linkRequest, ProfilePick } from "../../profilePick";
+import { hasChoice, linkRequest, ProfilePick } from "../../profilePick";
 import { notifyError } from "../../toasts";
 import { ProfileBulkState, ProfileSuggestion } from "../../../../interfaces/api";
 
-// Every suggestion, one card per contact (issue #65): select some, then link
-// what each has ticked in one go, in the background at Google's pace.
+// Every contact to review, one card each (issues #65, #81): select some, then
+// confirm what each has ticked in one go, in the background at Google's pace.
 const props = defineProps<{ queue: ProfileSuggestion[]; picks: Record<string, ProfilePick>; bulk?: ProfileBulkState }>();
 const emit = defineEmits<{ "update:pick": [contactId: string, pick: ProfilePick]; changed: [] }>();
 const { t, locale } = useI18n();
@@ -42,8 +42,7 @@ function select(id: string, on: boolean): void {
 
 const running = computed(() => Boolean(props.bulk?.running));
 const chosen = computed(() => props.queue.filter((s) => selected.value.has(s.contactId)));
-const toLink = computed(() => chosen.value.filter((s) => props.picks[s.contactId]?.ticked.length));
-const profileCount = computed(() => toLink.value.reduce((n, s) => n + props.picks[s.contactId].ticked.length, 0));
+const toLink = computed(() => chosen.value.filter((s) => props.picks[s.contactId] && hasChoice(props.picks[s.contactId])));
 
 async function linkSelected(): Promise<void> {
   try {
@@ -87,7 +86,7 @@ async function noneSelected(): Promise<void> {
       <template v-else>
         <button type="button" class="btn btn-ghost btn-sm" :disabled="!chosen.length" @click="noneSelected">{{ $t("profiles.none") }}</button>
         <button type="button" class="btn btn-primary btn-sm" :disabled="!toLink.length" @click="linkSelected">
-          <Link class="size-4" />{{ toLink.length ? $t("profiles.list.linkSelected", { profiles: $t("profiles.list.profilesN", profileCount), contacts: $t("profiles.list.contactsN", toLink.length) }) : $t("profiles.list.linkNone") }}
+          <Check class="size-4" />{{ $t("sync.confirmSelected", { count: number(toLink.length, locale) }, toLink.length) }}
         </button>
       </template>
       <slot name="view" />

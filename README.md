@@ -291,6 +291,7 @@ The app stays signed in between launches, unless you turn off
 | `placeholders.json` | which contacts have a photo uploaded by hand on the Contacts page, so a sync can replace it |
 | `kept-photos.json` | which contacts' photos are kept: the app never replaces them |
 | `profiles.json` | Find profiles: the people read from your exports, searches and scans, and your answers |
+| `review-photos/` | the profile photos shown in Sync's *To review*, so a card keeps its photo after the site's address for it expires (kept 90 days) |
 | `update-pending.json` | for a moment while an update installs: what to do when it's done |
 | `logs/` | server logs |
 

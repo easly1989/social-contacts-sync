@@ -26,6 +26,8 @@ async function start(t: { after(fn: () => void): void }, sessionId: string, logi
   const google = new FakeContacts(people, { "people/ec": "T0xE" });
   const scanned: SocialPerson[] = [{ id: "instagram:elena_conti", network: "instagram", url: "https://instagram.com/elena_conti", handle: "elena_conti", name: "Elena Conti", photoUrl: "https://scontent.cdninstagram.com/e.jpg", source: "scan", relation: "follower" }];
   const desktopCalls: string[] = [];
+  // `down`: the sites' image addresses have expired.
+  const web = { down: false };
   const desktop = {
     status: async (): Promise<ProfileScanState[]> => [{ network: "instagram", loggedIn: true, account: "easly1989" }],
     login: async (network: ScanNetwork) => (desktopCalls.push(`login ${network}`), { network, loggedIn: true }),
@@ -34,6 +36,7 @@ async function start(t: { after(fn: () => void): void }, sessionId: string, logi
     stop: async (network: ScanNetwork) => void desktopCalls.push(`stop ${network}`),
   };
   const fetchImpl = (async (url: string) => {
+    if (web.down) return new Response("{}", { status: 404 });
     if (url.includes("cdninstagram")) return new Response(new Uint8Array(jpeg), { headers: { "content-type": "image/jpeg" } });
     if (url.includes("bsky")) return new Response(JSON.stringify({ actors: [{ handle: "dgallo.bsky.social", displayName: "Davide Gallo" }] }), { headers: { "content-type": "application/json" } });
     return new Response("{}", { status: 404 });
@@ -54,7 +57,7 @@ async function start(t: { after(fn: () => void): void }, sessionId: string, logi
     const response = await fetch(`${base}${route}`, { method, headers: body === undefined ? {} : { "Content-Type": type }, body: typeof body === "string" ? body : body === undefined ? undefined : JSON.stringify(body) });
     return { status: response.status, json: (await response.json()) as any };
   };
-  return { google, call, desktopCalls, base };
+  return { google, call, desktopCalls, base, web };
 }
 
 test("import, search and scan feed one review queue; link with photo, then undo", async (t) => {
@@ -196,6 +199,52 @@ test("desktop: linking reads an Instagram photo with the login; a preview never 
   const linked = await call("POST", "/profiles/link", { contactId: "people/m", personIds: ["instagram:anna.m"], photoFrom: "instagram:anna.m" });
   assert.equal(linked.json.photoSet, true);
   assert.deepEqual(asked, ["instagram:anna.m"]);
+  assert.equal(google.photos.get("people/m"), jpeg.toString("base64"));
+});
+
+test("To review: a linked profile's photo is a candidate, applied and pinned without linking again (issue #81)", async (t) => {
+  const { google, call } = await start(t, "profiles-81");
+  // No profiles read yet: nothing to review, and Google isn't asked.
+  assert.deepEqual(await call("GET", "/profiles/count"), { status: 200, json: { count: 0 } });
+  await call("POST", "/profiles/scan/start", { network: "instagram", acceptRisk: true });
+  await call("POST", "/profiles/link", { contactId: "people/ec", personIds: ["instagram:elena_conti"] });
+  await call("POST", "/profiles/import?network=linkedin", "First Name,Last Name,URL\nElena,Conti,https://www.linkedin.com/in/elenaconti", "text/plain");
+
+  const elena = (await call("GET", "/profiles")).json.suggestions.find((s: any) => s.contactId === "people/ec");
+  assert.deepEqual(elena.candidates.map((c: any) => c.person.id), ["linkedin:elenaconti"]);
+  assert.deepEqual(elena.linked.map((p: any) => p.id), ["instagram:elena_conti"]);
+  assert.deepEqual(await call("GET", "/profiles/count"), { status: 200, json: { count: 1 } });
+
+  // Only the photo: LinkedIn isn't her, Instagram is linked already.
+  const confirmed = await call("POST", "/profiles/link", { contactId: "people/ec", personIds: [], photoFrom: "instagram:elena_conti", rejectIds: ["linkedin:elenaconti"] });
+  assert.equal(confirmed.json.photoSet, true);
+  assert.deepEqual(confirmed.json.linked.map((l: any) => [l.person.id, l.photoSet]), [["instagram:elena_conti", true]]);
+  assert.equal(google.photos.get("people/ec"), jpeg.toString("base64"));
+  assert.equal(google.people.get("people/ec")!.urls!.length, 1);
+  assert.equal(getPins("profiles-81")["people/ec"].matchedBy, "instagram.com/elena_conti");
+  assert.deepEqual(await call("GET", "/profiles/count"), { status: 200, json: { count: 0 } });
+
+  // Undo puts the photo back and leaves the link that was there.
+  await call("POST", "/profiles/undo", { contactId: "people/ec", personId: "instagram:elena_conti" });
+  assert.equal(google.photos.get("people/ec"), "T0xE");
+  assert.equal(google.people.get("people/ec")!.urls!.length, 1);
+
+  // A photo from a profile that is neither ticked nor on the contact isn't applied.
+  assert.equal((await call("POST", "/profiles/link", { contactId: "people/dg", personIds: [], photoFrom: "instagram:elena_conti" })).status, 404);
+  assert.equal((await call("POST", "/profiles/link", { contactId: "people/dg", personIds: [] })).status, 404);
+});
+
+test("the photo a card showed is applied when the site's address for it has expired (issue #81)", async (t) => {
+  const { google, call, base, web } = await start(t, "profiles-81b");
+  const data = loadProfiles("profiles-81b");
+  mergePeople(data, [{ id: "instagram:anna.m", network: "instagram", url: "https://instagram.com/anna.m", handle: "anna.m", photoUrl: "https://scontent.cdninstagram.com/anna.jpg", source: "scan" }]);
+  saveProfiles("profiles-81b", data);
+  // The card shows it while the address works...
+  assert.equal((await fetch(`${base}/profiles/photo?id=instagram:anna.m`)).status, 200);
+  // ...then the address expires.
+  web.down = true;
+  const linked = await call("POST", "/profiles/link", { contactId: "people/m", personIds: ["instagram:anna.m"], photoFrom: "instagram:anna.m" });
+  assert.equal(linked.json.photoSet, true);
   assert.equal(google.photos.get("people/m"), jpeg.toString("base64"));
 });
 

@@ -3,7 +3,7 @@ import { test, expect } from "@playwright/test";
 import { FakeBackend, screenshot } from "./backend";
 import { sampleProfiles } from "./fixtures";
 
-// Find profiles (issue #61), with the backend mocked.
+// Sync's To review and Sources (issues #61, #65, #81), with the backend mocked.
 let backend: FakeBackend;
 
 test.beforeEach(async ({ page }) => {
@@ -13,9 +13,12 @@ test.beforeEach(async ({ page }) => {
   await backend.install();
 });
 
-test("review list: several profiles per contact, the photo to use, and linking in bulk (issue #65)", async ({ page }) => {
+test("To review: one card per contact, a photo among the profiles, and confirming in bulk (issues #65, #81)", async ({ page }) => {
   await page.goto("/app");
-  await page.getByRole("navigation", { name: "Main navigation" }).first().getByRole("link", { name: "Find profiles" }).click();
+  const nav = page.getByRole("navigation", { name: "Main navigation" }).first();
+  await expect(nav.getByTestId("review-badge")).toHaveText("2");
+  await nav.getByRole("link", { name: "Sync 2 contacts to review" }).click();
+  await expect(page).toHaveURL(/\/app\/sync\?tab=review$/);
   await expect(page.getByRole("tab", { name: "To review (2)" })).toHaveAttribute("aria-selected", "true");
   const list = page.getByTestId("profile-list");
   const davide = list.getByTestId("profile-card").filter({ hasText: "Davide Gallo" }).first();
@@ -23,18 +26,21 @@ test("review list: several profiles per contact, the photo to use, and linking i
   await expect(davide.getByRole("checkbox", { name: "Davide Gallo · linkedin.com/in/davidegallo" })).toBeChecked();
   await expect(davide.getByRole("checkbox", { name: "Davide Gallo · @dgallo.bsky.social" })).toBeChecked();
   await expect(davide.getByRole("checkbox", { name: "Davide Gallo · @davide.gallo" })).not.toBeChecked();
-  await expect(davide.getByRole("checkbox", { name: "Use this photo" })).toHaveCount(2);
-  await expect(davide.getByRole("checkbox", { name: "Use this photo" }).first()).toBeChecked(); // LinkedIn's, the contact has none
   await expect(davide).toContainText("Connection · same name · Gallo Ceramiche");
+  // A photo from every profile that has one; LinkedIn's to begin with, since the contact has none.
+  const photos = davide.getByRole("radiogroup", { name: "Photo for Davide Gallo" });
+  await expect(photos.getByRole("radio")).toHaveCount(4);
+  await expect(photos.getByRole("radio", { name: "LinkedIn · linkedin.com/in/davidegallo" })).toBeChecked();
   // Photos come through the app's server.
-  await expect(davide.locator("img").first()).toHaveAttribute("src", "/api/profiles/photo?id=instagram%3Adavide.gallo");
+  await expect(photos.locator("img").first()).toHaveAttribute("src", "/api/profiles/photo?id=instagram%3Adavide.gallo");
 
-  // Instagram too, and its photo instead of LinkedIn's.
-  await davide.getByRole("checkbox", { name: "Davide Gallo · @davide.gallo" }).check();
-  await davide.getByRole("checkbox", { name: "Use this photo" }).first().check();
-  await expect(davide.getByRole("checkbox", { name: "Use this photo" }).nth(1)).not.toBeChecked();
-  await screenshot(page, "71-profiles-list");
-  await davide.getByRole("button", { name: "Link 3 profiles" }).click();
+  // Instagram's photo instead: that ticks the profile too.
+  await photos.getByText("@davide.gallo").click();
+  await expect(photos.getByRole("radio", { name: "Instagram · @davide.gallo" })).toBeChecked();
+  await expect(davide.getByRole("checkbox", { name: "Davide Gallo · @davide.gallo" })).toBeChecked();
+  await expect(davide).toContainText("Photo from Instagram: later syncs update it from there.");
+  await screenshot(page, "71-sync-review");
+  await davide.getByRole("button", { name: "Confirm: 3 profiles and the photo" }).click();
   await expect(page.getByRole("status").filter({ hasText: "Linked to Davide Gallo." })).toBeVisible();
   expect(backend.profileRequests.find((r) => r.route === "/link")!.body).toEqual({
     contactId: "people/dg",
@@ -46,11 +52,12 @@ test("review list: several profiles per contact, the photo to use, and linking i
   // The confirmation leaves by itself.
   await expect(page.getByRole("status").filter({ hasText: "Linked to Davide Gallo." })).toHaveCount(0, { timeout: 4000 });
 
-  // Elena, in bulk: selected, then linked in the background.
+  // Elena, in bulk: selected, then confirmed in the background.
   await expect(list.getByTestId("profile-card")).toHaveCount(1);
+  await expect(page.getByRole("tab", { name: "To review (1)" })).toBeVisible();
   await list.getByRole("checkbox", { name: "Select all" }).check();
   await expect(list).toContainText("1 of 1 contacts");
-  await list.getByRole("button", { name: "Link 1 profile to 1 contact" }).click();
+  await list.getByRole("button", { name: "Confirm 1 contact" }).click();
   expect(backend.profileRequests.find((r) => r.route === "/link_many")!.body).toEqual({
     items: [{ contactId: "people/ec", name: "Elena Conti", personIds: ["instagram:elena_conti"], rejectIds: [] }],
   });
@@ -61,7 +68,7 @@ test("review list: several profiles per contact, the photo to use, and linking i
   await expect(failed).toBeVisible({ timeout: 6000 });
   await expect(failed).toContainText("Elena Conti: Google had a temporary problem (503)");
   await expect(failed.getByRole("button", { name: "Copy error" })).toBeVisible();
-  await screenshot(page, "71b-profiles-bulk-error", { fullPage: false });
+  await screenshot(page, "71b-sync-bulk-error", { fullPage: false });
   await page.waitForTimeout(2500);
   await expect(failed).toBeVisible();
   await failed.getByRole("button", { name: "Close" }).click();
@@ -72,20 +79,20 @@ test("a contact that already has a photo keeps it unless a photo is picked by ha
   const davide = backend.profiles!.suggestions[0];
   Object.assign(davide, { hasPhoto: true, photoUrl: "/api/e2e-photos/7" });
   backend.profiles!.suggestions = [davide];
-  await page.goto("/app/profiles");
+  await page.goto("/app/sync?tab=review");
   const card = page.getByTestId("profile-card");
-  await expect(card).toContainText("Has a photo of its own");
-  // LinkedIn and Bluesky are ticked, but neither gives its photo.
-  await expect(card.getByRole("checkbox", { name: "Use this photo" })).toHaveCount(2);
-  for (const box of await card.getByRole("checkbox", { name: "Use this photo" }).all()) await expect(box).not.toBeChecked();
-  // Ticking or unticking more profiles doesn't pick one either.
+  await expect(card).toContainText("Has a photo of its own: pick another photo to replace it.");
+  // LinkedIn and Bluesky are ticked, but the contact's own photo stays picked.
+  const current = card.getByRole("radio", { name: "Current" });
+  await expect(current).toBeChecked();
+  // Ticking or unticking more profiles doesn't pick another either.
   await card.getByRole("checkbox", { name: "Davide Gallo · @davide.gallo" }).check();
   await card.getByRole("checkbox", { name: "Davide Gallo · linkedin.com/in/davidegallo" }).uncheck();
-  for (const box of await card.getByRole("checkbox", { name: "Use this photo" }).all()) await expect(box).not.toBeChecked();
+  await expect(current).toBeChecked();
 
   // In bulk too: links only.
   await page.getByRole("checkbox", { name: "Select all" }).check();
-  await page.getByRole("button", { name: "Link 2 profiles to 1 contact" }).click();
+  await page.getByRole("button", { name: "Confirm 1 contact" }).click();
   expect(backend.profileRequests.find((r) => r.route === "/link_many")!.body.items[0]).toEqual({
     contactId: "people/dg",
     name: "Davide Gallo",
@@ -98,12 +105,12 @@ test("a kept photo: only the links, no photo offered (issue #67)", async ({ page
   const davide = backend.profiles!.suggestions[0];
   Object.assign(davide, { hasPhoto: true, photoKept: true, photoUrl: "/api/e2e-photos/7" });
   backend.profiles!.suggestions = [davide];
-  await page.goto("/app/profiles");
+  await page.goto("/app/sync?tab=review");
   const card = page.getByTestId("profile-card");
   await expect(card).toContainText("This contact's photo is kept: only the links are added.");
-  await expect(card.getByRole("checkbox", { name: "Use this photo" })).toHaveCount(0);
-  await screenshot(page, "71c-profiles-kept-photo", { fullPage: false });
-  await card.getByRole("button", { name: "Link 2 profiles" }).click();
+  await expect(card.getByRole("radio")).toHaveCount(0);
+  await screenshot(page, "71c-sync-kept-photo", { fullPage: false });
+  await card.getByRole("button", { name: "Confirm: 2 profiles" }).click();
   expect(backend.profileRequests.find((r) => r.route === "/link")!.body).toEqual({
     contactId: "people/dg",
     name: "Davide Gallo",
@@ -112,39 +119,95 @@ test("a kept photo: only the links, no photo offered (issue #67)", async ({ page
   });
 });
 
-test("one at a time: keys tick profiles, link, and None of these; Linked has undo", async ({ page }) => {
-  await page.goto("/app/profiles");
+test("one at a time: keys pick a photo, confirm, skip and None of these", async ({ page }) => {
+  backend.profiles!.suggestions.push({ ...backend.profiles!.suggestions[1], contactId: "people/ec2", name: "Elena Conti Rossi" });
+  await page.goto("/app/sync?tab=review");
   await page.getByRole("button", { name: "One at a time" }).click();
   // The view is remembered.
   await page.reload();
   await expect(page.getByRole("button", { name: "One at a time" })).toHaveAttribute("aria-pressed", "true");
   const review = page.getByTestId("profile-review");
   await expect(review.getByRole("heading", { name: "Davide Gallo" })).toBeVisible();
+  await expect(review).toContainText("Keys: 1–9 pick a photo, Enter confirms, N is “None of these”, S skips.");
+  // 1: Instagram's photo, which ticks that profile; 3: Bluesky's.
   await page.keyboard.press("1");
+  await expect(review.getByRole("radio", { name: "Instagram · @davide.gallo" })).toBeChecked();
   await expect(review.getByRole("checkbox", { name: "Davide Gallo · @davide.gallo" })).toBeChecked();
+  // A click leaves the focus on the card's photos: keys still work.
+  await review.getByText("@dgallo.bsky.social").first().click();
   await page.keyboard.press("2");
-  await expect(review.getByRole("checkbox", { name: "Davide Gallo · linkedin.com/in/davidegallo" })).not.toBeChecked();
-  await screenshot(page, "72b-profiles-one-at-a-time");
+  await expect(review.getByRole("radio", { name: "LinkedIn · linkedin.com/in/davidegallo" })).toBeChecked();
+  await page.keyboard.press("3");
+  await expect(review.getByRole("radio", { name: "Bluesky · @dgallo.bsky.social" })).toBeChecked();
+  await screenshot(page, "72b-sync-one-at-a-time");
   await page.keyboard.press("Enter");
   await expect(page.getByRole("status").filter({ hasText: "Linked to Davide Gallo." })).toBeVisible();
-  expect(backend.profileRequests.find((r) => r.route === "/link")!.body).toMatchObject({ personIds: ["instagram:davide.gallo", "bluesky:dgallo.bsky.social"], photoFrom: "instagram:davide.gallo" });
+  expect(backend.profileRequests.find((r) => r.route === "/link")!.body).toMatchObject({
+    personIds: ["instagram:davide.gallo", "linkedin:davidegallo", "bluesky:dgallo.bsky.social"],
+    photoFrom: "bluesky:dgallo.bsky.social",
+  });
 
-  await expect(review.getByRole("heading", { name: "Elena Conti" })).toBeVisible();
+  await expect(review.getByRole("heading", { name: "Elena Conti", exact: true })).toBeVisible();
+  await page.keyboard.press("s");
+  expect(backend.profileRequests.find((r) => r.route === "/skip")!.body).toEqual({ contactId: "people/ec" });
+  await expect(review.getByRole("heading", { name: "Elena Conti Rossi" })).toBeVisible();
   await page.keyboard.press("n");
-  expect(backend.profileRequests.find((r) => r.route === "/reject")!.body).toEqual({ contactId: "people/ec", personIds: ["instagram:elena_conti"] });
+  expect(backend.profileRequests.find((r) => r.route === "/reject")!.body).toEqual({ contactId: "people/ec2", personIds: ["instagram:elena_conti"] });
   await expect(page.getByText("No suggestions left.")).toBeVisible();
+});
 
-  await page.getByRole("tab", { name: "Linked (2)" }).click();
-  const linked = page.getByTestId("profiles-linked");
-  await expect(linked).toContainText("instagram.com/davide.gallo");
-  await linked.getByRole("button", { name: "Undo" }).first().click();
-  await expect(page.getByRole("status").filter({ hasText: "Link removed from Davide Gallo." })).toBeVisible();
-  await expect(linked).toContainText("Undone");
+test("a profile already on the contact: its photo is offered and applied without linking again (issue #81)", async ({ page }) => {
+  const elena = backend.profiles!.suggestions[1];
+  elena.linked = [{ id: "bluesky:elena.bsky.social", network: "bluesky", url: "https://bsky.app/profile/elena.bsky.social", handle: "elena.bsky.social", name: "Elena Conti", photoUrl: "/api/e2e-photos/5", source: "search" }];
+  backend.profiles!.suggestions = [elena];
+  await page.goto("/app/sync?tab=review");
+  const card = page.getByTestId("profile-card");
+  // A placeholder, so the linked profile's photo is picked to begin with.
+  await expect(card.getByRole("radio", { name: "Bluesky · @elena.bsky.social" })).toBeChecked();
+  await expect(card).toContainText("Already linked");
+  // The Instagram suggestion isn't her: only the photo is left.
+  await card.getByRole("checkbox", { name: /@elena_conti/ }).uncheck();
+  await screenshot(page, "71d-sync-linked-photo", { fullPage: false });
+  await card.getByRole("button", { name: "Confirm: the photo" }).click();
+  expect(backend.profileRequests.find((r) => r.route === "/link")!.body).toEqual({
+    contactId: "people/ec",
+    name: "Elena Conti",
+    personIds: [],
+    photoFrom: "bluesky:elena.bsky.social",
+    rejectIds: ["instagram:elena_conti"],
+  });
+});
+
+test("To review on a phone: the card fits", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/app/sync?tab=review");
+  const card = page.getByTestId("profile-card").first();
+  await expect(card.getByRole("radiogroup")).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
+  await card.scrollIntoViewIfNeeded();
+  await screenshot(page, "71e-sync-review-phone", { fullPage: false });
+});
+
+test("Sync on its own opens Run; Find profiles' address opens To review (issue #81)", async ({ page }) => {
+  await page.goto("/app/sync");
+  await expect(page.getByRole("heading", { name: "Sync", exact: true })).toBeVisible();
+  await expect(page.getByRole("tab", { name: "Run" })).toHaveAttribute("aria-selected", "true");
+  await expect(page.getByRole("button", { name: "Start sync" })).toBeVisible();
+  // Run doesn't need the suggestions, which read the whole address book.
+  expect(backend.requested("/api/profiles")).toBeUndefined();
+
+  await page.goto("/app/profiles");
+  await expect(page).toHaveURL(/\/app\/sync\?tab=review$/);
+  await expect(page.getByRole("tab", { name: "To review (2)" })).toHaveAttribute("aria-selected", "true");
+  await page.getByRole("tab", { name: "Run" }).click();
+  await expect(page).toHaveURL(/\/app\/sync\?tab=run$/);
 });
 
 test("sources: import an export, run the public search, log in and scan with the risk accepted", async ({ page }) => {
   backend.profiles!.search = { running: false, networks: [], checked: 0, total: 0, found: {} };
   await page.goto("/app/profiles?tab=sources");
+  await expect(page).toHaveURL(/\/app\/sync\?tab=sources$/);
+  await expect(page.getByRole("heading", { name: "Find new profiles" })).toBeVisible();
   const sources = page.getByTestId("profile-sources");
   await sources.getByTestId("import-linkedin").setInputFiles({ name: "Connections.csv", mimeType: "text/csv", buffer: Buffer.from("First Name,Last Name,URL\nDavide,Gallo,https://www.linkedin.com/in/davidegallo") });
   await expect(page.getByRole("status").filter({ hasText: "Read 312." })).toBeVisible();

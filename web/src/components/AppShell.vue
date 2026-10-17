@@ -1,13 +1,14 @@
 <script setup lang="ts">
 import { computed, onMounted } from "vue";
 import { useRoute } from "vue-router";
-import { ArrowUpCircle, CircleCheck, ContactRound, Download, HandHeart, History, LayoutDashboard, RefreshCw, Settings, Sparkles, UserRoundSearch } from "lucide-vue-next";
+import { ArrowUpCircle, CircleCheck, ContactRound, Download, HandHeart, History, LayoutDashboard, RefreshCw, Settings, Sparkles } from "lucide-vue-next";
 
 import BrandLogo from "./BrandLogo.vue";
 import GoogleSignIn from "./GoogleSignIn.vue";
 import PreferencesMenu from "./PreferencesMenu.vue";
 import { cleanupSummary, loadCleanupSummary } from "../cleanupState";
 import { desktopInfo, loadDesktopInfo } from "../desktopInfo";
+import { loadReviewCount, reviewCount } from "../reviewState";
 import { isDesktop, sessionStatus } from "../settings";
 
 // The app frame from the mockups in issue #8: sidebar on wide windows,
@@ -20,13 +21,14 @@ const update = computed(() => desktopInfo.value?.lastUpdate);
 onMounted(() => {
   if (isDesktop.value) void loadDesktopInfo();
   void loadCleanupSummary();
+  void loadReviewCount();
 });
 
+// Sync holds Find profiles and Sync photos (issue #81); it opens on To review.
 const items = [
   { to: "/app", key: "dashboard", icon: LayoutDashboard, exact: true },
   { to: "/app/contacts", key: "contacts", icon: ContactRound },
-  { to: "/app/profiles", key: "profiles", icon: UserRoundSearch },
-  { to: "/app/sync", key: "sync", icon: RefreshCw },
+  { to: "/app/sync?tab=review", key: "sync", icon: RefreshCw },
   { to: "/app/cleanup", key: "cleanup", icon: Sparkles },
   { to: "/app/history", key: "history", icon: History },
   { to: "/app/settings", key: "settings", icon: Settings },
@@ -36,9 +38,10 @@ const items = [
 const needsSignIn = computed(() => isDesktop.value && sessionStatus.value?.setupDone && !sessionStatus.value.googleConnected);
 const blocked = computed(() => needsSignIn.value && !route.path.startsWith("/app/settings"));
 
-const active = computed(() => (item: (typeof items)[number]) =>
-  item.exact ? route.path === item.to : route.path === item.to || route.path.startsWith(`${item.to}/`)
-);
+const active = computed(() => (item: (typeof items)[number]) => {
+  const path = item.to.split("?")[0];
+  return item.exact ? route.path === path : route.path === path || route.path.startsWith(`${path}/`);
+});
 </script>
 
 <template>
@@ -59,6 +62,9 @@ const active = computed(() => (item: (typeof items)[number]) =>
         >
           <component :is="item.icon" class="size-[18px]" /><span class="flex-1">{{ $t(`app.nav.${item.key}`) }}</span>
           <span v-if="item.key === 'cleanup' && cleanupSummary?.duplicates" class="badge badge-secondary badge-sm" data-testid="cleanup-badge">{{ cleanupSummary.duplicates }}</span>
+          <template v-else-if="item.key === 'sync' && reviewCount">
+            <span class="badge badge-primary badge-sm" aria-hidden="true" data-testid="review-badge">{{ reviewCount }}</span><span class="sr-only">{{ $t("sync.toReviewN", reviewCount) }}</span>
+          </template>
         </router-link>
       </nav>
       <span class="flex-1"></span>
@@ -105,7 +111,7 @@ const active = computed(() => (item: (typeof items)[number]) =>
       </main>
     </div>
 
-    <nav class="fixed inset-x-0 bottom-0 z-10 grid grid-cols-7 border-t border-base-300 bg-base-100 text-[10px] font-medium lg:hidden" :aria-label="$t('app.navigation')">
+    <nav class="fixed inset-x-0 bottom-0 z-10 grid grid-cols-6 border-t border-base-300 bg-base-100 text-[10px] font-medium lg:hidden" :aria-label="$t('app.navigation')">
       <router-link
         v-for="item in items"
         :key="item.key"
