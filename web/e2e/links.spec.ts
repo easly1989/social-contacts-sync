@@ -107,6 +107,37 @@ test("report: add a profile link to a contact without a photo", async ({ page })
   await expect(saved.getByRole("button", { name: "Undo" })).toBeVisible();
 });
 
+test("report on a phone: the table fits, and so does adding a link", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  backend.linkFailures["https://www.linkedin.com/in/francesco"] = { status: 409, json: { error: "signin_required", network: "LinkedIn" } };
+  await page.goto(`/app/history/${backend.runs[0].id}`);
+  const table = page.getByRole("table");
+  await table.scrollIntoViewIfNeeded();
+  await screenshot(page, "29-report-phone", { fullPage: false });
+  // What is wider than its box: nothing.
+  const fits = () =>
+    page.evaluate(() => [
+      ...[...document.querySelectorAll("table")].filter((t) => t.parentElement!.scrollWidth > t.parentElement!.clientWidth).map((t) => `table ${t.parentElement!.scrollWidth}/${t.parentElement!.clientWidth}`),
+      ...(document.documentElement.scrollWidth > window.innerWidth ? [`page ${document.documentElement.scrollWidth}`] : []),
+    ]);
+
+  // Where the photo came from, under the name.
+  await expect(page.getByRole("row", { name: /Sofia Esposito/ })).toContainText("sofia@example.com");
+  expect(await fits()).toEqual([]);
+
+  await page.getByRole("tab", { name: "No photo found (2)" }).click();
+  expect(await fits()).toEqual([]);
+  await page.getByRole("row", { name: /Francesco Greco/ }).getByRole("button", { name: "Add profile link" }).click();
+  await page.getByLabel("Profile link for Francesco Greco").fill("https://www.linkedin.com/in/francesco");
+  await page.getByRole("button", { name: "Find photo" }).click();
+  await expect(page.getByRole("alert")).toBeVisible();
+  await page.getByRole("alert").evaluate((e) => e.scrollIntoView({ block: "center" }));
+  await screenshot(page, "29b-report-link-phone", { fullPage: false });
+  const button = await page.getByRole("button", { name: "Find photo" }).boundingBox();
+  expect(button!.x + button!.width).toBeLessThanOrEqual(390);
+  expect(await fits()).toEqual([]);
+});
+
 test("review: a photo looked up from a profile link becomes a candidate", async ({ page }) => {
   await page.goto("/app/sync/run?mode=review&sources=whatsapp,links");
   await expect.poll(() => backend.requested("/api/init_sync")).toBeTruthy();

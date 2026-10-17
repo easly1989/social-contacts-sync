@@ -195,7 +195,7 @@ onUnmounted(() => window.clearInterval(poll));
             </button>
           </div>
           <span class="flex-1"></span>
-          <label class="input input-sm w-56"><Search class="size-4 opacity-50" /><input v-model="search" :placeholder="$t('report.search')" :aria-label="$t('report.search')" /></label>
+          <label class="input input-sm w-full sm:w-56"><Search class="size-4 opacity-50" /><input v-model="search" :placeholder="$t('report.search')" :aria-label="$t('report.search')" /></label>
         </div>
         <div class="overflow-x-auto">
           <p v-if="tab === 'noMatch' && rows.length" class="mt-3 flex gap-1.5 text-xs text-base-content/60"><Link class="mt-px size-3.5 shrink-0" />{{ $t("links.reportHint") }}</p>
@@ -203,21 +203,32 @@ onUnmounted(() => window.clearInterval(poll));
             <thead>
               <tr>
                 <th>{{ $t("report.contact") }}</th>
-                <th>{{ $t("report.matchedBy") }}</th>
-                <th>{{ $t("report.source") }}</th>
-                <th>{{ $t("report.beforeAfter") }}</th>
+                <!-- On a phone, these two show under the name. -->
+                <th class="hidden sm:table-cell">{{ $t("report.matchedBy") }}</th>
+                <th class="hidden sm:table-cell">{{ $t("report.source") }}</th>
+                <th class="whitespace-normal">{{ $t("report.beforeAfter") }}</th>
                 <th></th>
               </tr>
             </thead>
             <tbody>
               <template v-for="{ result, index } in rows" :key="index">
               <tr :class="{ 'opacity-60': result.undone }">
-                <td class="font-medium">{{ result.name ?? "—" }}</td>
-                <td class="text-base-content/60">
+                <td class="font-medium">
+                  {{ result.name ?? "—" }}
+                  <div class="mt-1 space-y-1 font-normal sm:hidden">
+                    <span v-if="!result.matchedBy && result.error" class="line-clamp-2 text-xs wrap-anywhere text-error/80" :title="result.error">{{ result.error }}</span>
+                    <span v-else-if="result.matchedBy" class="block text-xs wrap-anywhere text-base-content/60">{{ result.matchedBy }}</span>
+                    <SourceBadge v-if="result.source" :source="result.source" />
+                    <button v-if="!result.undone && !changed(result) && result.outcome === 'noMatch' && linking !== index" type="button" class="btn btn-ghost btn-xs -ml-2" @click="startLink(index)">
+                      <Link class="size-3.5" />{{ $t("links.add") }}
+                    </button>
+                  </div>
+                </td>
+                <td class="hidden text-base-content/60 sm:table-cell">
                   <span v-if="!result.matchedBy && result.error" class="line-clamp-2 max-w-[36rem] break-words text-error/80" :title="result.error">{{ result.error }}</span>
                   <template v-else>{{ result.matchedBy ?? "—" }}</template>
                 </td>
-                <td><SourceBadge v-if="result.source" :source="result.source" /></td>
+                <td class="hidden sm:table-cell"><SourceBadge v-if="result.source" :source="result.source" /></td>
                 <td>
                   <PhotoCompare
                     v-if="changed(result)"
@@ -229,19 +240,19 @@ onUnmounted(() => window.clearInterval(poll));
                   />
                   <span v-else class="text-xs text-base-content/50">{{ $t(`outcomes.${result.outcome === "error" ? "errors" : result.outcome}`) }}</span>
                 </td>
-                <td class="text-right">
+                <td class="pl-0 text-right sm:pl-3">
                   <span v-if="result.undone" class="badge badge-ghost badge-sm">{{ $t("report.undone") }}</span>
-                  <button v-else-if="changed(result)" type="button" class="btn btn-ghost btn-xs" :disabled="undoing" @click="undoOne(index)"><Undo2 class="size-3.5" />{{ $t("report.undo") }}</button>
-                  <button v-else-if="result.outcome === 'noMatch' && linking !== index" type="button" class="btn btn-ghost btn-xs" @click="startLink(index)">
+                  <button v-else-if="changed(result)" type="button" class="btn btn-ghost btn-xs" :disabled="undoing" @click="undoOne(index)"><Undo2 class="size-3.5" /><span class="sr-only sm:not-sr-only">{{ $t("report.undo") }}</span></button>
+                  <button v-else-if="result.outcome === 'noMatch' && linking !== index" type="button" class="btn btn-ghost btn-xs hidden sm:inline-flex" @click="startLink(index)">
                     <Link class="size-3.5" />{{ $t("links.add") }}
                   </button>
                 </td>
               </tr>
               <tr v-if="linking === index" class="bg-base-200/60" :data-testid="`link-row-${index}`">
                 <td colspan="5">
-                  <div class="flex items-start gap-3">
-                    <ProfileLinkLookup :label="$t('links.fieldFor', { name: result.name ?? '—' })" autofocus @found="(lookup) => (found = lookup)" />
-                    <button type="button" class="btn btn-ghost btn-sm" @click="linking = undefined">{{ $t("common.cancel") }}</button>
+                  <div class="flex flex-wrap items-start gap-3">
+                    <ProfileLinkLookup :label="$t('links.fieldFor', { name: result.name ?? '—' })" class="basis-64" autofocus @found="(lookup) => (found = lookup)" />
+                    <button type="button" class="btn btn-ghost btn-sm ml-auto" @click="linking = undefined">{{ $t("common.cancel") }}</button>
                   </div>
                   <div v-if="found" class="mt-3 flex flex-wrap items-center gap-4 rounded-xl border border-base-300 bg-base-100 p-3">
                     <span class="grid size-12 place-items-center rounded-full bg-base-300 text-base font-semibold text-base-content/50">{{ (result.name ?? "?")[0] }}</span>
