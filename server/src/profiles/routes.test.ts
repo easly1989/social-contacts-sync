@@ -10,6 +10,9 @@ import { setKeptPhoto } from "../contacts/keptPhotos";
 import { getPins, photoHash, setPin } from "../contacts/photoPins";
 import { ReadProfile } from "./rereads";
 import { loadProfiles, mergePeople, saveProfiles } from "./store";
+import { loadQueue, queuePhotos } from "./queue";
+import { saveLookup } from "../linkLookups";
+import { parseProfileLink } from "../sources/links";
 import { FakeContacts } from "../cleanup/fakeContacts";
 import { Person } from "../cleanup/people";
 
@@ -246,6 +249,100 @@ test("the photo a card showed is applied when the site's address for it has expi
   const linked = await call("POST", "/profiles/link", { contactId: "people/m", personIds: ["instagram:anna.m"], photoFrom: "instagram:anna.m" });
   assert.equal(linked.json.photoSet, true);
   assert.equal(google.photos.get("people/m"), jpeg.toString("base64"));
+});
+
+test("To review: photos a sync sent there are cards; Use applies and pins, Keep current turns them down (issue #82)", async (t) => {
+  const { google, call, base } = await start(t, "profiles-82");
+  const wa = Buffer.alloc(1500, 4).toString("base64");
+  const gr = Buffer.alloc(1500, 5).toString("base64");
+  queuePhotos("profiles-82", { id: "people/ec", name: "Elena Conti" }, "photo", [
+    { photo: wa, source: "whatsapp", matchedBy: "+39 333 1" },
+    { photo: gr, source: "gravatar", matchedBy: "elena@example.com" },
+  ]);
+  queuePhotos("profiles-82", { id: "people/m", name: "Mamma" }, "photo", [{ photo: wa, source: "whatsapp", matchedBy: "+39 333 2" }]);
+  assert.deepEqual(await call("GET", "/profiles/count"), { status: 200, json: { count: 2 } });
+
+  const cards = (await call("GET", "/profiles")).json.suggestions;
+  const elena = cards.find((s: any) => s.contactId === "people/ec");
+  assert.deepEqual(elena.candidates, []);
+  assert.equal(elena.queue.kind, "photo");
+  assert.deepEqual(elena.queue.photos.map((p: any) => [p.source, p.matchedBy, p.id.startsWith("photo:")]), [["whatsapp", "+39 333 1", true], ["gravatar", "elena@example.com", true]]);
+  assert.equal(elena.queue.photos[0].hash, undefined);
+  const image = await fetch(`${base}/profiles/queue-photo?id=${encodeURIComponent(elena.queue.photos[1].id)}`);
+  assert.equal(Buffer.from(await image.arrayBuffer()).toString("base64"), gr);
+  assert.equal((await call("GET", "/profiles/queue-photo?id=photo:nope")).status, 404);
+
+  // Use Gravatar's: applied, pinned to it, the photo it replaced kept for undo.
+  const used = await call("POST", "/profiles/link", { contactId: "people/ec", personIds: [], photoFrom: elena.queue.photos[1].id });
+  assert.equal(used.json.photoSet, true);
+  assert.equal(google.photos.get("people/ec"), gr);
+  assert.deepEqual([getPins("profiles-82")["people/ec"].source, getPins("profiles-82")["people/ec"].hash], ["gravatar", photoHash(gr)]);
+  const queue = loadQueue("profiles-82");
+  assert.equal(queue.entries["people/ec"], undefined);
+  assert.equal(queue.dismissed["people/ec"], undefined);
+  assert.deepEqual([queue.applied[0].contactId, queue.applied[0].source, Boolean(queue.applied[0].previous)], ["people/ec", "gravatar", true]);
+
+  // Keep current: nothing changes, and WhatsApp's photo isn't offered again.
+  assert.deepEqual(await call("POST", "/profiles/keep", { contactId: "people/m" }), { status: 200, json: { ok: true } });
+  assert.deepEqual(loadQueue("profiles-82").dismissed["people/m"], [photoHash(wa)]);
+  assert.equal(google.photos.has("people/m"), false);
+  assert.deepEqual(await call("GET", "/profiles/count"), { status: 200, json: { count: 0 } });
+  assert.equal((await call("POST", "/profiles/keep", { contactId: "people/m" })).status, 404);
+});
+
+test("To review: a photo changed outside the app; Keep this unpins, Back to the source re-applies (issue #82)", async (t) => {
+  const { google, call } = await start(t, "profiles-82b");
+  const ig = Buffer.alloc(1500, 6).toString("base64");
+  const pin = { source: "links" as const, matchedBy: "instagram.com/elena_conti", network: "Instagram", hash: "old", readAt: "2026-10-01T00:00:00.000Z", suspended: true };
+  const changed = () => queuePhotos("profiles-82b", { id: "people/ec" }, "changed", [{ photo: ig, source: "links", matchedBy: "instagram.com/elena_conti", network: "Instagram" }], { source: "links", network: "Instagram", matchedBy: "instagram.com/elena_conti" });
+  setPin("profiles-82b", "people/ec", pin);
+  changed();
+  const card = (await call("GET", "/profiles")).json.suggestions[0];
+  assert.deepEqual([card.queue.kind, card.queue.pinned.network], ["changed", "Instagram"]);
+
+  await call("POST", "/profiles/keep", { contactId: "people/ec" });
+  assert.equal(getPins("profiles-82b")["people/ec"], undefined);
+  assert.equal(google.photos.get("people/ec"), "T0xE");
+
+  setPin("profiles-82b", "people/ec", pin);
+  changed();
+  const back = (await call("GET", "/profiles")).json.suggestions[0].queue.photos[0].id;
+  await call("POST", "/profiles/link", { contactId: "people/ec", personIds: [], photoFrom: back });
+  assert.equal(google.photos.get("people/ec"), ig);
+  assert.deepEqual([getPins("profiles-82b")["people/ec"].suspended, getPins("profiles-82b")["people/ec"].hash], [undefined, photoHash(ig)]);
+});
+
+test("To review: a photo looked up from a link typed on the card is applied and its link saved (issue #82)", async (t) => {
+  const { google, call } = await start(t, "profiles-82c");
+  queuePhotos("profiles-82c", { id: "people/m" }, "photo", [{ photo: Buffer.alloc(1500, 4).toString("base64"), source: "whatsapp", matchedBy: "+39 333 2" }]);
+  const lookup = saveLookup("profiles-82c", { photo: jpeg.toString("base64"), link: parseProfileLink("https://instagram.com/mamma.r")! });
+  const done = await call("POST", "/profiles/link", { contactId: "people/m", personIds: [], link: lookup.token });
+  assert.equal(done.json.photoSet, true);
+  assert.equal(google.photos.get("people/m"), jpeg.toString("base64"));
+  assert.deepEqual(google.people.get("people/m")!.urls, [{ value: "https://instagram.com/mamma.r", type: "profile" }]);
+  assert.equal(getPins("profiles-82c")["people/m"].matchedBy, "instagram.com/mamma.r");
+  // WhatsApp's photo, not used, isn't offered again.
+  assert.equal(loadQueue("profiles-82c").dismissed["people/m"].length, 1);
+  assert.equal(loadQueue("profiles-82c").applied[0].link, "https://instagram.com/mamma.r");
+});
+
+test("To review: a photo used while a sync runs keeps what the sync queued meanwhile (issue #82)", async (t) => {
+  const { google, call } = await start(t, "profiles-82e");
+  const wa = Buffer.alloc(1500, 4).toString("base64");
+  queuePhotos("profiles-82e", { id: "people/ec" }, "photo", [{ photo: wa, source: "whatsapp", matchedBy: "+39 333 1" }]);
+  const write = google.setPhoto.bind(google);
+  // The sync queues Mamma while Google saves Elena's photo.
+  google.setPhoto = async (id, photo) => (queuePhotos("profiles-82e", { id: "people/m" }, "photo", [{ photo: wa, source: "whatsapp", matchedBy: "+39 333 2" }]), write(id, photo));
+  const id = loadQueue("profiles-82e").entries["people/ec"].photos[0].id;
+  assert.equal((await call("POST", "/profiles/link", { contactId: "people/ec", personIds: [], photoFrom: id })).json.photoSet, true);
+  assert.deepEqual(Object.keys(loadQueue("profiles-82e").entries), ["people/m"]);
+});
+
+test("To review: a contact whose photo is kept shows no waiting photos (issue #82)", async (t) => {
+  const { call } = await start(t, "profiles-82d");
+  queuePhotos("profiles-82d", { id: "people/ec" }, "photo", [{ photo: Buffer.alloc(1500, 4).toString("base64"), source: "whatsapp", matchedBy: "+39 333 1" }]);
+  setKeptPhoto("profiles-82d", "people/ec", true);
+  assert.deepEqual((await call("GET", "/profiles")).json.suggestions, []);
 });
 
 test("pinned profiles each network could read again (issue #80)", async (t) => {

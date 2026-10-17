@@ -2,21 +2,18 @@ import WebSocket from "ws";
 import { RateLimiter } from "limiter";
 import { Client } from "whatsapp-web.js";
 
-import { EventType, PhotoPin, ReviewAnswer, ReviewRequest, SourceId, SyncOptions } from "../../interfaces/api";
+import { EventType, PhotoPin, RunOptions, SourceId, SyncOptions } from "../../interfaces/api";
 import { downloadContactPhoto, listContacts, OAuth2Client, updateContactPhoto } from "./gapi";
-import { sendEvent, sendMessageAndWait } from "./ws";
+import { sendEvent } from "./ws";
 import { deleteFromCache, getFromCache, setInCache } from "./cache";
-import { runSync, SyncMode } from "./syncEngine";
+import { defaultRunOptions, runSync } from "./syncEngine";
 import { saveRun } from "./runs";
 import { PhotoSource } from "./sources/types";
 import { whatsappSource } from "./sources/whatsapp";
 import { gravatarSource } from "./sources/gravatar";
 import { telegramSource } from "./sources/telegram";
-import { linksSource, LinksSourceOptions, networkNames, shortLink } from "./sources/links";
+import { linksSource, LinksSourceOptions } from "./sources/links";
 import { loadProfiles, storedProfilePhotos } from "./profiles/store";
-import { getLookup } from "./linkLookups";
-import { addContactLink } from "./contactLinks";
-import { peopleContactsApi } from "./cleanup/people";
 import { TelegramConnection } from "./telegram";
 import { telegramConnection } from "./telegramSession";
 import { getPrefs } from "./cleanup/store";
@@ -27,6 +24,7 @@ import { getKeptPhotos } from "./contacts/keptPhotos";
 import { getPins, setPin } from "./contacts/photoPins";
 import { defaultRereadCap, getReads, planRereads, rereading, rereadNetworks, saveReads } from "./profiles/rereads";
 import { askDesktop } from "./desktop";
+import { loadQueue, queuePhotos } from "./profiles/queue";
 
 /** Marks the contacts whose photo is a placeholder, or kept, from the Contacts page, and the source each photo follows. */
 export function withPlaceholders(
@@ -48,9 +46,22 @@ export function googleRateLimiter(): RateLimiter {
   return new RateLimiter({ tokensPerInterval: 1, interval: 1500 });
 }
 
-export function syncMode(options: SyncOptions): SyncMode {
-  if (options.manual_sync === "true") return "review";
-  return options.overwrite_photos === "true" ? "replace" : "fill";
+/** What the run does (issue #82): each option as asked, else its default. */
+export function runOptions(options: SyncOptions): RunOptions {
+  const flag = (value: string | undefined, fallback: boolean) => (value === undefined ? fallback : value === "true");
+  return {
+    fillMissing: flag(options.fill_missing, defaultRunOptions.fillMissing),
+    updatePinned: flag(options.update_pinned, defaultRunOptions.updatePinned),
+    lookDifferent: flag(options.look_different, defaultRunOptions.lookDifferent),
+    decideAll: flag(options.decide_all, defaultRunOptions.decideAll),
+  };
+}
+
+/** Profiles read with the login per network and sync: the Run tab's choice, else the environment, else 100. */
+export function readsCap(options: SyncOptions): number {
+  const asked = Number(options.reads_cap);
+  if (Number.isInteger(asked) && asked > 0) return Math.min(asked, 1000);
+  return Number(process.env.SCS_PROFILE_READS) || defaultRereadCap;
 }
 
 /** Sources asked for, in priority order, that are usable in this session. */
@@ -87,7 +98,7 @@ export async function initSync(id: string, syncOptions: SyncOptions) {
   const whatsappClient: Client | undefined = getFromCache(id, "whatsapp");
   const gAuth: OAuth2Client = getFromCache(id, "gauth");
   const limiter = googleRateLimiter();
-  const mode = syncMode(syncOptions);
+  const run = runOptions(syncOptions);
   setInCache(id, "sync_stop", false);
 
   // A profile read with the login (issues #79, #80) comes before the address a scan read.
@@ -104,7 +115,7 @@ export async function initSync(id: string, syncOptions: SyncOptions) {
           planRereads(
             getPins(id),
             reads,
-            Number(process.env.SCS_PROFILE_READS) || defaultRereadCap,
+            readsCap(syncOptions),
             // A LinkedIn read may show as a profile visit: only while the setting is on (issue #80).
             rereadNetworks.filter((n) => n !== "linkedin" || syncOptions.linkedin_rereads !== "false")
           ),
@@ -119,7 +130,13 @@ export async function initSync(id: string, syncOptions: SyncOptions) {
       : undefined;
   if (rereads) sources = sources.map((s) => (s.id === "links" ? rereads.source : s));
 
+  // Stop when asked to, or when the page went away.
+  const cancelled = () => getFromCache(id, "sync_stop") === true || ws.readyState !== WebSocket.OPEN;
+  const queue = loadQueue(id);
+
   try {
+    // Phase 1 (issue #82): the pinned profiles first, so their photos are fresh for phase 2.
+    await rereads?.readPlanned((reads) => sendEvent(ws, EventType.SyncProgress, { progress: 0, syncCount: 0, phase: "profiles", reads }), cancelled);
     const result = await runSync(
       {
         listContacts: async () =>
@@ -128,41 +145,19 @@ export async function initSync(id: string, syncOptions: SyncOptions) {
             getPlaceholders(id),
             getKeptPhotos(id),
             getPins(id)
-          ),
+          ).map((c) => (queue.dismissed[c.id] ? { ...c, dismissed: queue.dismissed[c.id] } : c)),
         currentPhoto: downloadContactPhoto,
         setPhoto: (contactId, photo) => updateContactPhoto(gAuth, contactId, photo),
-        addLink: async (contactId, url) => void (await addContactLink(peopleContactsApi(gAuth), contactId, url)),
         savePin: (contactId, pin) => setPin(id, contactId, pin),
+        queue: (contact, kind, found) =>
+          queuePhotos(id, contact, kind, found, kind === "changed" && contact.pin ? { source: contact.pin.source, network: contact.pin.network, matchedBy: contact.pin.matchedBy } : undefined),
       },
       sources,
-      mode,
+      run,
       {
         progress: (update) => sendEvent(ws, EventType.SyncProgress, update),
-        // Stop when asked to, or when the page went away.
-        cancelled: () => getFromCache(id, "sync_stop") === true || ws.readyState !== WebSocket.OPEN,
+        cancelled,
         beforeWrite: async () => void (await limiter.removeTokens(1)),
-        review: async ({ contact, existingPhoto, candidates }) => {
-          const request: ReviewRequest = {
-            existingPhoto,
-            newPhoto: candidates[0].photo,
-            contactName: contact.name ?? null,
-            candidates,
-          };
-          try {
-            // A person decides here: give them time.
-            const answer: ReviewAnswer | undefined = await sendMessageAndWait(ws, EventType.SyncConfirm, EventType.SyncPhotoConfirm, request, 10 * 60 * 1000);
-            if (!answer?.accept) return null;
-            // A photo the user looked up from a profile link (issue #51).
-            const fromLink = answer.link ? getLookup(id, answer.link) : undefined;
-            if (fromLink)
-              return { photo: fromLink.photo, source: "links", matchedBy: shortLink(fromLink.link), newLink: fromLink.link.url, network: networkNames[fromLink.link.network] };
-            const choice = Number.isInteger(answer.choice) ? answer.choice! : 0;
-            return choice >= 0 && choice < candidates.length ? choice : 0;
-          } catch (e) {
-            console.error("No answer for manual sync confirmation", e);
-            return null;
-          }
-        },
       }
     );
     if (rereads) result.run.profileReads = rereads.report();

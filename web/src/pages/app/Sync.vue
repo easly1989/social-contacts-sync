@@ -8,12 +8,14 @@ import AppShell from "../../components/AppShell.vue";
 import ProfileList from "../../components/profiles/ProfileList.vue";
 import ProfileReview from "../../components/profiles/ProfileReview.vue";
 import ProfileSources from "../../components/profiles/ProfileSources.vue";
-import RunSetup from "../../components/sync/RunSetup.vue";
+import RunTab from "../../components/sync/RunTab.vue";
+import SourceOrder from "../../components/sync/SourceOrder.vue";
 import { api } from "../../api";
 import { number } from "../../format";
 import { networkInfo } from "../../profileNetworks";
 import { initialPick, ProfilePick } from "../../profilePick";
-import { reviewCount } from "../../reviewState";
+import { loadReviewCount, reviewCount } from "../../reviewState";
+import { run, running } from "../../runState";
 import { signInAgainIfNeeded } from "../../signInAgain";
 import { notify, notifyError } from "../../toasts";
 import { ProfilesOverview, SocialNetwork } from "../../../../interfaces/api";
@@ -65,11 +67,22 @@ async function load(): Promise<void> {
 // To review and Sources read the address book; Run doesn't need to.
 watch(tab, (key) => key !== "run" && !overview.value && void load(), { immediate: true });
 
-// While a search, a scan or a bulk confirm runs, its progress comes in.
+// While a search, a scan, a bulk confirm or a sync runs, its progress (and what a sync queues) comes in.
 let poll: number | undefined;
-const busy = computed(() => overview.value?.search.running || overview.value?.bulk?.running || overview.value?.scans?.some((s) => s.running));
+const busy = computed(() => running.value || overview.value?.search.running || overview.value?.bulk?.running || overview.value?.scans?.some((s) => s.running));
 onMounted(() => (poll = window.setInterval(() => busy.value && tab.value !== "run" && void load(), 2500)));
 onBeforeUnmount(() => window.clearInterval(poll));
+// A finished sync leaves new contacts to review.
+watch(
+  () => run.runId,
+  (runId) => {
+    if (!runId) return;
+    if (tab.value === "run") overview.value = undefined;
+    else void load();
+    void loadReviewCount(true);
+  }
+);
+const runLabel = computed(() => (running.value ? ` · ${Math.floor(run.progress)}%` : ""));
 
 // When a bulk confirm ends: how it went.
 watch(
@@ -90,20 +103,24 @@ watch(
 const queue = computed(() =>
   (overview.value?.suggestions ?? [])
     .map((s) => ({ ...s, candidates: filter.value ? s.candidates.filter((c) => c.person.network === filter.value) : s.candidates }))
-    .filter((s) => s.candidates.length)
+    // A sync's photos aren't from one network: only without a filter.
+    .filter((s) => s.candidates.length || (!filter.value && s.queue))
 );
 const networksInQueue = computed(() => [...new Set((overview.value?.suggestions ?? []).flatMap((s) => s.candidates.map((c) => c.person.network)))]);
 const hasSources = computed(() => overview.value?.sources.some((s) => s.people > 0));
 
 // What each card has ticked, kept while moving between views and pages.
 const picks = reactive<Record<string, ProfilePick>>({});
+/** When each card's sync photos came, to start the card afresh when a later sync changes them. */
+const queuedAt: Record<string, string | undefined> = {};
 watch(
   queue,
   (list) => {
     for (const s of list) {
       const ids = new Set(s.candidates.map((c) => c.person.id));
       const pick = picks[s.contactId];
-      if (!pick || pick.ticked.some((id) => !ids.has(id))) picks[s.contactId] = initialPick(s);
+      if (!pick || pick.ticked.some((id) => !ids.has(id)) || queuedAt[s.contactId] !== s.queue?.addedAt) picks[s.contactId] = initialPick(s);
+      queuedAt[s.contactId] = s.queue?.addedAt;
     }
   },
   { immediate: true }
@@ -122,7 +139,7 @@ const toReview = computed(() => overview.value?.suggestions.length ?? reviewCoun
       <div class="flex flex-wrap items-end gap-3">
         <div role="tablist" class="tabs tabs-border flex-1">
           <button v-for="key in tabs" :key="key" type="button" role="tab" class="tab" :class="{ 'tab-active': tab === key }" :aria-selected="tab === key" @click="setTab(key)">
-            {{ $t(`sync.tabs.${key}`) }}<template v-if="key === 'review' && toReview !== undefined"> ({{ number(toReview, locale) }})</template>
+            {{ $t(`sync.tabs.${key}`) }}<template v-if="key === 'review' && toReview !== undefined"> ({{ number(toReview, locale) }})</template><template v-if="key === 'run'">{{ runLabel }}</template>
           </button>
         </div>
         <select v-if="tab === 'review' && networksInQueue.length > 1" v-model="filter" class="select select-sm w-48" :aria-label="$t('profiles.filter')">
@@ -131,8 +148,10 @@ const toReview = computed(() => overview.value?.suggestions.length ?? reviewCoun
         </select>
       </div>
 
-      <RunSetup v-if="tab === 'run'" />
-      <template v-else-if="overview">
+      <RunTab v-if="tab === 'run'" @review="setTab('review')" @sources="setTab('sources')" />
+      <!-- The sources a sync uses don't need the address book. -->
+      <SourceOrder v-if="tab === 'sources'" />
+      <template v-if="tab !== 'run' && overview">
         <template v-if="tab === 'review'">
           <template v-if="queue.length">
             <ProfileList v-if="view === 'list'" :queue="queue" :picks="picks" :bulk="overview.bulk" @update:pick="setPick" @changed="load">
@@ -167,10 +186,10 @@ const toReview = computed(() => overview.value?.suggestions.length ?? reviewCoun
           <ProfileSources :overview="overview" @changed="load" />
         </section>
       </template>
-      <div v-else-if="loadError" class="flex flex-col items-center gap-3 py-12 text-sm text-base-content/60">
+      <div v-else-if="tab !== 'run' && loadError" class="flex flex-col items-center gap-3 py-12 text-sm text-base-content/60">
         {{ $t("contacts.errors.load") }}<button type="button" class="btn btn-sm" @click="load"><RefreshCw class="size-4" />{{ $t("contacts.retry") }}</button>
       </div>
-      <div v-else class="grid place-items-center py-12"><span class="loading loading-spinner"></span></div>
+      <div v-else-if="tab !== 'run'" class="grid place-items-center py-12"><span class="loading loading-spinner"></span></div>
     </div>
   </AppShell>
 </template>

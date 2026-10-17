@@ -269,3 +269,83 @@ test("web version: no login scan", async ({ page }) => {
   await page.goto("/app/profiles?tab=sources");
   await expect(page.getByTestId("profile-scan")).toContainText("Available in the desktop app.");
 });
+
+test("To review: a sync's different photo, and a pinned photo changed outside the app (issue #82)", async ({ page }) => {
+  const readAt = "2026-10-15T09:00:00.000Z";
+  backend.profiles!.suggestions.push(
+    {
+      contactId: "people/mr",
+      name: "Marco Rossi",
+      hasPhoto: true,
+      photoUrl: "/api/e2e-photos/5",
+      candidates: [],
+      queue: { kind: "photo", photos: [{ id: "photo:aaa", source: "whatsapp", matchedBy: "+39 333 123 4567", readAt }], addedAt: readAt },
+    },
+    {
+      contactId: "people/sf",
+      name: "Sofia Ferrari",
+      hasPhoto: true,
+      photoUrl: "/api/e2e-photos/6",
+      candidates: [],
+      queue: {
+        kind: "changed",
+        photos: [{ id: "photo:bbb", source: "links", matchedBy: "instagram.com/sofia.ferrari", network: "Instagram", readAt }],
+        pinned: { source: "links", network: "Instagram", matchedBy: "instagram.com/sofia.ferrari" },
+        addedAt: readAt,
+      },
+    },
+    {
+      contactId: "people/lb",
+      name: "Laura Bruno",
+      hasPhoto: true,
+      photoUrl: "/api/e2e-photos/7",
+      candidates: [],
+      queue: { kind: "photo", photos: [{ id: "photo:ccc", source: "gravatar", matchedBy: "laura@example.com", readAt }], addedAt: readAt },
+    }
+  );
+  await page.goto("/app/sync?tab=review");
+  const card = (name: string) => page.getByTestId("profile-card").filter({ hasText: name });
+
+  // A different photo: offered, with where it came from; Use sends it.
+  const marco = card("Marco Rossi");
+  await expect(marco).toContainText("Different photo");
+  await expect(marco.getByRole("radio", { name: "WhatsApp · +39 333 123 4567" })).toBeChecked();
+  await expect(marco.locator("img[src^='/api/profiles/queue-photo']")).toHaveAttribute("src", "/api/profiles/queue-photo?id=photo%3Aaaa");
+  // A changed photo: what Google has now, against the source's.
+  const sofia = card("Sofia Ferrari");
+  await expect(sofia).toContainText("Changed outside the app");
+  await expect(sofia.getByTestId("changed-photo")).toContainText("In Google now");
+  await expect(sofia.getByTestId("changed-photo")).toContainText("no longer follows Instagram");
+  await sofia.evaluate((e) => e.scrollIntoView({ block: "center" }));
+  await screenshot(page, "72-sync-review-queue", { fullPage: false });
+
+  await marco.getByRole("button", { name: "Use WhatsApp" }).click();
+  await expect.poll(() => backend.profileRequests.find((r) => r.route === "/link")?.body).toMatchObject({ contactId: "people/mr", photoFrom: "photo:aaa", personIds: [] });
+  await sofia.getByRole("button", { name: "Back to Instagram" }).click();
+  await expect.poll(() => backend.profileRequests.filter((r) => r.route === "/link").at(-1)?.body).toMatchObject({ contactId: "people/sf", photoFrom: "photo:bbb" });
+  // Keep current: the photos found aren't offered again (the server remembers them).
+  await card("Laura Bruno").getByRole("button", { name: "Keep current photo" }).click();
+  await expect.poll(() => backend.profileRequests.find((r) => r.route === "/keep")?.body).toEqual({ contactId: "people/lb" });
+});
+
+test("To review, one at a time: Enter keeps a photo changed outside the app (issue #82)", async ({ page }) => {
+  backend.profiles!.suggestions = [
+    {
+      contactId: "people/sf",
+      name: "Sofia Ferrari",
+      hasPhoto: true,
+      photoUrl: "/api/e2e-photos/6",
+      candidates: [],
+      queue: { kind: "changed", photos: [], pinned: { source: "whatsapp" }, addedAt: "2026-10-15T09:00:00.000Z" },
+    },
+  ];
+  await page.goto("/app/sync?tab=review");
+  await page.getByRole("button", { name: "One at a time" }).click();
+  const review = page.getByTestId("profile-review");
+  await expect(review).toContainText("no longer follows WhatsApp");
+  // Without the source's photo, there is nothing to go back to.
+  await expect(review.getByRole("button", { name: /Back to/ })).toHaveCount(0);
+  await review.getByRole("heading", { name: "Sofia Ferrari" }).click();
+  await page.keyboard.press("Enter");
+  await expect.poll(() => backend.profileRequests.find((r) => r.route === "/keep")?.body).toEqual({ contactId: "people/sf" });
+});

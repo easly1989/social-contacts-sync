@@ -29,7 +29,8 @@ const routes: RouteRecordRaw[] = [
   // The app (issue #21); the old flow's last steps now live there.
   { path: "/app", component: () => import("./pages/app/Dashboard.vue") },
   { path: "/app/sync", component: () => import("./pages/app/Sync.vue") },
-  { path: "/app/sync/run", component: () => import("./pages/app/SyncRun.vue") },
+  // Sync photos is the Run tab of Sync (issue #82).
+  { path: "/app/sync/run", redirect: { path: "/app/sync", query: { tab: "run" } } },
   { path: "/app/history", component: () => import("./pages/app/History.vue") },
   { path: "/app/history/:id", component: () => import("./pages/app/RunReport.vue") },
   { path: "/app/cleanup", component: () => import("./pages/app/Cleanup.vue") },
@@ -39,16 +40,7 @@ const routes: RouteRecordRaw[] = [
   { path: "/app/settings", redirect: "/app/settings/general" },
   { path: "/app/settings/:section", component: () => import("./pages/app/Settings.vue") },
   { path: "/options", redirect: "/app/sync" },
-  {
-    path: "/sync",
-    redirect: (to) => ({
-      path: "/app/sync/run",
-      query: {
-        mode: to.query.manual_sync === "true" ? "review" : to.query.overwrite_photos === "true" ? "replace" : "fill",
-        sources: "whatsapp",
-      },
-    }),
-  },
+  { path: "/sync", redirect: { path: "/app/sync", query: { tab: "run" } } },
   // Desktop first-run wizard.
   { path: "/setup/google", component: () => import("./pages/SetupGoogle.vue") },
   { path: "/setup/signin", component: () => import("./pages/SetupSignIn.vue") },

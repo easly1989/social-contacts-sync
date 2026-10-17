@@ -15,4 +15,6 @@ export interface SimpleContact {
   photoKept?: boolean;
   /** The source the photo follows (issue #78). */
   pin?: PhotoPin;
+  /** Hashes of photos the user turned down in To review (issue #82): not offered again. */
+  dismissed?: string[];
 }

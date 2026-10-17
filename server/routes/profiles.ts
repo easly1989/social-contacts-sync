@@ -20,6 +20,8 @@ import { photoKey } from "../src/contacts/model";
 import { getPins, photoHash, setPin } from "../src/contacts/photoPins";
 import { desktopReader, lookupWithLogin, pinnedProfiles, ReadProfile, readsWithLogin, RereadNetwork } from "../src/profiles/rereads";
 import { cachedPhoto, cachePhoto } from "../src/profiles/photoCache";
+import { loadQueue, publicEntry, QueueData, queuedImage, recordApplied, resolveEntry, saveQueue } from "../src/profiles/queue";
+import { getLookup } from "../src/linkLookups";
 
 // Find profiles (issue #61): suggestions from exports, a public search and,
 // in the desktop app, a scan of the user's own followers with their login.
@@ -75,6 +77,12 @@ export function scannedPeople(network: ScanNetwork, people: SocialPerson[]): Soc
   });
 }
 
+/** Where a photo from a profile link comes from, for its pin. */
+function profilePin(url: string): { source: "links"; matchedBy: string; network?: string } {
+  const link = parseProfileLink(url);
+  return { source: "links", matchedBy: link ? shortLink(link) : url.replace(/^https:\/\//, ""), ...(link ? { network: networkNames[link.network] } : {}) };
+}
+
 /** The image's type from its first bytes. */
 export function imageType(bytes: Buffer): string {
   if (bytes[0] === 0x89 && bytes[1] === 0x50) return "image/png";
@@ -124,21 +132,23 @@ export function profilesRouter(options: Options = {}): express.Router {
     return (contact) => [...new Set(contact.urls.flatMap((u) => byUrl.get(parseProfileLink(u.value)?.url ?? "") ?? []))];
   }
 
-  function suggestions(data: ProfilesData, list: Contact[]): ProfileSuggestion[] {
+  /** To review: one card per contact with suggested profiles or photos a sync sent there (issue #82). */
+  function suggestions(data: ProfilesData, list: Contact[], queue: QueueData): ProfileSuggestion[] {
     const linked = new Set(data.linked.filter((l) => !l.undone).map((l) => l.person.id));
     const skipped = new Set(data.skipped);
     const onContact = linkedPeople(data);
     return list
-      .map((c) => ({ contact: c, candidates: candidatesFor(c, data.people, { rejected: data.rejected, linked }) }))
-      .filter((s) => s.candidates.length)
+      // A kept photo is never replaced: its contact only gets profiles.
+      .map((c) => ({ contact: c, candidates: candidatesFor(c, data.people, { rejected: data.rejected, linked }), entry: c.photoKept ? undefined : queue.entries[c.id] }))
+      .filter((s) => s.candidates.length || s.entry)
       .sort(
         (a, b) =>
           Number(skipped.has(a.contact.id)) - Number(skipped.has(b.contact.id)) ||
           Number(a.contact.hasPhoto && !a.contact.placeholder) - Number(b.contact.hasPhoto && !b.contact.placeholder) ||
-          b.candidates[0].score - a.candidates[0].score ||
+          (b.candidates[0]?.score ?? 0) - (a.candidates[0]?.score ?? 0) ||
           (a.contact.name ?? "").localeCompare(b.contact.name ?? "")
       )
-      .map(({ contact: c, candidates }) => ({
+      .map(({ contact: c, candidates, entry }) => ({
         contactId: c.id,
         name: c.name ?? "",
         photoUrl: c.photoUrl,
@@ -148,6 +158,7 @@ export function profilesRouter(options: Options = {}): express.Router {
         detail: [c.phones[0]?.value, c.emails[0]?.value, c.company].filter(Boolean).join(" · ") || undefined,
         candidates,
         linked: onContact(c).filter((p) => !candidates.some((s) => s.person.id === p.id)),
+        ...(entry ? { queue: publicEntry(entry) } : {}),
       }));
   }
 
@@ -174,7 +185,7 @@ export function profilesRouter(options: Options = {}): express.Router {
       })),
       search: searchState(req),
       scans: await scanStates(req, data),
-      suggestions: suggestions(data, list),
+      suggestions: suggestions(data, list, loadQueue(req.sessionID)),
       linked: data.linked.map(({ previousPhoto: _p, addedLink: _a, ...rest }) => rest).reverse(),
       bulk: getFromCache(req.sessionID, "profiles_bulk"),
     };
@@ -191,14 +202,15 @@ export function profilesRouter(options: Options = {}): express.Router {
     res.send((await scanStates(req, loadProfiles(req.sessionID))) ?? []);
   });
 
-  // How many contacts wait in To review, for the sidebar (issue #81). No profiles read yet: none, without asking Google.
+  // How many contacts wait in To review, for the sidebar (issue #81). Nothing read or queued yet: none, without asking Google.
   router.get("/profiles/count", async (req: Request, res: Response) => {
     const data = loadProfiles(req.sessionID);
-    if (!data.people.length) return res.send({ count: 0 });
+    const queue = loadQueue(req.sessionID);
+    if (!data.people.length && !Object.keys(queue.entries).length) return res.send({ count: 0 });
     const api = google(req, res);
     if (!api) return;
     try {
-      res.send({ count: suggestions(data, await contacts(req, api)).length });
+      res.send({ count: suggestions(data, await contacts(req, api), queue).length });
     } catch (e) {
       failed(req, res, "Counting profiles to review", e);
     }
@@ -295,40 +307,52 @@ export function profilesRouter(options: Options = {}): express.Router {
     const data = loadProfiles(sessionId);
     const notFound = () => Object.assign(new Error("not_found"), { status: 404 });
     const persons = request.personIds.map((id) => data.people.find((p) => p.id === id)).filter((p): p is SocialPerson => Boolean(p));
-    if (!persons.length && !request.photoFrom) throw notFound();
+    if (!persons.length && !request.photoFrom && !request.link) throw notFound();
     const { contactId } = request;
     const before = toContact(await api.get(contactId), getPlaceholders(sessionId), getKeptPhotos(sessionId));
-    // The photo comes from a ticked profile or one already on the contact (issue #81).
+    // The photo comes from a ticked profile or one already on the contact (issue #81), one a sync sent to To review, or a link typed on the card (issue #82).
     const photoOffered = [...persons, ...linkedPeople(data)(before)].find((p) => p.id === request.photoFrom);
-    if (!persons.length && !photoOffered) throw notFound();
-    const added = await addContactLinks(api, contactId, persons.map((p) => p.url));
+    const fromQueue = loadQueue(sessionId).entries[contactId]?.photos.find((p) => p.id === request.photoFrom);
+    const lookup = request.link ? getLookup(sessionId, request.link) : undefined;
+    if (!persons.length && !photoOffered && !fromQueue && !lookup) throw notFound();
+    const added = await addContactLinks(api, contactId, [...persons.map((p) => p.url), ...(lookup ? [lookup.link.url] : [])]);
     let photoSet = false;
     let previousPhoto: string | null | undefined;
     // A kept photo (issue #67) is never replaced: only the links are added.
     const photoPerson = before.photoKept ? undefined : photoOffered;
-    if (photoPerson) {
-      // What the card showed, when the site's address for it has expired.
-      const photo = (await profilePhoto(sessionId, photoPerson, true)) ?? cachedPhoto(photoPerson)?.toString("base64") ?? null;
-      if (photo) {
-        previousPhoto = before.hasPhoto ? await api.photo(await api.get(contactId)) : null;
-        const googleUrl = await api.setPhoto(contactId, photo);
-        clearPlaceholder(sessionId, contactId);
-        photoSet = true;
-        // The photo now follows this profile (issue #78).
-        const link = parseProfileLink(photoPerson.url);
-        const key = photoKey(googleUrl);
-        if (link) {
-          setPin(sessionId, contactId, {
-            source: "links",
-            matchedBy: shortLink(link),
-            network: networkNames[link.network],
-            hash: photoHash(photo),
-            ...(key ? { photoKey: key } : {}),
-            readAt: new Date().toISOString(),
-          });
-        }
-      }
+    const chosen = before.photoKept
+      ? undefined
+      : photoPerson
+        ? // What the card showed, when the site's address for it has expired.
+          { photo: (await profilePhoto(sessionId, photoPerson, true)) ?? cachedPhoto(photoPerson)?.toString("base64"), ...profilePin(photoPerson.url) }
+        : fromQueue
+          ? { photo: queuedImage(fromQueue), source: fromQueue.source, matchedBy: fromQueue.matchedBy, network: fromQueue.network }
+          : lookup
+            ? { photo: lookup.photo, ...profilePin(lookup.link.url) }
+            : undefined;
+    if (chosen?.photo) {
+      previousPhoto = before.hasPhoto ? await api.photo(await api.get(contactId)) : null;
+      const googleUrl = await api.setPhoto(contactId, chosen.photo);
+      clearPlaceholder(sessionId, contactId);
+      photoSet = true;
+      // The photo now follows where it came from (issue #78).
+      const key = photoKey(googleUrl);
+      setPin(sessionId, contactId, {
+        source: chosen.source,
+        ...(chosen.source === "links" ? { matchedBy: chosen.matchedBy, ...(chosen.network ? { network: chosen.network } : {}) } : {}),
+        hash: photoHash(chosen.photo),
+        ...(key ? { photoKey: key } : {}),
+        readAt: new Date().toISOString(),
+      });
     }
+    // Read again: a sync running meanwhile may have sent more contacts to To review.
+    const latest = loadQueue(sessionId);
+    if (photoSet && chosen && !photoPerson) recordApplied(latest, contactId, chosen.source, chosen.matchedBy, previousPhoto, lookup && added.includes(lookup.link.url) ? lookup.link.url : undefined);
+    // Answered: the contact leaves To review, and the photos not used there aren't offered again.
+    const entry = resolveEntry(latest, contactId, photoSet && Boolean(fromQueue));
+    // "Keep this" on a photo changed outside the app: it no longer follows its source.
+    if (entry?.kind === "changed" && !photoSet) setPin(sessionId, contactId, undefined);
+    saveQueue(sessionId, latest);
     const at = new Date().toISOString();
     const linked = (photoSet && photoPerson && !persons.includes(photoPerson) ? [...persons, photoPerson] : persons).map(
       (person): StoredLinked => ({
@@ -374,10 +398,11 @@ export function profilesRouter(options: Options = {}): express.Router {
     // `personId` and `usePhoto`: one profile, as before.
     const personIds = typeof body?.personId === "string" ? [body.personId] : strings(body?.personIds);
     const photoFrom = typeof body?.photoFrom === "string" ? body.photoFrom : body?.usePhoto === true ? personIds[0] : undefined;
-    // Only a photo, from a profile already on the contact, is a request too (issue #81).
-    if (!contactId || (!personIds.length && !photoFrom)) return undefined;
+    const link = typeof body?.link === "string" ? body.link : undefined;
+    // Only a photo is a request too: from a profile on the contact (issue #81), To review or a typed link (issue #82).
+    if (!contactId || (!personIds.length && !photoFrom && !link)) return undefined;
     const name = typeof body?.name === "string" ? body.name.slice(0, 120) : undefined;
-    return { contactId, personIds, photoFrom, rejectIds: strings(body?.rejectIds), name };
+    return { contactId, personIds, photoFrom, rejectIds: strings(body?.rejectIds), name, ...(link ? { link } : {}) };
   }
   const publicLinked = ({ previousPhoto: _p, addedLink: _a, ...rest }: StoredLinked) => rest;
 
@@ -390,7 +415,7 @@ export function profilesRouter(options: Options = {}): express.Router {
     try {
       const { linked, photoSet } = await linkContact(req.sessionID, api, request);
       forget(req);
-      res.send({ linked: linked.map(publicLinked), photoWanted: Boolean(request.photoFrom), photoSet });
+      res.send({ linked: linked.map(publicLinked), photoWanted: Boolean(request.photoFrom || request.link), photoSet });
     } catch (e) {
       if ((e as { status?: number })?.status === 404) return res.status(404).send({ error: "not_found" });
       failed(req, res, "Linking a profile", e);
@@ -519,6 +544,31 @@ export function profilesRouter(options: Options = {}): express.Router {
     data.skipped = [...data.skipped.filter((id) => id !== contactId), contactId];
     saveProfiles(req.sessionID, data);
     res.send({ ok: true });
+  });
+
+  // "Keep current" (another photo) or "Keep this" (changed outside the app): the contact leaves To review (issue #82).
+  router.post("/profiles/keep", (req: Request, res: Response) => {
+    if (!jsonOnly(req, res)) return;
+    const contactId = String(req.body?.contactId ?? "");
+    const queue = loadQueue(req.sessionID);
+    const entry = resolveEntry(queue, contactId, false);
+    if (!entry) return res.status(404).send({ error: "not_found" });
+    // Its photo no longer follows the source.
+    if (entry.kind === "changed") setPin(req.sessionID, contactId, undefined);
+    saveQueue(req.sessionID, queue);
+    res.send({ ok: true });
+  });
+
+  // A photo a sync sent to To review.
+  router.get("/profiles/queue-photo", (req: Request, res: Response) => {
+    const photo = Object.values(loadQueue(req.sessionID).entries)
+      .flatMap((e) => e.photos)
+      .find((p) => p.id === req.query.id);
+    const image = photo && queuedImage(photo);
+    if (!image) return res.status(404).send({ error: "not_found" });
+    const bytes = Buffer.from(image, "base64");
+    res.set("Cache-Control", "private, max-age=86400");
+    res.type(imageType(bytes)).send(bytes);
   });
 
   // The login scan: desktop app only.

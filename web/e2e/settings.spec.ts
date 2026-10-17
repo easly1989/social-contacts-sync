@@ -160,13 +160,13 @@ test("desktop: LinkedIn reads are on by default, said once before a sync, and ca
   await page.setViewportSize({ width: 390, height: 844 });
   await screenshot(page, "26c-linkedin-notice-phone", { fullPage: false });
   await notice.getByRole("button", { name: "Turn off for LinkedIn" }).click();
-  await expect(page).toHaveURL(/\/app\/sync\/run/);
+  await expect(page.getByTestId("run-progress")).toBeVisible();
   await expect.poll(initSync).toEqual(["false"]);
 
   // Never again; and the setting is off.
   await page.goto("/app/sync");
   await page.getByRole("button", { name: "Start sync" }).click();
-  await expect(page).toHaveURL(/\/app\/sync\/run/);
+  await expect(page.getByTestId("run-progress")).toBeVisible();
   await expect(page.getByTestId("linkedin-notice")).toBeHidden();
   await page.goto("/app/settings/sources");
   await expect(page.getByTestId("settings-linkedin-rereads").getByRole("checkbox")).not.toBeChecked();
@@ -177,7 +177,7 @@ test("desktop: Got it keeps LinkedIn reads on; no notice without pinned LinkedIn
   // Nothing pinned to LinkedIn: no notice.
   await page.goto("/app/sync");
   await page.getByRole("button", { name: "Start sync" }).click();
-  await expect(page).toHaveURL(/\/app\/sync\/run/);
+  await expect(page.getByTestId("run-progress")).toBeVisible();
   await expect.poll(initSync).toEqual(["true"]);
 
   backend.pinnedProfiles = { linkedin: 1 };
@@ -185,7 +185,7 @@ test("desktop: Got it keeps LinkedIn reads on; no notice without pinned LinkedIn
   await page.getByRole("button", { name: "Start sync" }).click();
   await expect(page.getByTestId("linkedin-notice")).toContainText("This sync checks the LinkedIn profile your contact's photo comes from");
   await page.getByTestId("linkedin-notice").getByRole("button", { name: "Got it" }).click();
-  await expect(page).toHaveURL(/\/app\/sync\/run/);
+  await expect(page.getByTestId("run-progress")).toBeVisible();
   await expect.poll(initSync).toEqual(["true", "true"]);
 });
 

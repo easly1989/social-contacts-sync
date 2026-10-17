@@ -115,6 +115,8 @@ export const api = {
   stopBulkLink: () => post<ProfileBulkState>("/api/profiles/link_many/stop"),
   rejectProfiles: (contactId: string, personIds: string[]) => post("/api/profiles/reject", { contactId, personIds }),
   skipProfiles: (contactId: string) => post("/api/profiles/skip", { contactId }),
+  keepCurrentPhoto: (contactId: string) => post("/api/profiles/keep", { contactId }),
+  queuePhotoUrl: (id: string) => `/api/profiles/queue-photo?id=${encodeURIComponent(id)}`,
   profileScan: (action: "login" | "logout" | "start" | "stop", network: SocialNetwork, acceptRisk = false) =>
     post<ProfileScanState | { ok: true }>(`/api/profiles/scan/${action}`, { network, ...(acceptRisk ? { acceptRisk } : {}) }),
   // Telegram sign-in (issue #36).

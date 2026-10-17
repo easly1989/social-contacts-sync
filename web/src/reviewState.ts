@@ -7,7 +7,9 @@ export const reviewCount = ref<number>();
 
 let loading: Promise<void> | undefined;
 
-export function loadReviewCount(): Promise<void> {
+/** `again`: a sync queued contacts since the count was read. */
+export function loadReviewCount(again = false): Promise<void> {
+  if (again) loading = undefined;
   loading ??= api
     .profilesCount()
     .then(({ count }) => {

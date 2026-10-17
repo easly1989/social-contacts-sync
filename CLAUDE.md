@@ -70,8 +70,9 @@ this staging step.
 
 **Sync pipeline.** `server/src/sync.ts` (`initSync`) picks the requested `PhotoSource`s
 (`server/src/sources/` — whatsapp, telegram, gravatar, links; interface in `sources/types.ts`) in
-the user's priority order, and hands them to `syncEngine.ts` (`runSync`, modes `fill` / `replace` /
-`review`). Progress and review confirmations travel over the `/api/ws` WebSocket as
+the user's priority order, reads pinned social profiles first (`profiles/rereads.ts`), and hands
+them to `syncEngine.ts` (`runSync` with `RunOptions`): what is safe is applied, the rest goes to
+the To review queue (`profiles/queue.ts`). Progress travels over the `/api/ws` WebSocket as
 `interfaces/api.ts` `EventType`s. Google writes go through `gapi.ts` behind a rate limiter (~40
 photo updates/min) with `googleRetry.ts`. Every run is saved by `runs.ts` with before/after photos
 so `undo.ts` can revert a whole run or one contact.
@@ -86,7 +87,7 @@ replaced by sync or Find profiles).
 storage keyed by an OS-keychain-protected key).
 
 **Web.** Pages in `web/src/pages/` (setup wizard, public pages) and `web/src/pages/app/`
-(Dashboard, SyncSetup/SyncRun/RunReport, Contacts, Profiles, Cleanup, History, Settings). API
+(Dashboard, Sync with its To review / Sources / Run tabs, RunReport, Contacts, Cleanup, History, Settings). API
 calls in `src/api.ts`, WebSocket in `src/services/ws.ts`. All user-facing strings go through
 vue-i18n — add every new key to both `en.ts` and `it.ts`.
 

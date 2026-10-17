@@ -1,7 +1,7 @@
 import fs from "fs";
 import path from "path";
 
-import { PhotoPin, ProfileReadsReport } from "../../../interfaces/api";
+import { PhotoPin, ProfileReadsReport, SyncProgress } from "../../../interfaces/api";
 import { getFromCache, setInCache } from "../cache";
 import { askDesktop } from "../desktop";
 import { downloadImage, LinkBlockedError, LinkPhoto, parseProfileLink, ProfileLink } from "../sources/links";
@@ -107,7 +107,12 @@ export interface RereadOptions {
  * The links source, reading each profile in the plan with the login before
  * its photo is looked up, 3–7 seconds after the previous read.
  */
-export function rereading(inner: PhotoSource, plan: RereadPlan, read: ReadProfile, options: RereadOptions): { source: PhotoSource; report(): RunReads } {
+export function rereading(
+  inner: PhotoSource,
+  plan: RereadPlan,
+  read: ReadProfile,
+  options: RereadOptions
+): { source: PhotoSource; report(): RunReads; readPlanned(progress: (reads: RunProgressReads) => void, cancelled?: () => boolean): Promise<void> } {
   const sleep = options.sleep ?? ((ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms)));
   const random = options.random ?? Math.random;
   const done = new Set<string>();
@@ -153,6 +158,24 @@ export function rereading(inner: PhotoSource, plan: RereadPlan, read: ReadProfil
       find: async (contact) => (await rereadAll(contact.urls), inner.find(contact)),
       ...(inner.findAll ? { findAll: async (contact) => (await rereadAll(contact.urls), inner.findAll!(contact)) } : {}),
     },
+    /** Phase 1 of a sync (issue #82): the pinned profiles in the plan, read before any photo, with progress per network. */
+    async readPlanned(progress: (reads: RunProgressReads) => void, cancelled: () => boolean = () => false): Promise<void> {
+      const totals = new Map<RereadNetwork, number>();
+      for (const url of plan.selected) {
+        const network = parseProfileLink(url)?.network as RereadNetwork;
+        totals.set(network, (totals.get(network) ?? 0) + 1);
+      }
+      const snapshot = () =>
+        Object.fromEntries([...totals].map(([network, total]) => [network, { read: stats[network]?.read ?? 0, total, ...(stats[network]?.stopped ? { stopped: stats[network]!.stopped } : {}) }]));
+      progress(snapshot());
+      for (const url of plan.selected) {
+        if (cancelled()) return;
+        const link = parseProfileLink(url);
+        if (!link || stats[link.network as RereadNetwork]?.stopped) continue;
+        await reread(link);
+        progress(snapshot());
+      }
+    },
     report() {
       const report: RunReads = {};
       for (const network of rereadNetworks) {
@@ -169,6 +192,7 @@ export function rereading(inner: PhotoSource, plan: RereadPlan, read: ReadProfil
 }
 
 export type RunReads = Partial<Record<RereadNetwork, ProfileReadsReport>>;
+export type RunProgressReads = NonNullable<SyncProgress["reads"]>;
 
 /** Whether the desktop app reads this network with the login (never anonymously). */
 export const readsWithLogin = (network: string): network is RereadNetwork => rereadNetworks.includes(network as RereadNetwork);

@@ -312,7 +312,7 @@ export class FakeBackend {
       data.search.running = false;
       return route.fulfill({ json: data.search });
     }
-    if (sub.startsWith("/photo")) {
+    if (sub.startsWith("/photo") || sub === "/queue-photo") {
       const id = new URL(request.url()).searchParams.get("id") ?? "";
       return route.fulfill({ contentType: "image/jpeg", body: Buffer.from(avatars[id.length % avatars.length], "base64") });
     }
@@ -323,7 +323,8 @@ export class FakeBackend {
         .map((c) => ({ contactId: body.contactId, name: suggestion.name, person: c.person, at: new Date().toISOString(), photoSet: c.person.id === body.photoFrom }));
       data.linked.unshift(...linked);
       drop(body.contactId);
-      return route.fulfill({ json: { linked, photoWanted: Boolean(body.photoFrom), photoSet: Boolean(body.photoFrom) } });
+      const photo = Boolean(body.photoFrom || body.link);
+      return route.fulfill({ json: { linked, photoWanted: photo, photoSet: photo } });
     }
     if (sub === "/link_many") {
       data.bulk = { running: true, done: 0, total: body.items.length, contacts: 0, profiles: 0, failed: [] };
@@ -333,7 +334,7 @@ export class FakeBackend {
       Object.assign(data.bulk!, { running: false, stopped: true });
       return route.fulfill({ json: data.bulk });
     }
-    if (sub === "/reject" || sub === "/skip") {
+    if (sub === "/reject" || sub === "/skip" || sub === "/keep") {
       drop(body.contactId);
       return route.fulfill({ json: { ok: true } });
     }

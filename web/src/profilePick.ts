@@ -1,14 +1,27 @@
-import { ProfileCandidate, ProfileLinkRequest, ProfileSuggestion, SocialPerson } from "../../interfaces/api";
+import { LinkLookup, ProfileCandidate, ProfileLinkRequest, ProfileSuggestion, QueuePhoto, SocialPerson } from "../../interfaces/api";
 
 /*
   What a contact's card has ticked (issue #65): several profiles can be
   linked at once, and one photo is picked among the suggested profiles and
-  those already on the contact (issue #81).
+  those already on the contact (issue #81), the photos a sync sent to To
+  review, and one behind a profile link typed on the card (issue #82).
 */
 
 export interface ProfilePick {
   ticked: string[];
+  /** A profile's id, a queued photo's id, or "link" for `link`. */
   photoFrom?: string;
+  link?: LinkLookup;
+}
+
+/** One photo a card offers. */
+export interface PhotoOption {
+  id: string;
+  person?: SocialPerson;
+  /** The person is a suggestion, not a profile already on the contact. */
+  suggested?: boolean;
+  queued?: QueuePhoto;
+  lookup?: LinkLookup;
 }
 
 /** The contact has no photo, or a placeholder; a kept photo (issue #67) is never replaced. */
@@ -16,19 +29,25 @@ export function wantsPhotoFor(suggestion: ProfileSuggestion): boolean {
   return !suggestion.photoKept && (!suggestion.hasPhoto || Boolean(suggestion.placeholder));
 }
 
-/** The photos a card offers, in key order (1–9): the suggested profiles', then those already linked. */
-export function photoCandidates(suggestion: ProfileSuggestion): { person: SocialPerson; suggested: boolean }[] {
-  if (suggestion.photoKept) return [];
+/**
+ * The photos a card offers, in key order (1–9): those a sync found, the
+ * suggested profiles', those already linked, then a typed link's. A photo
+ * changed outside the app has its own choice instead (issue #82).
+ */
+export function photoCandidates(suggestion: ProfileSuggestion, pick?: ProfilePick): PhotoOption[] {
+  if (suggestion.photoKept || suggestion.queue?.kind === "changed") return [];
   return [
-    ...suggestion.candidates.filter((c) => c.person.photoUrl).map((c) => ({ person: c.person, suggested: true })),
-    ...(suggestion.linked ?? []).map((person) => ({ person, suggested: false })),
+    ...(suggestion.queue?.photos ?? []).map((queued) => ({ id: queued.id, queued })),
+    ...suggestion.candidates.filter((c) => c.person.photoUrl).map((c) => ({ id: c.person.id, person: c.person, suggested: true })),
+    ...(suggestion.linked ?? []).map((person) => ({ id: person.id, person, suggested: false })),
+    ...(pick?.link ? [{ id: "link", lookup: pick.link }] : []),
   ];
 }
 
-/** The photo given when the contact wants one: a ticked profile's, else a linked one's. */
+/** The photo a sync offers, else when the contact wants one: a ticked profile's, else a linked one's. */
 function firstPhoto(suggestion: ProfileSuggestion, ticked: string[]): string | undefined {
-  if (!wantsPhotoFor(suggestion)) return undefined;
-  return photoCandidates(suggestion).find((c) => !c.suggested || ticked.includes(c.person.id))?.person.id;
+  if (!wantsPhotoFor(suggestion)) return photoCandidates(suggestion).find((c) => c.queued)?.id;
+  return photoCandidates(suggestion).find((c) => !c.suggested || ticked.includes(c.id))?.id;
 }
 
 /**
@@ -49,17 +68,22 @@ export function initialPick(suggestion: ProfileSuggestion): ProfilePick {
 export function toggle(pick: ProfilePick, id: string, suggestion: ProfileSuggestion): ProfilePick {
   if (pick.ticked.includes(id)) {
     const ticked = pick.ticked.filter((t) => t !== id);
-    return { ticked, photoFrom: pick.photoFrom === id ? firstPhoto(suggestion, ticked) : pick.photoFrom };
+    return { ...pick, ticked, photoFrom: pick.photoFrom === id ? firstPhoto(suggestion, ticked) : pick.photoFrom };
   }
   const person = suggestion.candidates.find((c) => c.person.id === id)?.person;
   const takesPhoto = !pick.photoFrom && wantsPhotoFor(suggestion) && person?.photoUrl;
-  return { ticked: [...pick.ticked, id], photoFrom: takesPhoto ? id : pick.photoFrom };
+  return { ...pick, ticked: [...pick.ticked, id], photoFrom: takesPhoto ? id : pick.photoFrom };
 }
 
 /** Picks a photo (none: the contact's own); a suggested profile's photo ticks that profile too. */
 export function pickPhoto(pick: ProfilePick, id: string | undefined, suggestion: ProfileSuggestion): ProfilePick {
   const suggested = suggestion.candidates.some((c) => c.person.id === id);
-  return { ticked: id && suggested && !pick.ticked.includes(id) ? [...pick.ticked, id] : pick.ticked, photoFrom: id };
+  return { ...pick, ticked: id && suggested && !pick.ticked.includes(id) ? [...pick.ticked, id] : pick.ticked, photoFrom: id };
+}
+
+/** The photo behind a typed profile link becomes one more choice, and the chosen one. */
+export function addLink(pick: ProfilePick, lookup: LinkLookup): ProfilePick {
+  return { ...pick, link: lookup, photoFrom: "link" };
 }
 
 /** Something to confirm: a profile to link, or a photo. */
@@ -69,12 +93,12 @@ export function hasChoice(pick: ProfilePick): boolean {
 
 /** The request for one card: the ticked profiles, the photo, and the other suggestions as not this contact. */
 export function linkRequest(suggestion: ProfileSuggestion, pick: ProfilePick): ProfileLinkRequest {
-  const photoFrom = suggestion.photoKept ? undefined : photoCandidates(suggestion).find((c) => c.person.id === pick.photoFrom && (!c.suggested || pick.ticked.includes(c.person.id)))?.person.id;
+  const photoFrom = photoCandidates(suggestion, pick).find((c) => c.id === pick.photoFrom && (!c.suggested || pick.ticked.includes(c.id)))?.id;
   return {
     contactId: suggestion.contactId,
     name: suggestion.name,
     personIds: suggestion.candidates.map((c) => c.person.id).filter((id) => pick.ticked.includes(id)),
-    ...(photoFrom ? { photoFrom } : {}),
+    ...(photoFrom === "link" ? { link: pick.link!.token } : photoFrom ? { photoFrom } : {}),
     rejectIds: suggestion.candidates.map((c) => c.person.id).filter((id) => !pick.ticked.includes(id)),
   };
 }
