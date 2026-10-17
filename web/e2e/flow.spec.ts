@@ -165,6 +165,8 @@ test("review mode: each linked profile is its own candidate, labelled with its n
   await page.keyboard.press("3");
   await expect(radios.nth(2)).toHaveAttribute("aria-checked", "true");
   await screenshot(page, "07b-review-profiles");
+  await page.setViewportSize({ width: 390, height: 844 });
+  await screenshot(page, "07c-review-profiles-phone", { fullPage: false });
 
   await page.keyboard.press("Enter");
   await expect

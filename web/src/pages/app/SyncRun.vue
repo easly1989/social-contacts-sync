@@ -169,19 +169,19 @@ onUnmounted(() => {
           <div class="flex-1 text-xl font-bold">{{ review.contactName ?? $t("sync.review.unknown") }}</div>
           <span class="text-sm text-base-content/60">{{ $t("syncRun.reviewProgress", { checked: checked + 1, total: total ?? "?" }) }}</span>
         </div>
-        <div class="mt-8 grid items-center gap-8 lg:grid-cols-[1fr_auto_2fr]">
+        <div class="mt-6 grid items-center gap-6 lg:grid-cols-[1fr_auto_2fr]">
           <div class="text-center">
             <div class="mb-3 text-xs font-semibold uppercase tracking-wide text-base-content/50">{{ $t("sync.review.current") }}</div>
-            <div class="inline-block rounded-full border-2 border-base-300 p-1.5">
-              <img v-if="review.existingPhoto" :src="photo(review.existingPhoto)" :alt="$t('sync.review.current')" class="size-36 rounded-full object-cover" />
-              <div v-else class="grid size-36 place-items-center rounded-full bg-base-200 text-sm text-base-content/50">{{ $t("sync.review.noPhoto") }}</div>
+            <div class="inline-block rounded-full border-2 border-base-300 p-1">
+              <img v-if="review.existingPhoto" :src="photo(review.existingPhoto)" :alt="$t('sync.review.current')" class="size-20 rounded-full object-cover sm:size-28" />
+              <div v-else class="grid size-20 place-items-center rounded-full bg-base-200 text-xs text-base-content/50 sm:size-28">{{ $t("sync.review.noPhoto") }}</div>
             </div>
             <div class="mt-4"><button type="button" class="btn btn-sm" @click="answer(false)">{{ $t("sync.review.keep") }} <kbd class="kbd kbd-xs">←</kbd></button></div>
           </div>
           <ArrowRight class="mx-auto hidden size-8 text-base-content/30 lg:block" />
           <div>
             <div class="mb-3 text-center text-xs font-semibold uppercase tracking-wide text-base-content/50">{{ $t("syncRun.candidates") }}</div>
-            <div class="flex flex-wrap justify-center gap-6" role="radiogroup" :aria-label="$t('syncRun.candidates')">
+            <div class="flex flex-wrap items-start justify-center gap-4 sm:gap-6" role="radiogroup" :aria-label="$t('syncRun.candidates')">
               <button
                 v-for="(candidate, index) in review.candidates"
                 :key="index"
@@ -189,15 +189,15 @@ onUnmounted(() => {
                 role="radio"
                 :aria-checked="choice === index"
                 :aria-label="`${index + 1}. ${candidate.network ?? candidate.source}`"
-                class="text-center"
+                class="w-28 text-center sm:w-36"
                 @click="choice = index"
               >
-                <span class="relative inline-block rounded-full p-1.5" :class="choice === index ? 'border-[3px] border-primary' : 'border-2 border-base-300'">
-                  <img :src="photo(candidate.photo)" alt="" class="size-36 rounded-full object-cover" />
-                  <span v-if="choice === index" class="absolute -right-1 -top-1 grid size-7 place-items-center rounded-full bg-primary text-primary-content"><Check class="size-4" /></span>
+                <span class="relative inline-block rounded-full p-1" :class="choice === index ? 'border-[3px] border-primary' : 'border-2 border-base-300'">
+                  <img :src="photo(candidate.photo)" alt="" class="size-20 rounded-full object-cover sm:size-28" />
+                  <span v-if="choice === index" class="absolute -right-1 -top-1 grid size-6 place-items-center rounded-full bg-primary text-primary-content"><Check class="size-3.5" /></span>
                 </span>
                 <span class="mt-2 flex items-center justify-center gap-1.5"><kbd class="kbd kbd-xs">{{ index + 1 }}</kbd><SourceBadge :source="candidate.source" :label="candidate.network" /></span>
-                <span v-if="candidate.source === 'links'" class="mt-1 block max-w-44 truncate text-[11px] text-base-content/50">{{ candidate.matchedBy }}</span>
+                <span v-if="candidate.source === 'links'" class="mt-1 block truncate text-[11px] text-base-content/50">{{ candidate.matchedBy }}</span>
               </button>
             </div>
             <div class="mt-4 text-center"><button type="button" class="btn btn-primary btn-sm" @click="answer(true)">{{ $t("sync.review.use") }} <kbd class="kbd kbd-xs">Enter</kbd></button></div>
@@ -213,7 +213,7 @@ onUnmounted(() => {
         <div class="mt-6 border-t border-base-300 pt-5" data-testid="review-link">
           <div class="flex flex-wrap items-start gap-3">
             <span class="flex items-center gap-1.5 pt-1.5 text-sm text-base-content/70"><Link class="size-4" />{{ $t("links.reviewPrompt") }}</span>
-            <ProfileLinkLookup :key="reviewKey" @found="onLinkFound" />
+            <ProfileLinkLookup :key="reviewKey" class="basis-64" @found="onLinkFound" />
           </div>
           <p class="mt-2 text-xs text-base-content/50">{{ $t("links.reviewHint") }}</p>
         </div>
