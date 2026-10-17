@@ -11,7 +11,7 @@ import { autoUpdatesOn, findUpdate, releasesRepo, updateFeed, updateStrategy } f
 import { afterUpdate, closeChoices, takePendingUpdate, UpdateLanguage, updateLanguage, updateText, writePendingUpdate } from "./updateFlow";
 import { deleteLocalData, packageKind, writableValues } from "./localData";
 import { telegramEnv } from "./telegramApp";
-import { forgetSocialSessions, socialLogin, socialLogout, socialScan, socialStatus, socialStop } from "./socialScan";
+import { forgetSocialSessions, socialLogin, socialLogout, socialProfile, socialScan, socialStatus, socialStop } from "./socialScan";
 import { ScanNetwork } from "./socialParse";
 
 const productName = "Social Contacts Sync";
@@ -150,6 +150,9 @@ async function answer({ id, request, payload = {} }: ServerMessage): Promise<voi
       case "social-stop":
         socialStop(scanNetwork(payload.network));
         return reply();
+      // A sync reads a pinned profile again (issue #79).
+      case "social-profile":
+        return reply(await socialProfile(scanNetwork(payload.network), String(payload.handle ?? "")));
       case "focus":
         // After signing in from the system browser: back to the app.
         if (mainWindow?.isMinimized()) mainWindow.restore();

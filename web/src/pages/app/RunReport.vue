@@ -2,7 +2,7 @@
 import { computed, onMounted, onUnmounted, ref } from "vue";
 import { useRoute } from "vue-router";
 import { useI18n } from "vue-i18n";
-import { ArrowLeft, ArrowRight, Check, CircleAlert, FileDown, Image, ImagePlus, Link, Replace, Search, Undo2 } from "lucide-vue-next";
+import { ArrowLeft, ArrowRight, Check, CircleAlert, FileDown, Image, ImagePlus, Link, RefreshCw, Replace, Search, Undo2 } from "lucide-vue-next";
 
 import AppShell from "../../components/AppShell.vue";
 import PhotoCompare from "../../components/PhotoCompare.vue";
@@ -12,7 +12,7 @@ import SourceBadge from "../../components/SourceBadge.vue";
 import StatTile from "../../components/StatTile.vue";
 import { api, withGoogleDetail } from "../../api";
 import { dateTime, duration, number } from "../../format";
-import { ContactResult, LinkLookup, RunRecord } from "../../../../interfaces/api";
+import { ContactResult, LinkLookup, ProfileReadsReport, RunRecord } from "../../../../interfaces/api";
 
 // Mockup 3.4 in issue #8.
 const route = useRoute();
@@ -25,6 +25,19 @@ const search = ref("");
 const undoing = ref(false);
 let poll: number | undefined;
 
+const networkNames = { instagram: "Instagram", facebook: "Facebook" };
+function readsText(network: keyof typeof networkNames, reads?: ProfileReadsReport): string {
+  if (!reads) return "";
+  const name = networkNames[network];
+  const stopped = reads.stopped && (reads.stopped.startsWith("error") ? "error" : reads.stopped);
+  return [
+    t("report.profileReads.read", { network: name, count: number(reads.read, locale.value) }, reads.read),
+    reads.waiting ? t("report.profileReads.waiting", { count: number(reads.waiting, locale.value) }, reads.waiting) : "",
+    stopped ? t(`report.profileReads.${stopped}`, { network: name }) : "",
+  ]
+    .filter(Boolean)
+    .join(" ");
+}
 const changed = (r: ContactResult) => r.outcome === "added" || r.outcome === "replaced";
 const rows = computed(() => {
   const term = search.value.trim().toLowerCase();
@@ -158,6 +171,11 @@ onUnmounted(() => window.clearInterval(poll));
       </p>
       <p v-if="run.mode !== 'fill' && run.counters.alreadyHadPhoto" class="-mt-2 flex items-center gap-1.5 text-sm text-base-content/60" data-testid="count-kept-google">
         <Image class="size-4" />{{ $t("outcomes.keptGoogle") }}: {{ number(run.counters.alreadyHadPhoto, locale) }}
+      </p>
+      <!-- Pinned profiles read again with the login (issue #79). -->
+      <p v-for="(reads, network) in run.profileReads" :key="network" class="-mt-2 flex items-start gap-1.5 text-sm text-base-content/60" :data-testid="`profile-reads-${network}`">
+        <RefreshCw class="mt-0.5 size-4 shrink-0" :class="{ 'text-warning': reads?.stopped }" />
+        <span>{{ readsText(network, reads) }}</span>
       </p>
 
       <section class="rounded-box border border-base-300 bg-base-100 px-4 pt-4 sm:px-6">

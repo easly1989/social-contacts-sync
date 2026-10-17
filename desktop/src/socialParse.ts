@@ -129,6 +129,55 @@ export const facebookExtractScript = `(() => {
   return items;
 })()`;
 
+/** One profile read again by a sync (issue #79). */
+export interface ProfileRead {
+  name?: string;
+  photoUrl?: string;
+}
+
+/** The address of a profile's page, from its handle; undefined for anything but a plain handle. */
+export function profilePageUrl(network: string, handle: string): string | undefined {
+  if (network === "instagram") return /^[\w.]{1,30}$/.test(handle) ? `https://www.instagram.com/${handle}/` : undefined;
+  if (network === "facebook") {
+    if (/^\d+$/.test(handle)) return `https://www.facebook.com/profile.php?id=${handle}`;
+    return /^[\w.]{5,50}$/.test(handle) ? `https://www.facebook.com/${handle}` : undefined;
+  }
+  return undefined;
+}
+
+/** /api/v1/users/web_profile_info/?username=…: undefined when there's no such profile. */
+export function instagramProfile(json: unknown): ProfileRead | undefined {
+  const user = (json as { data?: { user?: { full_name?: string; profile_pic_url?: string; profile_pic_url_hd?: string } | null } })?.data?.user;
+  if (!user) return undefined;
+  return { name: text(user.full_name), photoUrl: httpsUrl(user.profile_pic_url_hd) ?? httpsUrl(user.profile_pic_url) };
+}
+
+export interface FacebookProfilePage {
+  heading: string;
+  /** Pictures in the page's header, with their width on screen. */
+  images: { src: string; width: number }[];
+}
+
+/** The profile picture is the largest of Facebook's own pictures in the header; undefined when there's none. */
+export function facebookProfile(page: FacebookProfilePage): ProfileRead | undefined {
+  const own = page.images.filter((i) => /^https:\/\/[^/]+\.fbcdn\.net\//.test(i.src) && i.width >= 100).sort((a, b) => b.width - a.width)[0];
+  if (!own) return undefined;
+  return { name: text(page.heading), photoUrl: own.src };
+}
+
+/** Runs in a profile page: its heading and the pictures in its header (the profile picture is an SVG image). */
+export const facebookProfileScript = `(() => {
+  const header = document.querySelector("[role=main]") || document.body;
+  const images = [];
+  for (const el of header.querySelectorAll("svg image, img")) {
+    const src = el.getAttribute("xlink:href") || el.getAttribute("href") || el.getAttribute("src") || "";
+    const width = Math.round(el.getBoundingClientRect().width);
+    if (src && width) images.push({ src, width });
+    if (images.length >= 40) break;
+  }
+  return { heading: (header.querySelector("h1")?.innerText || "").split("\\n")[0].trim(), images };
+})()`;
+
 /** Why a site's answer means stop: a sign-in or check page, or a limit. */
 export function blockedReason(status: number, finalUrl: string, body = ""): string | undefined {
   if (status === 429 || status === 999) return "limited";

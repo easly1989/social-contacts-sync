@@ -118,6 +118,20 @@ test("report: tabs, search, undo and CSV export", async ({ page }) => {
   expect(file.suggestedFilename()).toBe(`social-contacts-sync-${run.id}.csv`);
 });
 
+test("report: pinned profiles read again with the login, and why a network stopped (issue #79)", async ({ page }) => {
+  const run = backend.runs[0];
+  run.profileReads = { instagram: { read: 38, waiting: 12, stopped: "limited" }, facebook: { read: 1, waiting: 0 } };
+  await page.goto(`/app/history/${run.id}`);
+  await expect(page.getByTestId("profile-reads-instagram")).toHaveText(
+    "Instagram: 38 profiles read again with your login. 12 wait for the next sync. Instagram asked to slow down, so the sync stopped reading it."
+  );
+  await expect(page.getByTestId("profile-reads-facebook")).toHaveText("Facebook: 1 profile read again with your login.");
+  await screenshot(page, "25d-report-profile-reads", { fullPage: false });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.getByTestId("profile-reads-instagram").scrollIntoViewIfNeeded();
+  await screenshot(page, "25e-report-profile-reads-phone", { fullPage: false });
+});
+
 test("report: kept Google photos aren't 'no photo found', and an error stays one line", async ({ page }) => {
   const run = backend.runs[0];
   // A contact that kept its Google photo, and a long error.
