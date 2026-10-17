@@ -1,7 +1,7 @@
 import { test, expect } from "@playwright/test";
 
 import { FakeBackend, screenshot } from "./backend";
-import { sampleRun } from "./fixtures";
+import { sampleReview, sampleRun } from "./fixtures";
 
 // The app screens (issue #21), with the backend mocked.
 let backend: FakeBackend;
@@ -96,6 +96,44 @@ test("history lists every run with its result", async ({ page }) => {
   await screenshot(page, "24-history");
   await rows.nth(1).getByRole("link", { name: "Report" }).click();
   await expect(page.getByRole("heading", { name: "Sync report" })).toBeVisible();
+});
+
+test("history: syncs, reviews and the profiles linked in To review, with undo (issue #84)", async ({ page }) => {
+  const review = sampleReview();
+  backend.runs.unshift(review);
+  await page.goto("/app/history");
+  const rows = page.getByRole("row");
+  await expect(rows).toHaveCount(4);
+  await page.getByRole("tab", { name: "Reviews" }).click();
+  await expect(rows).toHaveCount(2);
+  await expect(rows.nth(1)).toContainText("Decisions in To review");
+  await expect(rows.nth(1)).toContainText("2 contacts changed");
+  await page.getByRole("tab", { name: "Syncs" }).click();
+  await expect(rows).toHaveCount(3);
+
+  await page.getByRole("tab", { name: "Linked profiles" }).click();
+  const linked = page.getByTestId("linked-profiles").getByRole("row");
+  await expect(linked).toHaveCount(4);
+  // Newest first.
+  await expect(linked.nth(1)).toContainText("Davide Gallo");
+  await expect(linked.nth(3)).toContainText("instagram.com/elena_conti");
+  await screenshot(page, "24b-history-linked");
+  await linked.nth(3).getByRole("button", { name: "Undo the change to Elena Conti" }).click();
+  await expect.poll(() => backend.undoRequests).toEqual([{ id: review.id, body: { indexes: [0] } }]);
+  await expect(linked.nth(3)).toContainText("Undone");
+  await page.setViewportSize({ width: 390, height: 844 });
+  await screenshot(page, "24c-history-linked-phone");
+
+  // The entry's report shows what each decision linked.
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.goto(`/app/history/${review.id}`);
+  await expect(page.getByRole("heading", { name: "Review", exact: true })).toBeVisible();
+  await expect(page.getByText("2 contacts changed")).toBeVisible();
+  await expect(page.getByRole("row", { name: /Davide Gallo/ })).toContainText("bsky.app/profile/dgallo.bsky.social");
+  await expect(page.getByRole("row", { name: /Davide Gallo/ }).getByRole("button", { name: "Undo" })).toBeVisible();
+  await screenshot(page, "25f-report-review");
+  await page.setViewportSize({ width: 390, height: 844 });
+  await screenshot(page, "25g-report-review-phone");
 });
 
 test("report: tabs, search, undo and CSV export", async ({ page }) => {

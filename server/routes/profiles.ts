@@ -1,10 +1,10 @@
 import express, { Request, Response } from "express";
 
-import { Contact, LinkedNetworks, PinnedProfiles, ProfileBulkState, ProfileLinkRequest, ProfileScanState, ProfileSearchState, ProfileSuggestion, ProfilesOverview, SocialNetwork, SocialPerson } from "../../interfaces/api";
+import { Contact, ContactResult, LinkedNetworks, PinnedProfiles, ProfileBulkState, ProfileLinkRequest, ProfileScanState, ProfileSearchState, ProfileSuggestion, ProfilesOverview, SocialNetwork, SocialPerson } from "../../interfaces/api";
 import { getFromCache, setInCache } from "../src/cache";
 import { OAuth2Client } from "../src/gapi";
 import { ContactsApi, peopleContactsApi } from "../src/cleanup/people";
-import { addContactLinks, removeContactLink } from "../src/contactLinks";
+import { addContactLinks } from "../src/contactLinks";
 import { toContact } from "../src/contacts/model";
 import { clearPlaceholder, getPlaceholders } from "../src/contacts/placeholders";
 import { getKeptPhotos } from "../src/contacts/keptPhotos";
@@ -20,7 +20,9 @@ import { photoKey } from "../src/contacts/model";
 import { getPins, photoHash, setPin } from "../src/contacts/photoPins";
 import { desktopReader, getReads, lookupWithLogin, pinnedProfiles, ReadProfile, readsWithLogin, RereadNetwork } from "../src/profiles/rereads";
 import { cachedPhoto, cachePhoto } from "../src/profiles/photoCache";
-import { loadQueue, publicEntry, QueueData, queuedImage, recordApplied, resolveEntry, saveQueue } from "../src/profiles/queue";
+import { loadQueue, publicEntry, QueueData, queuedImage, resolveEntry, saveQueue } from "../src/profiles/queue";
+import { migrateReviewHistory } from "../src/profiles/history";
+import { recordDecision } from "../src/runs";
 import { getLookup } from "../src/linkLookups";
 
 // Find profiles (issue #61): suggestions from exports, a public search and,
@@ -329,6 +331,8 @@ export function profilesRouter(options: Options = {}): express.Router {
    * card's other profiles are remembered as not this contact.
    */
   async function linkContact(sessionId: string, api: ContactsApi, request: ProfileLinkRequest): Promise<{ linked: StoredLinked[]; photoSet: boolean }> {
+    // Older answers first, so this one joins the right Review entry (issue #84).
+    migrateReviewHistory(sessionId);
     const data = loadProfiles(sessionId);
     const notFound = () => Object.assign(new Error("not_found"), { status: 404 });
     const persons = request.personIds.map((id) => data.people.find((p) => p.id === id)).filter((p): p is SocialPerson => Boolean(p));
@@ -343,6 +347,7 @@ export function profilesRouter(options: Options = {}): express.Router {
     const added = await addContactLinks(api, contactId, [...persons.map((p) => p.url), ...(lookup ? [lookup.link.url] : [])]);
     let photoSet = false;
     let previousPhoto: string | null | undefined;
+    const previousPin = getPins(sessionId)[contactId] ?? null;
     // A kept photo (issue #67) is never replaced: only the links are added.
     const photoPerson = before.photoKept ? undefined : photoOffered;
     const chosen = before.photoKept
@@ -372,24 +377,29 @@ export function profilesRouter(options: Options = {}): express.Router {
     }
     // Read again: a sync running meanwhile may have sent more contacts to To review.
     const latest = loadQueue(sessionId);
-    if (photoSet && chosen && !photoPerson) recordApplied(latest, contactId, chosen.source, chosen.matchedBy, previousPhoto, lookup && added.includes(lookup.link.url) ? lookup.link.url : undefined);
     // Answered: the contact leaves To review, and the photos not used there aren't offered again.
     const entry = resolveEntry(latest, contactId, photoSet && Boolean(fromQueue));
     // "Keep this" on a photo changed outside the app: it no longer follows its source.
     if (entry?.kind === "changed" && !photoSet) setPin(sessionId, contactId, undefined);
     saveQueue(sessionId, latest);
     const at = new Date().toISOString();
-    const linked = (photoSet && photoPerson && !persons.includes(photoPerson) ? [...persons, photoPerson] : persons).map(
-      (person): StoredLinked => ({
-        contactId,
-        name: before.name ?? request.name ?? "",
-        person,
-        at,
-        photoSet: photoSet && person === photoPerson,
-        addedLink: added.some((url) => url === person.url),
-        ...(photoSet && person === photoPerson ? { previousPhoto } : {}),
-      })
+    const name = before.name ?? request.name ?? "";
+    const people = photoSet && photoPerson && !persons.includes(photoPerson) ? [...persons, photoPerson] : persons;
+    const linked = people.map(
+      (person): StoredLinked => ({ contactId, name, person, at, photoSet: photoSet && person === photoPerson, addedLink: added.includes(person.url), recorded: true })
     );
+    // What changed is a decision in History, where undo puts the photo, the links and the pin back (issue #84).
+    const profiles = [...people.map((p) => ({ url: p.url, network: p.network as string })), ...(lookup ? [{ url: lookup.link.url, network: lookup.link.network as string }] : [])].map((p) => ({ ...p, ...(added.includes(p.url) ? { added: true } : {}) }));
+    if (photoSet || added.length) {
+      const result: ContactResult = {
+        contactId,
+        ...(name ? { name } : {}),
+        outcome: photoSet ? (previousPhoto ? "replaced" : "added") : "linked",
+        ...(photoSet ? { source: chosen!.source, ...(chosen!.matchedBy ? { matchedBy: chosen!.matchedBy } : {}), previousPin } : {}),
+        ...(profiles.length ? { profiles } : {}),
+      };
+      recordDecision(sessionId, result, { photo: photoSet ? chosen!.photo : undefined, previous: previousPhoto ?? undefined }, new Date(at));
+    }
     const current = loadProfiles(sessionId);
     current.linked.push(...linked);
     current.skipped = current.skipped.filter((id) => id !== contactId);
@@ -523,31 +533,6 @@ export function profilesRouter(options: Options = {}): express.Router {
     if (!bytes) return res.status(404).send({ error: "no_photo" });
     res.set("Cache-Control", "private, max-age=86400");
     res.type(imageType(bytes)).send(bytes);
-  });
-
-  router.post("/profiles/undo", async (req: Request, res: Response) => {
-    if (!jsonOnly(req, res)) return;
-    const api = google(req, res);
-    if (!api) return;
-    const data = loadProfiles(req.sessionID);
-    const entry = [...data.linked].reverse().find((l) => !l.undone && l.contactId === req.body?.contactId && l.person.id === req.body?.personId);
-    if (!entry) return res.status(404).send({ error: "not_found" });
-    try {
-      if (entry.addedLink) await removeContactLink(api, entry.contactId, entry.person.url);
-      if (entry.photoSet) {
-        if (entry.previousPhoto) await api.setPhoto(entry.contactId, entry.previousPhoto);
-        else await api.deletePhoto(entry.contactId);
-        const link = parseProfileLink(entry.person.url);
-        if (link && getPins(req.sessionID)[entry.contactId]?.matchedBy === shortLink(link)) setPin(req.sessionID, entry.contactId, undefined);
-      }
-      entry.undone = true;
-      entry.previousPhoto = undefined;
-      saveProfiles(req.sessionID, data);
-      forget(req);
-      res.send({ ok: true });
-    } catch (e) {
-      failed(req, res, "Undoing a link", e);
-    }
   });
 
   // "None of these": the shown profiles aren't this contact.

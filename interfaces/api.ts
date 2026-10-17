@@ -13,8 +13,8 @@ export interface Event {
 
 export type SourceId = "whatsapp" | "telegram" | "gravatar" | "links";
 
-/** What happened to one contact during a sync. "kept": runs from before issue #82 (a photo kept in review). */
-export type SyncOutcome = "added" | "replaced" | "kept" | "queued" | "alreadyHadPhoto" | "noMatch" | "error";
+/** What happened to one contact during a sync. "kept": runs from before issue #82 (a photo kept in review). "linked": a review session linked profiles without a photo (issue #84). */
+export type SyncOutcome = "added" | "replaced" | "linked" | "kept" | "queued" | "alreadyHadPhoto" | "noMatch" | "error";
 
 export interface SyncCounters {
   added: number;
@@ -22,6 +22,8 @@ export interface SyncCounters {
   kept: number;
   /** Sent to Sync's To review (issue #82); absent in older runs. */
   queued?: number;
+  /** Review sessions: contacts that only got profiles linked (issue #84). */
+  linked?: number;
   alreadyHadPhoto: number;
   noMatch: number;
   errors: number;
@@ -95,14 +97,20 @@ export interface ContactResult {
   hasPhoto?: boolean;
   /** A profile link this run saved on the contact; undo removes it. */
   addedLink?: string;
+  /** Review sessions (issue #84): the profiles a decision linked; `added` when it saved the link on the contact, which undo removes. */
+  profiles?: { url: string; network: string; added?: boolean }[];
+  /** The source the photo followed before (none: null); undo puts it back. Absent in runs before issue #84. */
+  previousPin?: PhotoPin | null;
+  /** Review entries: when the decision was made. */
+  at?: string;
 }
 
 export interface RunSummary {
   id: string;
   startedAt: string;
   finishedAt?: string;
-  /** "sync": a run with options (issue #82); the others are older runs. */
-  mode: "fill" | "replace" | "review" | "sync";
+  /** "sync": a run with options (issue #82); "session": decisions made in To review (issue #84); the others are older runs. */
+  mode: "fill" | "replace" | "review" | "sync" | "session";
   options?: RunOptions;
   sources: SourceId[];
   totalContacts: number;

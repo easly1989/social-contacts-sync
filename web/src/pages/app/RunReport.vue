@@ -38,7 +38,13 @@ function readsText(network: keyof typeof networkNames, reads?: ProfileReadsRepor
     .filter(Boolean)
     .join(" ");
 }
-const changed = (r: ContactResult) => r.outcome === "added" || r.outcome === "replaced";
+const photoChanged = (r: ContactResult) => r.outcome === "added" || r.outcome === "replaced";
+// A Review entry (issue #84) also links profiles without a photo.
+const changed = (r: ContactResult) => photoChanged(r) || r.outcome === "linked";
+const review = computed(() => run.value?.mode === "session");
+const shortUrl = (url: string) => url.replace(/^https:\/\//, "");
+// A photo from a linked profile is matched by that profile, listed once.
+const matchedBy = (r: ContactResult) => (r.profiles?.some((p) => shortUrl(p.url) === r.matchedBy) ? undefined : r.matchedBy);
 const rows = computed(() => {
   const term = search.value.trim().toLowerCase();
   return (run.value?.results ?? [])
@@ -79,7 +85,7 @@ function watchUndo(indexes?: number[]): void {
 }
 
 async function undoAll(): Promise<void> {
-  if (!window.confirm(t("report.undoConfirm"))) return;
+  if (!window.confirm(t(review.value ? "report.undoReviewConfirm" : "report.undoConfirm"))) return;
   await api.undo(runId);
   watchUndo();
 }
@@ -133,7 +139,7 @@ onUnmounted(() => window.clearInterval(poll));
 </script>
 
 <template>
-  <AppShell :title="$t('report.title')">
+  <AppShell :title="$t(run?.mode === 'session' ? 'report.reviewTitle' : 'report.title')">
     <template #actions>
       <router-link to="/app/history" class="btn btn-ghost btn-sm"><ArrowLeft class="size-4" />{{ $t("report.back") }}</router-link>
     </template>
@@ -143,8 +149,9 @@ onUnmounted(() => window.clearInterval(poll));
       <section class="flex flex-wrap items-center gap-5 rounded-box border border-success/30 bg-gradient-to-r from-success/15 to-primary/10 p-6">
         <span class="grid size-12 place-items-center rounded-full bg-success text-success-content"><Check class="size-6" /></span>
         <div class="flex-1">
-          <div class="text-xl font-bold">{{ $t("report.banner", run.counters.added + run.counters.replaced) }}</div>
-          <div class="text-sm text-base-content/70">
+          <div class="text-xl font-bold">{{ review ? $t("history.reviewResult", run.results.length) : $t("report.banner", run.counters.added + run.counters.replaced) }}</div>
+          <div v-if="review" class="text-sm text-base-content/70">{{ $t("report.reviewWhen", { when: dateTime(run.startedAt, locale) }) }}</div>
+          <div v-else class="text-sm text-base-content/70">
             {{ $t("report.finished", {
               duration: run.finishedAt ? duration(Date.parse(run.finishedAt) - Date.parse(run.startedAt), locale) : "—",
               checked: number(run.results.length, locale),
@@ -154,12 +161,17 @@ onUnmounted(() => window.clearInterval(poll));
         </div>
         <button type="button" class="btn btn-sm" :disabled="!undoable || undoing" @click="undoAll">
           <span v-if="undoing" class="loading loading-spinner loading-xs"></span><Undo2 v-else class="size-4" />
-          {{ undoing ? $t("report.undoing") : $t("report.undoRun") }}
+          {{ undoing ? $t("report.undoing") : $t(review ? "report.undoReview" : "report.undoRun") }}
         </button>
         <button type="button" class="btn btn-ghost btn-sm" @click="exportCsv"><FileDown class="size-4" />{{ $t("report.exportCsv") }}</button>
       </section>
 
-      <div class="grid grid-cols-2 gap-4 lg:grid-cols-4">
+      <div v-if="review" class="grid grid-cols-2 gap-4 lg:grid-cols-4">
+        <StatTile :label="$t('outcomes.added')" :value="number(run.counters.added, locale)" :icon="ImagePlus" tone="text-success" />
+        <StatTile :label="$t('outcomes.replaced')" :value="number(run.counters.replaced, locale)" :icon="Replace" />
+        <StatTile :label="$t('outcomes.linked')" :value="number(run.counters.linked ?? 0, locale)" :icon="Link" />
+      </div>
+      <div v-else class="grid grid-cols-2 gap-4 lg:grid-cols-4">
         <StatTile :label="$t('outcomes.added')" :value="number(run.counters.added, locale)" :icon="ImagePlus" tone="text-success" />
         <StatTile v-if="run.mode === 'sync'" :label="$t('outcomes.queued')" :value="number(run.counters.queued ?? 0, locale)" :icon="ListChecks" tone="text-primary" />
         <StatTile v-else-if="run.mode !== 'fill'" :label="$t('outcomes.replaced')" :value="number(run.counters.replaced, locale)" :icon="Replace" />
@@ -184,7 +196,7 @@ onUnmounted(() => window.clearInterval(poll));
 
       <section class="rounded-box border border-base-300 bg-base-100 px-4 pt-4 sm:px-6">
         <div class="flex flex-wrap items-center gap-3">
-          <div role="tablist" class="tabs tabs-border">
+          <div v-if="!review" role="tablist" class="tabs tabs-border">
             <button
               v-for="key in ['changed', 'noMatch', 'errors', 'all'] as const"
               :key="key"
@@ -221,7 +233,8 @@ onUnmounted(() => window.clearInterval(poll));
                   {{ result.name ?? "—" }}
                   <div class="mt-1 space-y-1 font-normal sm:hidden">
                     <span v-if="!result.matchedBy && result.error" class="line-clamp-2 text-xs wrap-anywhere text-error/80" :title="result.error">{{ result.error }}</span>
-                    <span v-else-if="result.matchedBy" class="block text-xs wrap-anywhere text-base-content/60">{{ result.matchedBy }}</span>
+                    <span v-else-if="matchedBy(result)" class="block text-xs wrap-anywhere text-base-content/60">{{ matchedBy(result) }}</span>
+                    <span v-for="p in result.profiles" :key="p.url" class="block text-xs wrap-anywhere text-base-content/60"><Link class="inline size-3" /> {{ shortUrl(p.url) }}</span>
                     <SourceBadge v-if="result.source" :source="result.source" />
                     <button v-if="!result.undone && !changed(result) && result.outcome === 'noMatch' && linking !== index" type="button" class="btn btn-ghost btn-xs -ml-2" @click="startLink(index)">
                       <Link class="size-3.5" />{{ $t("links.add") }}
@@ -230,12 +243,13 @@ onUnmounted(() => window.clearInterval(poll));
                 </td>
                 <td class="hidden text-base-content/60 sm:table-cell">
                   <span v-if="!result.matchedBy && result.error" class="line-clamp-2 max-w-[36rem] break-words text-error/80" :title="result.error">{{ result.error }}</span>
-                  <template v-else>{{ result.matchedBy ?? "—" }}</template>
+                  <template v-else>{{ matchedBy(result) ?? (result.profiles?.length ? "" : "—") }}</template>
+                  <span v-for="p in result.profiles" :key="p.url" class="flex items-center gap-1 text-xs wrap-anywhere" data-testid="report-profile"><Link class="size-3 shrink-0" />{{ shortUrl(p.url) }}</span>
                 </td>
                 <td class="hidden sm:table-cell"><SourceBadge v-if="result.source" :source="result.source" /></td>
                 <td>
                   <PhotoCompare
-                    v-if="changed(result)"
+                    v-if="photoChanged(result)"
                     :name="result.name"
                     :source="result.source"
                     :matched-by="result.matchedBy"

@@ -5,7 +5,7 @@ import os from "os";
 import path from "path";
 
 import { RunRecord } from "../../interfaces/api";
-import { getRun, getRunPhoto, historyUsage, listRuns, saveRun, updateRun } from "./runs";
+import { getRun, getRunPhoto, historyUsage, listRuns, recordDecision, saveRun, updateRun } from "./runs";
 
 function result(id: string, startedAt: string) {
   const run: RunRecord = {
@@ -85,3 +85,34 @@ test("run IDs can't escape the history folder", (t) => {
   assert.equal(getRun("desktop", "../../etc"), undefined);
   assert.equal(getRunPhoto("desktop", "../x", 0, "photo"), undefined);
 });
+
+for (const mode of ["web", "desktop"] as const) {
+  test(`${mode}: decisions in To review are one Review entry per session, a new one after 30 minutes (issue #84)`, (t) => {
+    withEnv(mode === "web" ? { SCS_DESKTOP: undefined } : { SCS_DESKTOP: "1", SCS_DATA_DIR: fs.mkdtempSync(path.join(os.tmpdir(), "scs-session-")) }, t);
+    const session = `review-${mode}`;
+    const at = (minute: number) => new Date(Date.UTC(2026, 9, 17, 10, minute));
+    const photo = Buffer.from("new").toString("base64");
+    const previous = Buffer.from("old").toString("base64");
+    recordDecision(session, { contactId: "c/1", name: "Ada", outcome: "replaced", source: "whatsapp", previousPin: null }, { photo, previous }, at(0));
+    recordDecision(session, { contactId: "c/2", outcome: "linked", profiles: [{ url: "https://instagram.com/bea", network: "Instagram", added: true }] }, {}, at(25));
+    recordDecision(session, { contactId: "c/3", outcome: "added", source: "links" }, { photo }, at(56));
+
+    const runs = listRuns(session);
+    assert.deepEqual(runs.map((r) => [r.mode, "results" in r, r.totalContacts]), [["session", false, 1], ["session", false, 2]]);
+    const first = getRun(session, runs[1].id)!;
+    assert.deepEqual(first.results.map((r) => r.contactId), ["c/1", "c/2"]);
+    assert.deepEqual([first.startedAt, first.finishedAt], [at(0).toISOString(), at(25).toISOString()]);
+    assert.deepEqual(first.counters, { added: 0, replaced: 1, linked: 1, kept: 0, alreadyHadPhoto: 0, noMatch: 0, errors: 0 });
+    assert.deepEqual(first.sources, ["whatsapp"]);
+    assert.equal(Buffer.from(getRunPhoto(session, first.id, 0, "previous")!, "base64").toString(), "old");
+    assert.equal(getRunPhoto(session, first.id, 1, "photo"), undefined);
+    assert.equal(Buffer.from(getRunPhoto(session, runs[0].id, 0, "photo")!, "base64").toString(), "new");
+
+    // An entry undone as a whole takes a new decision: it can be undone again.
+    const latest = getRun(session, runs[0].id)!;
+    Object.assign(latest, { undone: true, results: latest.results.map((r) => ({ ...r, undone: true })) });
+    updateRun(latest);
+    recordDecision(session, { contactId: "c/4", outcome: "linked" }, {}, at(58));
+    assert.equal(listRuns(session)[0].undone, undefined);
+  });
+}

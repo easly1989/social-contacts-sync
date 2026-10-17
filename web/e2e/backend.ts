@@ -156,7 +156,7 @@ export class FakeBackend {
           const body = request.postDataJSON() ?? {};
           this.undoRequests.push({ id: run.id, body });
           const indexes: number[] = body.indexes ?? run.results.map((_r, i) => i);
-          for (const i of indexes) if (["added", "replaced"].includes(run.results[i]?.outcome)) run.results[i].undone = true;
+          for (const i of indexes) if (["added", "replaced", "linked"].includes(run.results[i]?.outcome)) run.results[i].undone = true;
           return route.fulfill({ status: 202, json: { ok: true } });
         }
         return route.fulfill({ json: run });

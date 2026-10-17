@@ -14,8 +14,10 @@ import { Base64 } from "../types";
 
 export interface StoredLinked extends ProfileLinked {
   addedLink: boolean;
-  /** The contact's photo before, for undo (null: it had none). */
+  /** The contact's photo before (null: it had none); before issue #84, which keeps it in History. */
   previousPhoto?: Base64 | null;
+  /** In a Review entry in History (issue #84). */
+  recorded?: boolean;
 }
 
 export interface ProfilesData {
