@@ -25,7 +25,8 @@ test("dashboard: coverage, sources, activity and latest photos", async ({ page }
   await expect(page.getByText("Last sync added 7 photos")).toBeVisible();
   await expect(page.getByRole("link", { name: /Photo sync · Replace all/ })).toHaveAttribute("href", `/app/history/${backend.runs[0].id}`);
   await expect(page.getByText("7 contacts got a face in the last sync.")).toBeVisible();
-  await expect(page.getByRole("navigation", { name: "Main navigation" }).first()).toBeVisible();
+  // Sync comes right after the Dashboard (issue #82).
+  await expect(page.getByRole("navigation", { name: "Main navigation" }).first().getByRole("link")).toHaveText([/^Dashboard/, /^Sync/, /^Contacts/, /^Clean up/, /^History/, /^Settings/]);
   await screenshot(page, "20-dashboard");
 });
 
@@ -46,33 +47,44 @@ test("dashboard on a phone uses bottom tabs", async ({ page }) => {
   await screenshot(page, "22-dashboard-mobile", { fullPage: false });
 });
 
-test("sync setup: sources can be reordered and switched off", async ({ page }) => {
-  await page.goto("/app/sync");
-  await expect(page.getByText("1,248", { exact: true })).toBeVisible();
-  await expect(page.getByText("474", { exact: true })).toBeVisible();
-  await expect(page.getByText("up to 12 min")).toBeVisible();
+const syncSources = () => new URL(backend.requested("/api/init_sync")!.url()).searchParams.get("sources");
+
+test("sync: sources are ordered and switched off in Sources, and Run uses them (issue #82)", async ({ page }) => {
+  await page.goto("/app/sync?tab=run");
+  const summary = page.getByTestId("run-summary");
+  await expect(summary.getByText("1,248", { exact: true })).toBeVisible();
+  await expect(summary.getByText("474", { exact: true })).toBeVisible();
+  await expect(summary.getByText("up to 12 min")).toBeVisible();
+  await summary.getByRole("button", { name: "Change sources" }).click();
+  await expect(page.getByRole("tab", { name: "Sources" })).toHaveAttribute("aria-selected", "true");
   await page.getByRole("button", { name: "Move Gravatar up" }).click();
   await expect(page.getByRole("list", { name: "Sources" }).getByRole("listitem").first()).toContainText("Gravatar");
-  await screenshot(page, "23-sync-setup");
+  await screenshot(page, "23-sync-sources");
 
+  await page.getByRole("tab", { name: "Run" }).click();
+  await screenshot(page, "23b-sync-run");
   await page.getByRole("button", { name: "Start sync" }).click();
-  await expect(page).toHaveURL(/sources=gravatar%2Cwhatsapp/);
+  await expect.poll(() => backend.requested("/api/init_sync")).toBeTruthy();
+  expect(syncSources()).toBe("gravatar,whatsapp,links");
 
-  await page.goto("/app/sync");
+  await page.goto("/app/sync?tab=sources");
   await page.getByRole("checkbox", { name: "Gravatar" }).uncheck();
   await page.getByRole("checkbox", { name: "WhatsApp" }).uncheck();
   await page.getByRole("checkbox", { name: "Profile links" }).uncheck();
+  await page.getByRole("tab", { name: "Run" }).click();
   await expect(page.getByText("Choose at least one source.")).toBeVisible();
   await expect(page.getByRole("button", { name: "Start sync" })).toBeDisabled();
 });
 
-test("sync setup without WhatsApp offers to connect it", async ({ page }) => {
+test("sync without WhatsApp offers to connect it", async ({ page }) => {
   backend.status.whatsappConnected = false;
-  await page.goto("/app/sync");
+  await page.goto("/app/sync?tab=sources");
   await expect(page.getByTestId("source-whatsapp")).toContainText("Not connected");
   await expect(page.getByTestId("source-whatsapp").getByRole("link", { name: "Connect" })).toBeVisible();
+  await page.getByRole("tab", { name: "Run" }).click();
   await page.getByRole("button", { name: "Start sync" }).click();
-  await expect(page).toHaveURL(/sources=gravatar%2Clinks$/);
+  await expect.poll(() => backend.requested("/api/init_sync")).toBeTruthy();
+  expect(syncSources()).toBe("gravatar,links");
 });
 
 test("history lists every run with its result", async ({ page }) => {

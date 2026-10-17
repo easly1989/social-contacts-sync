@@ -3,8 +3,6 @@ export enum EventType {
   WhatsAppConnecting = "whatsapp_connecting",
   Redirect = "redirect",
   SyncProgress = "sync_progress",
-  SyncConfirm = "sync_confirm",
-  SyncPhotoConfirm = "sync_photo_confirm",
   WhatsAppError = "whatsapp_error",
 }
 
@@ -15,13 +13,15 @@ export interface Event {
 
 export type SourceId = "whatsapp" | "telegram" | "gravatar" | "links";
 
-/** What happened to one contact during a sync. */
-export type SyncOutcome = "added" | "replaced" | "kept" | "alreadyHadPhoto" | "noMatch" | "error";
+/** What happened to one contact during a sync. "kept": runs from before issue #82 (a photo kept in review). */
+export type SyncOutcome = "added" | "replaced" | "kept" | "queued" | "alreadyHadPhoto" | "noMatch" | "error";
 
 export interface SyncCounters {
   added: number;
   replaced: number;
   kept: number;
+  /** Sent to Sync's To review (issue #82); absent in older runs. */
+  queued?: number;
   alreadyHadPhoto: number;
   noMatch: number;
   errors: number;
@@ -34,34 +34,52 @@ export interface SyncProgress {
   totalContacts?: number;
   image?: string;
   error?: string;
-  isManualSync?: boolean;
+  /** Profiles read again first (desktop, with the login), then photos from every source (issue #82). */
+  phase?: "profiles" | "photos";
+  /** Phase "profiles": per network, profiles read so far, how many to read, and why it stopped. */
+  reads?: Partial<Record<"instagram" | "facebook" | "linkedin", { read: number; total: number; stopped?: string }>>;
   /** Contacts processed so far. */
   checked?: number;
   counters?: SyncCounters;
-  /** The latest contact that got a photo, for the "just added" list. */
-  latest?: { name?: string; source: SourceId };
+  /** The latest contact that got a photo, for the "just added" list; `pinned`: updated from the source it follows. */
+  latest?: { name?: string; source: SourceId; network?: string; pinned?: boolean };
   /** Set on the final event of a run. */
   runId?: string;
   /** Final event: the run was stopped before the last contact. */
   cancelled?: boolean;
 }
 
-/** A photo a source offers for the contact under review. */
-export interface ReviewCandidate {
-  photo: string;
-  source: SourceId;
-  matchedBy: string;
-  /** For a profile link, its network: "Instagram", "X"… (issue #77). */
-  network?: string;
+/** What a sync does (issue #82), in place of the old modes. */
+export interface RunOptions {
+  /** Contacts without a photo (or with a placeholder) take the pinned source's photo, or the first source's. */
+  fillMissing: boolean;
+  /** A pinned source with a new photo is applied. */
+  updatePinned: boolean;
+  /** Contacts with a photo and a different one somewhere go to To review; nothing changes. */
+  lookDifferent: boolean;
+  /** Nothing is applied: every contact with a photo to pick goes to To review. */
+  decideAll: boolean;
 }
 
-/** Payload of EventType.SyncConfirm (review mode). */
-export interface ReviewRequest {
-  existingPhoto: string | null;
-  /** Same as candidates[0].photo, for older clients. */
-  newPhoto: string;
-  contactName: string | null;
-  candidates: ReviewCandidate[];
+/** A photo waiting in Sync's To review (issue #82). */
+export interface QueuePhoto {
+  /** `photo:<hash>`: what a confirm sends as `photoFrom`. */
+  id: string;
+  source: SourceId;
+  /** The phone number, email or profile ("instagram.com/name") it came from. */
+  matchedBy: string;
+  /** For a profile link, its network: "Instagram", "X"… */
+  network?: string;
+  readAt: string;
+}
+
+/** A contact's photos waiting in To review: "photo" to pick one, "changed" when a pinned photo was changed outside the app. */
+export interface QueueEntry {
+  kind: "photo" | "changed";
+  photos: QueuePhoto[];
+  /** "changed": the source the photo was pinned to. */
+  pinned?: { source: SourceId; network?: string; matchedBy?: string };
+  addedAt: string;
 }
 
 export interface ContactResult {
@@ -83,7 +101,9 @@ export interface RunSummary {
   id: string;
   startedAt: string;
   finishedAt?: string;
-  mode: "fill" | "replace" | "review";
+  /** "sync": a run with options (issue #82); the others are older runs. */
+  mode: "fill" | "replace" | "review" | "sync";
+  options?: RunOptions;
   sources: SourceId[];
   totalContacts: number;
   counters: SyncCounters;
@@ -142,9 +162,13 @@ export interface GoogleAccount {
   totalContacts?: number;
 }
 
+/** The query of /api/init_sync: strings, "true" or "false" for the options (issue #82). */
 export interface SyncOptions {
-  overwrite_photos?: string; // "true" or "false" (since converted to string via query params)
-  manual_sync?: string; // "true" or "false" (since converted to string via query params)
+  fill_missing?: string;
+  update_pinned?: string;
+  look_different?: string;
+  decide_all?: string;
+  reads_cap?: string; // desktop: profiles read with the login per network and sync
   sources?: string; // comma-separated SourceId list in priority order; default "whatsapp"
   links_best_effort?: string; // "true": profile links also try Instagram, Facebook and LinkedIn
   linkedin_rereads?: string; // "false": the desktop app doesn't read pinned LinkedIn profiles with the login (issue #80)
@@ -164,14 +188,6 @@ export interface LinkLookup {
   url: string;
 }
 
-/** Answer to a review request (EventType.SyncPhotoConfirm). */
-export interface ReviewAnswer {
-  accept: boolean;
-  /** Index in the request's candidates. */
-  choice?: number;
-  /** Use a photo looked up from a profile link instead (LinkLookup.token). */
-  link?: string;
-}
 
 /** Result of the desktop app's latest update check. */
 export interface UpdateCheck {
@@ -434,6 +450,8 @@ export interface ProfileSuggestion {
   candidates: ProfileCandidate[];
   /** Profiles already on the contact, read with a photo: photo candidates too (issue #81). */
   linked?: SocialPerson[];
+  /** Photos a sync sent to To review (issue #82). */
+  queue?: QueueEntry;
 }
 
 export interface ProfileLinked {
@@ -483,6 +501,8 @@ export interface ProfileLinkRequest {
   /** The other profiles shown on the card: not this contact. */
   rejectIds?: string[];
   name?: string;
+  /** A photo looked up from a profile link on the card (LinkLookup.token): applied, and its link saved. */
+  link?: string;
 }
 
 /** Linking in bulk (issue #65): runs in the background at Google's pace. */

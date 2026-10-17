@@ -5,7 +5,7 @@ import { PhotoPin } from "../../../interfaces/api";
 import { photoHash } from "../contacts/photoPins";
 import { SimpleContact } from "../interfaces";
 import { LinkBlockedError, linksSource, Pacer, parseProfileLink, ProfileLink } from "../sources/links";
-import { runSync, SyncTarget } from "../syncEngine";
+import { defaultRunOptions, runSync, SyncTarget } from "../syncEngine";
 import { getReads, LoginNeededError, lookupWithLogin, planRereads, ReadProfile, rereading, StoredRead } from "./rereads";
 
 // Pinned Instagram and Facebook profiles read again with the login (issue #79), against a fake desktop app.
@@ -51,7 +51,7 @@ function contact(id: string, handle: string, photo: number): SimpleContact {
   };
 }
 
-async function sync(contacts: SimpleContact[], answers: Record<string, Awaited<ReturnType<ReadProfile>>>, cap = 10) {
+async function sync(contacts: SimpleContact[], answers: Record<string, Awaited<ReturnType<ReadProfile>>>, cap = 10, phased = false) {
   const reads: Record<string, StoredRead> = {};
   const scanned: Record<string, string> = Object.fromEntries(contacts.map((c) => [c.urls![0], "https://cdn.example/v1.jpg"]));
   const asked: string[] = [];
@@ -70,9 +70,31 @@ async function sync(contacts: SimpleContact[], answers: Record<string, Awaited<R
     setPhoto: async (id) => void writes.push(id),
     savePin: () => {},
   };
-  const { run } = await runSync(target, [rereads.source], "fill", { progress: () => {}, cancelled: () => false }, { shuffle: false });
-  return { run, asked, waits, writes, reads, report: rereads.report() };
+  // Phase 1 (issue #82): the pinned profiles read before the photos.
+  const phases: unknown[] = [];
+  if (phased) await rereads.readPlanned((progress) => void phases.push(structuredClone(progress)));
+  const askedFirst = [...asked];
+  const { run } = await runSync(target, [rereads.source], { ...defaultRunOptions, lookDifferent: false }, { progress: () => {}, cancelled: () => false }, { shuffle: false });
+  return { run, asked, askedFirst, phases, waits, writes, reads, report: rereads.report() };
 }
+
+test("phase 1: pinned profiles are read before any photo, with progress per network; not read twice (issue #82)", async () => {
+  const { askedFirst, asked, phases, writes, report } = await sync(
+    [contact("c/anna", "anna", 1), contact("c/bruno", "bruno", 1)],
+    { anna: { profile: { photoUrl: "https://cdn.example/v2.jpg" } }, bruno: { stopped: "limited" } },
+    10,
+    true
+  );
+  assert.deepEqual(askedFirst, ["instagram:anna", "instagram:bruno"]);
+  assert.deepEqual(asked, askedFirst);
+  assert.deepEqual(phases, [
+    { instagram: { read: 0, total: 2 } },
+    { instagram: { read: 1, total: 2 } },
+    { instagram: { read: 1, total: 2, stopped: "limited" } },
+  ]);
+  assert.deepEqual(writes, ["c/anna"]);
+  assert.deepEqual(report.instagram, { read: 1, waiting: 1, stopped: "limited" });
+});
 
 test("a changed photo is written, an unchanged one isn't; reads are spaced out", async () => {
   const { asked, writes, reads, report, waits } = await sync([contact("c/anna", "anna", 1), contact("c/bruno", "bruno", 1)], {

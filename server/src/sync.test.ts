@@ -2,14 +2,18 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { Client } from "whatsapp-web.js";
 
-import { requestedSources, syncMode, withoutSharedNumbers } from "./sync";
+import { readsCap, requestedSources, runOptions, withoutSharedNumbers } from "./sync";
 
-test("the existing option flags map to modes", () => {
-  assert.equal(syncMode({}), "fill");
-  assert.equal(syncMode({ overwrite_photos: "false", manual_sync: "false" }), "fill");
-  assert.equal(syncMode({ overwrite_photos: "true" }), "replace");
-  assert.equal(syncMode({ manual_sync: "true" }), "review");
-  assert.equal(syncMode({ manual_sync: "true", overwrite_photos: "true" }), "review");
+test("run options: each as asked, else its default (issue #82)", () => {
+  assert.deepEqual(runOptions({}), { fillMissing: true, updatePinned: true, lookDifferent: true, decideAll: false });
+  assert.deepEqual(runOptions({ fill_missing: "false", look_different: "false", decide_all: "true" }), { fillMissing: false, updatePinned: true, lookDifferent: false, decideAll: true });
+});
+
+test("profiles read per network: the Run tab's cap, within 1–1000, else 100", () => {
+  assert.equal(readsCap({ reads_cap: "40" }), 40);
+  assert.equal(readsCap({ reads_cap: "5000" }), 1000);
+  assert.equal(readsCap({ reads_cap: "-3" }), 100);
+  assert.equal(readsCap({}), 100);
 });
 
 const client = {} as Client;

@@ -2,7 +2,7 @@
 import { computed, onMounted, onUnmounted, ref } from "vue";
 import { useRoute } from "vue-router";
 import { useI18n } from "vue-i18n";
-import { ArrowLeft, ArrowRight, Check, CircleAlert, FileDown, Image, ImagePlus, Link, RefreshCw, Replace, Search, Undo2 } from "lucide-vue-next";
+import { ArrowLeft, ArrowRight, Check, CircleAlert, FileDown, Image, ImagePlus, Link, ListChecks, RefreshCw, Replace, Search, Undo2 } from "lucide-vue-next";
 
 import AppShell from "../../components/AppShell.vue";
 import PhotoCompare from "../../components/PhotoCompare.vue";
@@ -161,13 +161,17 @@ onUnmounted(() => window.clearInterval(poll));
 
       <div class="grid grid-cols-2 gap-4 lg:grid-cols-4">
         <StatTile :label="$t('outcomes.added')" :value="number(run.counters.added, locale)" :icon="ImagePlus" tone="text-success" />
-        <StatTile v-if="run.mode !== 'fill'" :label="$t('outcomes.replaced')" :value="number(run.counters.replaced, locale)" :icon="Replace" />
+        <StatTile v-if="run.mode === 'sync'" :label="$t('outcomes.queued')" :value="number(run.counters.queued ?? 0, locale)" :icon="ListChecks" tone="text-primary" />
+        <StatTile v-else-if="run.mode !== 'fill'" :label="$t('outcomes.replaced')" :value="number(run.counters.replaced, locale)" :icon="Replace" />
         <StatTile v-else :label="$t('outcomes.alreadyHadPhoto')" :value="number(run.counters.alreadyHadPhoto, locale)" :icon="Image" />
         <StatTile :label="$t('outcomes.noMatch')" :value="number(run.counters.noMatch, locale)" :icon="Search" />
         <StatTile :label="$t('outcomes.errors')" :value="number(run.counters.errors, locale)" :icon="CircleAlert" tone="text-error" />
       </div>
       <p v-if="run.mode === 'fill' && run.counters.replaced" class="-mt-2 flex items-center gap-1.5 text-sm text-base-content/60" data-testid="count-placeholders">
         <Replace class="size-4" />{{ $t("outcomes.placeholders") }}: {{ number(run.counters.replaced, locale) }}
+      </p>
+      <p v-if="run.mode === 'sync' && run.counters.replaced" class="-mt-2 flex items-center gap-1.5 text-sm text-base-content/60" data-testid="count-replaced">
+        <Replace class="size-4" />{{ $t("outcomes.replaced") }}: {{ number(run.counters.replaced, locale) }}
       </p>
       <p v-if="run.mode !== 'fill' && run.counters.alreadyHadPhoto" class="-mt-2 flex items-center gap-1.5 text-sm text-base-content/60" data-testid="count-kept-google">
         <Image class="size-4" />{{ $t("outcomes.keptGoogle") }}: {{ number(run.counters.alreadyHadPhoto, locale) }}

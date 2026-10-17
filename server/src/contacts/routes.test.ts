@@ -13,7 +13,7 @@ import { saveLookup } from "../linkLookups";
 import { parseProfileLink } from "../sources/links";
 import { getPlaceholders } from "./placeholders";
 import { getKeptPhotos } from "./keptPhotos";
-import { runSync } from "../syncEngine";
+import { defaultRunOptions, runSync } from "../syncEngine";
 import { withPlaceholders } from "../sync";
 
 // The Contacts page (issue #55) against the fake address book, which applies
@@ -98,7 +98,7 @@ test("placeholder photos: uploaded by hand, then replaced by the next sync, even
   const { run } = await runSync(
     { listContacts: async () => contacts, currentPhoto: async (c) => google.photos.get(c.id) ?? null, setPhoto: (id, photo) => google.setPhoto(id, photo) },
     [{ id: "whatsapp", find: async (c) => (c.id === "people/a" || c.id === "people/c" ? { photo: "V0E=", source: "whatsapp", matchedBy: "+39" } : null) }],
-    "fill",
+    { ...defaultRunOptions, lookDifferent: false },
     { progress: () => {}, cancelled: () => false },
     { shuffle: false }
   );
@@ -127,15 +127,15 @@ test("kept photos: never replaced by a sync in any mode, and links still work (i
     getPlaceholders("contacts-67"),
     getKeptPhotos("contacts-67")
   );
-  for (const mode of ["fill", "replace"] as const) {
+  for (const options of [defaultRunOptions, { ...defaultRunOptions, decideAll: true }]) {
     const { run } = await runSync(
       { listContacts: async () => contacts, currentPhoto: async (c) => google.photos.get(c.id) ?? null, setPhoto: (id, photo) => google.setPhoto(id, photo) },
       [{ id: "whatsapp", find: async () => ({ photo: "V0E=", source: "whatsapp", matchedBy: "+39" }) }],
-      mode,
+      options,
       { progress: () => {}, cancelled: () => false },
       { shuffle: false }
     );
-    assert.deepEqual(run.results.map((r) => [r.contactId, r.outcome]), [["people/a", "alreadyHadPhoto"], ["people/b", "added"], ["people/c", "alreadyHadPhoto"]], mode);
+    assert.deepEqual(run.results.map((r) => [r.contactId, r.outcome]), [["people/a", "alreadyHadPhoto"], ["people/b", options.decideAll ? "queued" : "added"], ["people/c", "alreadyHadPhoto"]]);
   }
   assert.equal(google.photos.get("people/a"), Buffer.alloc(2048, 1).toString("base64"));
   assert.equal(google.photos.get("people/c"), "UkVBTA==");

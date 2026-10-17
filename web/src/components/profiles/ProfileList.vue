@@ -59,7 +59,11 @@ async function stop(): Promise<void> {
 }
 async function noneSelected(): Promise<void> {
   try {
-    for (const s of chosen.value) await api.rejectProfiles(s.contactId, s.candidates.map((c) => c.person.id));
+    for (const s of chosen.value) {
+      if (s.candidates.length) await api.rejectProfiles(s.contactId, s.candidates.map((c) => c.person.id));
+      // A sync's photos: the contact keeps the one it has.
+      if (s.queue) await api.keepCurrentPhoto(s.contactId);
+    }
     selected.value = new Set();
   } catch (e) {
     notifyError(t("profiles.errors.link"), e);

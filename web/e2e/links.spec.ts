@@ -1,9 +1,7 @@
 import { test, expect } from "@playwright/test";
 
-import { EventType } from "../../interfaces/api";
-import { avatars } from "./avatars";
 import { FakeBackend, screenshot } from "./backend";
-import { sampleRun } from "./fixtures";
+import { sampleProfiles, sampleRun } from "./fixtures";
 
 // Profile links (issue #51), with the backend mocked.
 let backend: FakeBackend;
@@ -33,8 +31,9 @@ test("settings: profile links are ready, and the unofficial networks are opt-in"
   await screenshot(page, "28-settings-links-dark");
 
   // The sync sends the choice.
-  await page.goto("/app/sync");
+  await page.goto("/app/sync?tab=sources");
   await expect(page.getByTestId("source-links")).toContainText("Uses the profile links saved on your Google contacts");
+  await page.getByRole("tab", { name: "Run" }).click();
   await page.getByRole("button", { name: "Start sync" }).click();
   await expect.poll(() => backend.requested("/api/init_sync")).toBeTruthy();
   const query = new URL(backend.requested("/api/init_sync")!.url()).searchParams;
@@ -138,31 +137,19 @@ test("report on a phone: the table fits, and so does adding a link", async ({ pa
   expect(await fits()).toEqual([]);
 });
 
-test("review: a photo looked up from a profile link becomes a candidate", async ({ page }) => {
-  await page.goto("/app/sync/run?mode=review&sources=whatsapp,links");
-  await expect.poll(() => backend.requested("/api/init_sync")).toBeTruthy();
-  await backend.send(EventType.SyncConfirm, {
-    existingPhoto: avatars[0],
-    newPhoto: avatars[5],
-    contactName: "Francesco Greco",
-    candidates: [{ photo: avatars[5], source: "whatsapp", matchedBy: "+39 335 210 4471" }],
-  });
-  const review = page.getByTestId("review");
-  await expect(review.getByRole("radio")).toHaveCount(1);
+test("To review: a photo looked up from a profile link on the card becomes a choice (issue #82)", async ({ page }) => {
+  backend.profiles = sampleProfiles();
+  await page.goto("/app/sync?tab=review");
+  const card = page.getByTestId("profile-card").filter({ hasText: "Elena Conti" });
+  await card.getByTestId("card-link").locator("summary").click();
+  // Typing the link isn't taken for shortcuts.
+  await card.getByLabel("Profile link for Elena Conti").pressSequentially("instagram.com/elena.conti.ph");
+  await card.getByRole("button", { name: "Find photo" }).click();
+  await expect(card.getByRole("radio", { name: "Instagram · instagram.com/elena.conti.ph" })).toBeChecked();
+  await card.scrollIntoViewIfNeeded();
+  await screenshot(page, "07b-review-link", { fullPage: false });
 
-  // Typing the link isn't taken for shortcuts ("1", "s"…).
-  const field = review.getByLabel("Profile link");
-  await field.fill("");
-  await field.pressSequentially("instagram.com/fra.greco1");
-  await expect(review.getByRole("radio")).toHaveCount(1);
-  await review.getByRole("button", { name: "Find photo" }).click();
-  await expect(review.getByRole("radio")).toHaveCount(2);
-  await expect(review.getByRole("radio").nth(1)).toHaveAttribute("aria-checked", "true");
-  await expect(review).toContainText("instagram.com/elena.conti.ph");
-  await screenshot(page, "07b-review-link");
-
-  await review.getByRole("button", { name: /Use new photo/ }).click();
-  await expect
-    .poll(() => backend.received.find((e) => e.type === EventType.SyncPhotoConfirm))
-    .toEqual({ type: EventType.SyncPhotoConfirm, data: { accept: true, link: "token-1" } });
+  await card.getByRole("button", { name: /^Confirm/ }).click();
+  await expect.poll(() => backend.profileRequests.find((r) => r.route === "/link")?.body).toMatchObject({ contactId: "people/ec", link: "token-1", personIds: ["instagram:elena_conti"] });
+  expect(backend.profileRequests.find((r) => r.route === "/link")?.body.photoFrom).toBeUndefined();
 });
