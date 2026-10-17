@@ -92,6 +92,8 @@ export const api = {
   uploadPhoto: (id: string, photo: Blob, kept = false) => send<Contact>("PUT", `${contactPath(id)}/photo${kept ? "?as=kept" : ""}`, photo, photo.type || "image/jpeg"),
   keepPhoto: (id: string, kept: boolean) => send<Contact>("PUT", `${contactPath(id)}/keep_photo`, JSON.stringify({ kept })),
   removePhoto: (id: string) => send<Contact>("DELETE", `${contactPath(id)}/photo`),
+  /** The photo stays, but no longer follows its source (issue #78). */
+  unpinPhoto: (id: string) => send<Contact>("DELETE", `${contactPath(id)}/pin`),
   photoFromLink: (id: string, token: string) => post<Contact>(`${contactPath(id)}/photo_from_link`, { token }),
   createLabel: (name: string) => post<ContactLabel>("/api/contacts/labels", { name }),
   applyLabel: (contactIds: string[], label: string, add: boolean) => post<{ contacts: Contact[] }>("/api/contacts/labels/apply", { contactIds, label, add }),

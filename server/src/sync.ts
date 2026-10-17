@@ -2,7 +2,7 @@ import WebSocket from "ws";
 import { RateLimiter } from "limiter";
 import { Client } from "whatsapp-web.js";
 
-import { EventType, ReviewAnswer, ReviewRequest, SourceId, SyncOptions } from "../../interfaces/api";
+import { EventType, PhotoPin, ReviewAnswer, ReviewRequest, SourceId, SyncOptions } from "../../interfaces/api";
 import { downloadContactPhoto, listContacts, OAuth2Client, updateContactPhoto } from "./gapi";
 import { sendEvent, sendMessageAndWait } from "./ws";
 import { deleteFromCache, getFromCache, setInCache } from "./cache";
@@ -12,7 +12,7 @@ import { PhotoSource } from "./sources/types";
 import { whatsappSource } from "./sources/whatsapp";
 import { gravatarSource } from "./sources/gravatar";
 import { telegramSource } from "./sources/telegram";
-import { linksSource, LinksSourceOptions, shortLink } from "./sources/links";
+import { linksSource, LinksSourceOptions, networkNames, shortLink } from "./sources/links";
 import { loadProfiles, storedProfilePhotos } from "./profiles/store";
 import { getLookup } from "./linkLookups";
 import { addContactLink } from "./contactLinks";
@@ -24,12 +24,19 @@ import { inferRegion, toE164Digits } from "./phone";
 import { SimpleContact } from "./interfaces";
 import { getPlaceholders, isPlaceholder } from "./contacts/placeholders";
 import { getKeptPhotos } from "./contacts/keptPhotos";
+import { getPins, setPin } from "./contacts/photoPins";
 
-/** Marks the contacts whose photo is a placeholder, or kept, from the Contacts page. */
-export function withPlaceholders(contacts: SimpleContact[], placeholders: Record<string, string>, kept: Set<string> = new Set()): SimpleContact[] {
-  return contacts.map((c) =>
-    c.hasPhoto && kept.has(c.id) ? { ...c, photoKept: true } : isPlaceholder(placeholders, c.id, c.photoUrl) ? { ...c, placeholder: true } : c
-  );
+/** Marks the contacts whose photo is a placeholder, or kept, from the Contacts page, and the source each photo follows. */
+export function withPlaceholders(
+  contacts: SimpleContact[],
+  placeholders: Record<string, string>,
+  kept: Set<string> = new Set(),
+  pins: Record<string, PhotoPin> = {}
+): SimpleContact[] {
+  return contacts.map((c) => {
+    const marked = c.hasPhoto && kept.has(c.id) ? { ...c, photoKept: true } : isPlaceholder(placeholders, c.id, c.photoUrl) ? { ...c, placeholder: true } : c;
+    return pins[c.id] ? { ...marked, pin: pins[c.id] } : marked;
+  });
 }
 
 const knownSources: SourceId[] = ["whatsapp", "telegram", "gravatar", "links"];
@@ -88,11 +95,13 @@ export async function initSync(id: string, syncOptions: SyncOptions) {
           withPlaceholders(
             withoutSharedNumbers(await listContacts(gAuth), getPrefs(id).sharedNumbers, inferRegion(whatsappClient?.info?.wid?.user)),
             getPlaceholders(id),
-            getKeptPhotos(id)
+            getKeptPhotos(id),
+            getPins(id)
           ),
         currentPhoto: downloadContactPhoto,
         setPhoto: (contactId, photo) => updateContactPhoto(gAuth, contactId, photo),
         addLink: async (contactId, url) => void (await addContactLink(peopleContactsApi(gAuth), contactId, url)),
+        savePin: (contactId, pin) => setPin(id, contactId, pin),
       },
       requestedSources(syncOptions, whatsappClient, telegramConnection(id), storedProfilePhotos(loadProfiles(id).people)),
       mode,
@@ -114,7 +123,8 @@ export async function initSync(id: string, syncOptions: SyncOptions) {
             if (!answer?.accept) return null;
             // A photo the user looked up from a profile link (issue #51).
             const fromLink = answer.link ? getLookup(id, answer.link) : undefined;
-            if (fromLink) return { photo: fromLink.photo, source: "links", matchedBy: shortLink(fromLink.link), newLink: fromLink.link.url };
+            if (fromLink)
+              return { photo: fromLink.photo, source: "links", matchedBy: shortLink(fromLink.link), newLink: fromLink.link.url, network: networkNames[fromLink.link.network] };
             const choice = Number.isInteger(answer.choice) ? answer.choice! : 0;
             return choice >= 0 && choice < candidates.length ? choice : 0;
           } catch (e) {

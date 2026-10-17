@@ -41,7 +41,8 @@ export interface ContactsApi {
   update(resourceName: string, person: Person, fields: readonly string[]): Promise<Person>;
   create(person: Person): Promise<Person>;
   remove(resourceName: string): Promise<void>;
-  setPhoto(resourceName: string, photo: Base64): Promise<void>;
+  /** Resolves with Google's address for the new photo, when it gives one. */
+  setPhoto(resourceName: string, photo: Base64): Promise<string | undefined>;
   deletePhoto(resourceName: string): Promise<void>;
   /** The contact's own photo (not Google's default letter), or null. */
   photo(person: Person): Promise<Base64 | null>;
@@ -106,7 +107,8 @@ export function peopleContactsApi(auth: OAuth2Client): ContactsApi {
       await people.deleteContact({ resourceName });
     },
     async setPhoto(resourceName, photo) {
-      await withGoogleRetry(() => people.updateContactPhoto({ resourceName, requestBody: { photoBytes: photo } }));
+      const res = await withGoogleRetry(() => people.updateContactPhoto({ resourceName, requestBody: { photoBytes: photo, personFields: "photos" } }));
+      return res.data.person ? ownPhotoUrl(res.data.person) : undefined;
     },
     async deletePhoto(resourceName) {
       await withGoogleRetry(() => people.deleteContactPhoto({ resourceName }));

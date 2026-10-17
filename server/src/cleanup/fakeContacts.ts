@@ -75,6 +75,7 @@ export class FakeContacts implements ContactsApi {
     this.calls.push(`setPhoto ${id}`);
     this.photos.set(id, photo);
     this.photoVersions.set(id, (this.photoVersions.get(id) ?? 0) + 1);
+    return this.withPhoto(this.people.get(id) ?? { resourceName: id }).photos?.[0]?.url ?? undefined;
   }
   async deletePhoto(id: string) {
     this.calls.push(`deletePhoto ${id}`);

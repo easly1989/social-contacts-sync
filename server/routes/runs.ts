@@ -3,6 +3,7 @@ import express, { Request, Response } from "express";
 import { getFromCache, setInCache } from "../src/cache";
 import { deleteContactPhoto, listContacts, OAuth2Client, updateContactPhoto } from "../src/gapi";
 import { removeContactLink } from "../src/contactLinks";
+import { setPin } from "../src/contacts/photoPins";
 import { peopleContactsApi } from "../src/cleanup/people";
 import { GoogleStats } from "../../interfaces/api";
 import { getRun, getRunPhoto, listRuns, updateRun } from "../src/runs";
@@ -75,8 +76,15 @@ router.post("/runs/:id/undo", (req: Request, res: Response) => {
   const sessionId = req.sessionID;
   const limiter = googleRateLimiter();
   undoRun(run, (index) => getRunPhoto(sessionId, run.id, index, "previous"), {
-    setPhoto: (contactId, photo) => updateContactPhoto(gAuth, contactId, photo),
-    deletePhoto: (contactId) => deleteContactPhoto(gAuth, contactId),
+    // An undone photo stops following its source, or the next sync would bring it back (issue #78).
+    setPhoto: async (contactId, photo) => {
+      await updateContactPhoto(gAuth, contactId, photo);
+      setPin(sessionId, contactId, undefined);
+    },
+    deletePhoto: async (contactId) => {
+      await deleteContactPhoto(gAuth, contactId);
+      setPin(sessionId, contactId, undefined);
+    },
     removeLink: (contactId, url) => removeContactLink(peopleContactsApi(gAuth), contactId, url),
   }, {
     indexes,

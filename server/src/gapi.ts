@@ -100,16 +100,18 @@ export async function updateContactPhoto(
   auth: OAuth2Client,
   resourceName: string,
   photo: Base64
-): Promise<void> {
+): Promise<string | undefined> {
   const people: people_v1.People = peopleApi({ version: "v1", auth });
 
   // Errors propagate so the sync can count them per contact.
-  await withGoogleRetry(() =>
+  const res = await withGoogleRetry(() =>
     people.people.updateContactPhoto({
       resourceName: resourceName,
-      requestBody: { photoBytes: photo },
+      requestBody: { photoBytes: photo, personFields: "photos" },
     })
   );
+  // The new photo's address, to tell later whether it was changed elsewhere (issue #78).
+  return res.data.person?.photos?.find((p) => !p.default && p.url)?.url ?? undefined;
 }
 
 export async function deleteContactPhoto(auth: OAuth2Client, resourceName: string): Promise<void> {

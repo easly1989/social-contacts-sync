@@ -281,3 +281,36 @@ test("kept photos: from a row, the editor and an upload; never offered for repla
   await expect(dialog).toContainText("1 uploaded");
   expect(backend.contacts.find((c) => c.id === "people/dg")!.photoKept).toBe(true);
 });
+
+test("a photo from a profile follows it until the user stops it; a changed one is paused (issue #78)", async ({ page }) => {
+  Object.assign(backend.contacts.find((c) => c.id === "people/mr")!, { photoFrom: { source: "links", network: "Facebook", matchedBy: "facebook.com/marco.rossi", suspended: true } });
+  await page.goto("/app/contacts");
+  await page.getByTestId("tile-all").click();
+  const editor = page.getByTestId("contact-editor");
+
+  // Lorenzo's photo from his Instagram now follows it.
+  await row(page, /Lorenzo Giordano/).getByRole("button", { name: /Lorenzo Giordano/ }).click();
+  await editor.getByRole("button", { name: "Add link" }).click();
+  await editor.getByLabel("Profile link").fill("instagram.com/lorenzo.g");
+  await editor.getByRole("button", { name: "Find photo" }).click();
+  await editor.getByRole("button", { name: "Use this photo" }).click();
+  const from = editor.getByTestId("photo-from");
+  await expect(from).toContainText("Photo from Instagram: each sync checks it for a newer one.");
+  await expect(from).toContainText("instagram.com/elena.conti.ph");
+  await screenshot(page, "78a-contacts-photo-from", { fullPage: false });
+  await from.getByRole("button", { name: "Stop following" }).click();
+  await expect(from).toBeHidden();
+  expect(sent("/lg/pin", "DELETE")).toHaveLength(1);
+  await expect(editor).toContainText("A photo you upload is a placeholder");
+  await screenshot(page, "78c-contacts-photo-unpinned", { fullPage: false });
+  page.once("dialog", (d) => d.accept()); // the unsaved link
+  await editor.getByRole("button", { name: "Close" }).first().click();
+
+  // Marco's was changed outside the app.
+  await row(page, /Marco Rossi/).getByRole("button", { name: /Marco Rossi/ }).click();
+  await expect(editor.getByTestId("photo-from")).toContainText("Photo from Facebook, paused: it was changed outside the app");
+  await screenshot(page, "78b-contacts-photo-from-paused", { fullPage: false });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(editor.getByTestId("photo-from")).toBeVisible();
+  await screenshot(page, "78d-contacts-photo-from-phone", { fullPage: false });
+});

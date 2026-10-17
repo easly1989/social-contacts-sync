@@ -343,7 +343,29 @@ export interface Contact {
   placeholder?: boolean;
   /** The photo is kept: the app never replaces it (issue #67). */
   photoKept?: boolean;
+  /** Where the photo comes from, when it follows a source (issue #78). */
+  photoFrom?: Pick<PhotoPin, "source" | "network" | "matchedBy" | "suspended">;
   updatedAt?: string;
+}
+
+/**
+ * A photo pinned to the source it was picked from (issue #78): syncs take
+ * that source first and apply its new photo when it changes.
+ */
+export interface PhotoPin {
+  source: SourceId;
+  /** For a profile link, the profile in short form ("instagram.com/name"), as in reports. */
+  matchedBy?: string;
+  /** For a profile link, its network: "Instagram", "X"… */
+  network?: string;
+  /** A hash of the photo last applied from the source; absent for a pin brought over from an earlier link. */
+  hash?: string;
+  /** Google's address for that photo, without its size: a different one means it was changed outside the app. */
+  photoKey?: string;
+  /** When the source was last read. */
+  readAt: string;
+  /** The photo was changed outside the app: the pin waits, and the photo is left alone. */
+  suspended?: boolean;
 }
 
 /** What the editor sends for a new or changed contact. */

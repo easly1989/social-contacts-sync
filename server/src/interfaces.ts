@@ -1,3 +1,5 @@
+import { PhotoPin } from "../../interfaces/api";
+
 export interface SimpleContact {
   id: string;
   name?: string;
@@ -11,4 +13,6 @@ export interface SimpleContact {
   placeholder?: boolean;
   /** The photo is kept: no sync replaces it, whatever the mode (issue #67). */
   photoKept?: boolean;
+  /** The source the photo follows (issue #78). */
+  pin?: PhotoPin;
 }
