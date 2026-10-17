@@ -56,6 +56,10 @@ test("desktop: Find photo says when the app isn't signed in, and sends the Linke
   await page.getByRole("button", { name: "Find photo" }).click();
   await expect(page.getByRole("alert")).toHaveText("The app isn't signed in to Facebook. Sign in from Find profiles, then try again.");
   await screenshot(page, "26e-report-login-needed", { fullPage: false });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.getByRole("alert").scrollIntoViewIfNeeded();
+  await screenshot(page, "26g-report-login-needed-phone", { fullPage: false });
+  await page.setViewportSize({ width: 1280, height: 800 });
   await field.fill("https://www.linkedin.com/in/francesco");
   await page.getByRole("button", { name: "Find photo" }).click();
   await expect(page.getByRole("alert")).toHaveText("Reading LinkedIn profiles is turned off in Settings, Sources.");
@@ -85,6 +89,7 @@ test("report: add a profile link to a contact without a photo", async ({ page })
   await field.fill("https://www.linkedin.com/in/francesco");
   await page.getByRole("button", { name: "Find photo" }).click();
   await expect(page.getByRole("alert")).toHaveText("LinkedIn asked to sign in or is limiting requests. Try again later.");
+  await screenshot(page, "26f-report-signin-required", { fullPage: false });
 
   await field.fill("https://www.instagram.com/elena.conti.ph/");
   await page.getByRole("button", { name: "Find photo" }).click();
