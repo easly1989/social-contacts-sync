@@ -12,7 +12,7 @@ import StatTile from "../../components/StatTile.vue";
 import { addHandler, sendEvent } from "../../services/ws";
 import { api } from "../../api";
 import { number } from "../../format";
-import { bestEffortLinks } from "../../profileLinks";
+import { bestEffortLinks, linkedinRereads } from "../../profileLinks";
 import { EventType, LinkLookup, ReviewAnswer, ReviewRequest, SourceId, SyncCounters, SyncProgress } from "../../../../interfaces/api";
 
 // Mockups 3.2 (progress) and 3.3 (review) in issue #8.
@@ -120,6 +120,7 @@ onMounted(() => {
     overwrite_photos: String(mode.value === "replace"),
     sources: String(route.query.sources ?? "whatsapp"),
     links_best_effort: String(bestEffortLinks.value),
+    linkedin_rereads: String(linkedinRereads.value),
   });
   fetch(`/api/init_sync?${params}`, { credentials: "include" });
   timer = window.setInterval(() => {

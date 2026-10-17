@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { onMounted, onUnmounted, ref } from "vue";
-import { Check, FlaskConical, Info } from "lucide-vue-next";
+import { Check, CircleDashed, FlaskConical, Info } from "lucide-vue-next";
 
 import SettingsCard from "./SettingsCard.vue";
 import SourceMark from "../SourceMark.vue";
@@ -8,8 +8,8 @@ import TelegramLink from "../TelegramLink.vue";
 import WhatsAppLink from "../WhatsAppLink.vue";
 import { api } from "../../api";
 import { isDesktop } from "../../settings";
-import { bestEffortLinks, bestEffortNetworks, stableNetworks } from "../../profileLinks";
-import { SessionStatus } from "../../../../interfaces/api";
+import { bestEffortLinks, bestEffortNetworks, linkedinRereads, stableNetworks } from "../../profileLinks";
+import { ProfileScanState, SessionStatus } from "../../../../interfaces/api";
 
 const status = ref<SessionStatus>();
 const unlinking = ref(false);
@@ -36,8 +36,13 @@ function watchWhatsApp(): void {
   }, 2000);
 }
 
+// Desktop: whether the app is signed in to each site read with the login (issue #80).
+const networkNames: Record<string, string> = { instagram: "Instagram", facebook: "Facebook", linkedin: "LinkedIn" };
+const logins = ref<ProfileScanState[]>([]);
+
 onMounted(async () => {
   status.value = await api.status();
+  if (isDesktop.value) logins.value = await api.socialLogins().catch(() => []);
 });
 onUnmounted(() => window.clearInterval(poll));
 </script>
@@ -89,7 +94,7 @@ onUnmounted(() => window.clearInterval(poll));
         <SourceMark source="links" />
         <div class="min-w-[10rem] flex-1">
           <div class="font-medium">{{ $t("links.name") }}</div>
-          <div class="text-sm text-base-content/60">{{ $t("links.byLink") }} · {{ $t("dashboard.noSignIn") }}</div>
+          <div class="text-sm text-base-content/60">{{ $t("links.byLink") }}<template v-if="!isDesktop"> · {{ $t("dashboard.noSignIn") }}</template></div>
         </div>
         <span class="badge badge-soft badge-success badge-sm">{{ $t("dashboard.ready") }}</span>
       </div>
@@ -97,7 +102,18 @@ onUnmounted(() => window.clearInterval(poll));
         <ul class="flex flex-wrap gap-1.5" :aria-label="$t('links.networks')">
           <li v-for="n in stableNetworks" :key="n" class="inline-flex items-center gap-1 rounded-full border border-base-300 px-2 py-0.5 text-xs"><Check class="size-3 text-success" />{{ n }}</li>
         </ul>
-        <label class="flex cursor-pointer items-start gap-3 rounded-xl border border-base-300 p-3">
+        <!-- Desktop: these three are read with the login made in Find profiles, never anonymously (issue #80). -->
+        <div v-if="isDesktop" class="rounded-xl border border-base-300 p-3" data-testid="settings-social-logins">
+          <span class="block text-sm font-medium">{{ $t("links.withLogin") }}</span>
+          <span class="mt-1 block text-xs text-base-content/60">{{ $t("links.withLoginText") }}</span>
+          <ul class="mt-2 flex flex-wrap gap-1.5">
+            <li v-for="n in logins" :key="n.network" class="inline-flex items-center gap-1 rounded-full border border-base-300 px-2 py-0.5 text-xs" :class="n.loggedIn ? '' : 'text-base-content/60'">
+              <Check v-if="n.loggedIn" class="size-3 text-success" /><CircleDashed v-else class="size-3" />{{ networkNames[n.network] }} · {{ n.loggedIn ? $t("links.signedIn") : $t("links.notSignedIn") }}
+            </li>
+          </ul>
+          <router-link v-if="logins.some((n) => !n.loggedIn)" to="/app/profiles" class="btn btn-sm mt-3">{{ $t("links.signInFromProfiles") }}</router-link>
+        </div>
+        <label v-else class="flex cursor-pointer items-start gap-3 rounded-xl border border-base-300 p-3">
           <input v-model="bestEffortLinks" type="checkbox" class="toggle toggle-primary toggle-sm mt-0.5" />
           <span class="flex-1">
             <span class="flex flex-wrap items-center gap-2 text-sm font-medium">{{ $t("links.bestEffort") }}<span class="badge badge-warning badge-soft badge-xs">{{ $t("links.unofficial") }}</span></span>
@@ -107,9 +123,16 @@ onUnmounted(() => window.clearInterval(poll));
             </span>
           </span>
         </label>
+        <label v-if="isDesktop" class="flex cursor-pointer items-start gap-3 rounded-xl border border-base-300 p-3" data-testid="settings-linkedin-rereads">
+          <input v-model="linkedinRereads" type="checkbox" class="toggle toggle-primary toggle-sm mt-0.5" />
+          <span class="flex-1">
+            <span class="block text-sm font-medium">{{ $t("links.linkedinRereads") }}</span>
+            <span class="mt-1 block text-xs text-base-content/60">{{ $t("links.linkedinRereadsText") }}</span>
+          </span>
+        </label>
         <p class="flex gap-1.5 text-xs text-base-content/50"><Info class="mt-px size-3.5 shrink-0" />{{ $t("links.settingsHint") }}</p>
       </div>
     </div>
-    <p class="flex items-start gap-1.5 pt-4 text-xs text-base-content/50"><Info class="mt-px size-3.5 shrink-0" />{{ $t("setup.sources.unavailable") }}</p>
+    <p class="flex items-start gap-1.5 pt-4 text-xs text-base-content/50"><Info class="mt-px size-3.5 shrink-0" />{{ $t(isDesktop ? "setup.sources.unavailableDesktop" : "setup.sources.unavailable") }}</p>
   </SettingsCard>
 </template>

@@ -1,6 +1,6 @@
 import express, { Request, Response } from "express";
 
-import { Contact, ProfileBulkState, ProfileLinkRequest, ProfileScanState, ProfileSearchState, ProfileSuggestion, ProfilesOverview, SocialNetwork, SocialPerson } from "../../interfaces/api";
+import { Contact, PinnedProfiles, ProfileBulkState, ProfileLinkRequest, ProfileScanState, ProfileSearchState, ProfileSuggestion, ProfilesOverview, SocialNetwork, SocialPerson } from "../../interfaces/api";
 import { getFromCache, setInCache } from "../src/cache";
 import { OAuth2Client } from "../src/gapi";
 import { ContactsApi, peopleContactsApi } from "../src/cleanup/people";
@@ -18,6 +18,7 @@ import { loadProfiles, mergePeople, ProfilesData, saveProfiles, StoredLinked } f
 import { downloadImage, lookupProfileLink, networkNames, parseProfileLink, shortLink } from "../src/sources/links";
 import { photoKey } from "../src/contacts/model";
 import { getPins, photoHash, setPin } from "../src/contacts/photoPins";
+import { pinnedProfiles } from "../src/profiles/rereads";
 
 // Find profiles (issue #61): suggestions from exports, a public search and,
 // in the desktop app, a scan of the user's own followers with their login.
@@ -167,6 +168,17 @@ export function profilesRouter(options: Options = {}): express.Router {
       bulk: getFromCache(req.sessionID, "profiles_bulk"),
     };
   }
+
+  // How many pinned profiles each network could read again with the login (issue #80).
+  router.get("/profiles/pinned", (req: Request, res: Response) => {
+    const counts: PinnedProfiles = Object.fromEntries([...pinnedProfiles(getPins(req.sessionID))].map(([network, urls]) => [network, urls.length]));
+    res.send(counts);
+  });
+
+  // Desktop: which sites the app is signed in to, without reading the address book (issue #80).
+  router.get("/profiles/logins", async (req: Request, res: Response) => {
+    res.send((await scanStates(req, loadProfiles(req.sessionID))) ?? []);
+  });
 
   router.get("/profiles", async (req: Request, res: Response) => {
     const api = google(req, res);

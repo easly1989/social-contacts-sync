@@ -6,6 +6,7 @@ import { ArrowLeft, AtSign, Check, CircleCheck, Info, Phone, Send } from "lucide
 import FlowFrame from "../components/FlowFrame.vue";
 import TelegramLink from "../components/TelegramLink.vue";
 import WhatsAppLink from "../components/WhatsAppLink.vue";
+import { isDesktop } from "../settings";
 import { SessionStatus, TelegramState } from "../../../interfaces/api";
 
 // Mockup 1.4 in issue #8: WhatsApp, Telegram (issue #36) and Gravatar.
@@ -105,7 +106,7 @@ onUnmounted(() => window.clearInterval(poll));
       </section>
     </div>
 
-    <p class="mt-5 flex items-center gap-1.5 text-xs text-base-content/50"><Info class="size-3.5" />{{ $t("setup.sources.unavailable") }}</p>
+    <p class="mt-5 flex items-center gap-1.5 text-xs text-base-content/50"><Info class="size-3.5" />{{ $t(isDesktop ? "setup.sources.unavailableDesktop" : "setup.sources.unavailable") }}</p>
 
     <template #actions>
       <router-link to="/setup/signin" class="btn btn-ghost"><ArrowLeft class="size-4" />{{ $t("common.back") }}</router-link>

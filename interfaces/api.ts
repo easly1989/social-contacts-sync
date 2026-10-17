@@ -94,14 +94,14 @@ export interface RunSummary {
 export interface RunRecord extends RunSummary {
   results: ContactResult[];
   /** Desktop: pinned profiles read again with the user's login, per network (issue #79). */
-  profileReads?: Partial<Record<"instagram" | "facebook", ProfileReadsReport>>;
+  profileReads?: Partial<Record<"instagram" | "facebook" | "linkedin", ProfileReadsReport>>;
 }
 
 export interface ProfileReadsReport {
   read: number;
   /** Left for the next sync: over the cap, or after the network stopped. */
   waiting: number;
-  /** Why the network stopped: "limited", "signin", "busy" (a login scan was running) or "error:…". */
+  /** Why the network stopped: "limited", "signin", "notSignedIn" (no login in the app), "busy" (a login scan was running) or "error:…". */
   stopped?: string;
 }
 
@@ -147,7 +147,11 @@ export interface SyncOptions {
   manual_sync?: string; // "true" or "false" (since converted to string via query params)
   sources?: string; // comma-separated SourceId list in priority order; default "whatsapp"
   links_best_effort?: string; // "true": profile links also try Instagram, Facebook and LinkedIn
+  linkedin_rereads?: string; // "false": the desktop app doesn't read pinned LinkedIn profiles with the login (issue #80)
 }
+
+/** Desktop: pinned profiles each network could read again with the login (issue #80). */
+export type PinnedProfiles = Partial<Record<"instagram" | "facebook" | "linkedin", number>>;
 
 /** A profile picture looked up from a link (report and review, issue #51). */
 export interface LinkLookup {
