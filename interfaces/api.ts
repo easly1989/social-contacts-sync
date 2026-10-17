@@ -93,6 +93,16 @@ export interface RunSummary {
 
 export interface RunRecord extends RunSummary {
   results: ContactResult[];
+  /** Desktop: pinned profiles read again with the user's login, per network (issue #79). */
+  profileReads?: Partial<Record<"instagram" | "facebook", ProfileReadsReport>>;
+}
+
+export interface ProfileReadsReport {
+  read: number;
+  /** Left for the next sync: over the cap, or after the network stopped. */
+  waiting: number;
+  /** Why the network stopped: "limited", "signin", "busy" (a login scan was running) or "error:…". */
+  stopped?: string;
 }
 
 export interface SessionStatus {

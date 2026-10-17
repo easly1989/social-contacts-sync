@@ -1,6 +1,22 @@
 import { app, BrowserWindow, session, Session } from "electron";
 
-import { blockedReason, browserUserAgent, facebookExtractScript, facebookPeople, instagramPage, isAbortedLoad, linkedinPage, pause, ScannedPerson, ScanNetwork } from "./socialParse";
+import {
+  blockedReason,
+  browserUserAgent,
+  facebookExtractScript,
+  facebookPeople,
+  facebookProfile,
+  facebookProfileScript,
+  instagramPage,
+  instagramProfile,
+  isAbortedLoad,
+  linkedinPage,
+  pause,
+  ProfileRead,
+  profilePageUrl,
+  ScannedPerson,
+  ScanNetwork,
+} from "./socialParse";
 
 /*
   The experimental login scan of Find profiles (issue #61). The user logs in
@@ -100,6 +116,7 @@ export function socialLogin(network: ScanNetwork, parent?: BrowserWindow): Promi
 
 export async function socialLogout(network: ScanNetwork): Promise<void> {
   running.get(network) && (running.get(network)!.stop = true);
+  closeReader(network);
   await partition(network).clearStorageData();
 }
 
@@ -207,6 +224,71 @@ export async function socialScan(network: ScanNetwork): Promise<{ people: Scanne
   } finally {
     running.delete(network);
     if (win && !win.isDestroyed()) win.destroy();
+  }
+}
+
+/*
+  A sync reads a pinned profile again (issue #79), one at a time; the sync
+  paces the reads. One hidden window per network serves a sync's reads and
+  closes once they stop coming.
+*/
+const readers = new Map<ScanNetwork, { win: BrowserWindow; idle?: NodeJS.Timeout }>();
+
+async function reader(network: ScanNetwork): Promise<BrowserWindow> {
+  const known = readers.get(network);
+  if (known && !known.win.isDestroyed()) {
+    clearTimeout(known.idle);
+    return known.win;
+  }
+  const win = await openHidden(network);
+  readers.set(network, { win });
+  return win;
+}
+
+function release(network: ScanNetwork): void {
+  const known = readers.get(network);
+  if (known) known.idle = setTimeout(() => closeReader(network), 60_000);
+}
+
+function closeReader(network: ScanNetwork): void {
+  const known = readers.get(network);
+  readers.delete(network);
+  if (known && !known.win.isDestroyed()) known.win.destroy();
+}
+
+/** A profile's photo address and name, read with the user's login; `stopped` when the site said no. Nothing is posted or changed. */
+export async function socialProfile(network: ScanNetwork, handle: string): Promise<{ profile?: ProfileRead; missing?: boolean; stopped?: string }> {
+  const url = profilePageUrl(network, handle);
+  if (!url) return { missing: true };
+  if (!(await cookie(network, sites[network].cookie))) return { stopped: "signin" };
+  // A login scan is reading the site already: two at once would double the requests.
+  if (running.has(network)) return { stopped: "busy" };
+  try {
+    const win = await reader(network);
+    const atHome = blockedReason(200, win.webContents.getURL());
+    if (atHome) {
+      closeReader(network);
+      return { stopped: atHome };
+    }
+    if (network === "instagram") {
+      const answer = await pageFetch(win, `/api/v1/users/web_profile_info/?username=${encodeURIComponent(handle)}`, { "X-IG-App-ID": "936619743392459", "X-Requested-With": "XMLHttpRequest" });
+      const blocked = blockedReason(answer.status, answer.url, answer.body);
+      if (blocked) return { stopped: blocked };
+      if (answer.status === 404) return { missing: true };
+      if (answer.status !== 200) return { stopped: `error:${answer.status}` };
+      const profile = instagramProfile(JSON.parse(answer.body));
+      return profile ? { profile } : { missing: true };
+    }
+    await load(win, url);
+    const blocked = blockedReason(200, win.webContents.getURL());
+    if (blocked) return { stopped: blocked };
+    const profile = facebookProfile(await win.webContents.executeJavaScript(facebookProfileScript));
+    return profile ? { profile } : { missing: true };
+  } catch (e) {
+    closeReader(network);
+    return { stopped: `error:${e instanceof Error ? e.message : String(e)}` };
+  } finally {
+    release(network);
   }
 }
 

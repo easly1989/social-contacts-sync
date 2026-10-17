@@ -1,7 +1,19 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { blockedReason, browserUserAgent, facebookPeople, instagramPage, isAbortedLoad, linkedinPage, pause } from "./socialParse";
+import {
+  blockedReason,
+  browserUserAgent,
+  facebookPeople,
+  facebookProfile,
+  FacebookProfilePage,
+  instagramPage,
+  instagramProfile,
+  isAbortedLoad,
+  linkedinPage,
+  pause,
+  profilePageUrl,
+} from "./socialParse";
 
 // Shaped like the sites' answers (issue #61); the scan itself needs the real sites.
 test("Instagram followers pages: people and the next cursor", () => {
@@ -22,6 +34,39 @@ test("Instagram followers pages: people and the next cursor", () => {
   ]);
   assert.equal(page.next, "QVFE");
   assert.equal(instagramPage({ users: [], next_max_id: null }, "following").next, undefined);
+});
+
+test("one Instagram profile (issue #79): the largest photo and the name, nothing for a missing profile", () => {
+  assert.deepEqual(
+    instagramProfile({ data: { user: { username: "davide.gallo", full_name: "Davide Gallo", profile_pic_url: "https://scontent.cdninstagram.com/s150.jpg", profile_pic_url_hd: "https://scontent.cdninstagram.com/s320.jpg" } }, status: "ok" }),
+    { name: "Davide Gallo", photoUrl: "https://scontent.cdninstagram.com/s320.jpg" }
+  );
+  assert.deepEqual(instagramProfile({ data: { user: { full_name: "", profile_pic_url: "https://scontent.cdninstagram.com/s150.jpg" } } }), { name: undefined, photoUrl: "https://scontent.cdninstagram.com/s150.jpg" });
+  assert.equal(instagramProfile({ data: { user: null }, status: "ok" }), undefined);
+  assert.equal(instagramProfile("nope"), undefined);
+});
+
+test("one Facebook profile (issue #79): the profile picture is the largest picture in the header, the name its heading", () => {
+  const page: FacebookProfilePage = {
+    heading: "Davide Gallo",
+    images: [
+      { src: "https://scontent.xx.fbcdn.net/small.jpg", width: 40 },
+      { src: "https://scontent.xx.fbcdn.net/profile.jpg", width: 168 },
+      { src: "http://insecure.example/big.jpg", width: 400 },
+      { src: "https://static.example.com/other.png", width: 300 },
+    ],
+  };
+  assert.deepEqual(facebookProfile(page), { name: "Davide Gallo", photoUrl: "https://scontent.xx.fbcdn.net/profile.jpg" });
+  assert.equal(facebookProfile({ heading: "", images: [{ src: "https://scontent.xx.fbcdn.net/small.jpg", width: 40 }] }), undefined);
+});
+
+test("profile addresses the desktop app reads (issue #79): only a plain handle", () => {
+  assert.equal(profilePageUrl("instagram", "davide.gallo"), "https://www.instagram.com/davide.gallo/");
+  assert.equal(profilePageUrl("facebook", "davide.gallo"), "https://www.facebook.com/davide.gallo");
+  assert.equal(profilePageUrl("facebook", "100012345"), "https://www.facebook.com/profile.php?id=100012345");
+  assert.equal(profilePageUrl("instagram", "../accounts"), undefined);
+  assert.equal(profilePageUrl("facebook", "a/b"), undefined);
+  assert.equal(profilePageUrl("linkedin", "davidegallo"), undefined);
 });
 
 test("LinkedIn connections: profiles from `included`, with the largest picture", () => {

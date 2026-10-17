@@ -25,6 +25,8 @@ import { SimpleContact } from "./interfaces";
 import { getPlaceholders, isPlaceholder } from "./contacts/placeholders";
 import { getKeptPhotos } from "./contacts/keptPhotos";
 import { getPins, setPin } from "./contacts/photoPins";
+import { defaultRereadCap, getReads, planRereads, rereading, saveReads } from "./profiles/rereads";
+import { askDesktop } from "./desktop";
 
 /** Marks the contacts whose photo is a placeholder, or kept, from the Contacts page, and the source each photo follows. */
 export function withPlaceholders(
@@ -88,6 +90,26 @@ export async function initSync(id: string, syncOptions: SyncOptions) {
   const mode = syncMode(syncOptions);
   setInCache(id, "sync_stop", false);
 
+  // A profile read again with the login (issue #79) comes before the address a scan read.
+  const reads = getReads(id);
+  const scanned = storedProfilePhotos(loadProfiles(id).people);
+  let sources = requestedSources(syncOptions, whatsappClient, telegramConnection(id), (link) => reads[link.url]?.photoUrl ?? scanned(link));
+  const rereads =
+    process.env.SCS_DESKTOP === "1" && sources.some((s) => s.id === "links")
+      ? rereading(
+          sources.find((s) => s.id === "links")!,
+          planRereads(getPins(id), reads, Number(process.env.SCS_PROFILE_READS) || defaultRereadCap),
+          (network, handle) => askDesktop("social-profile", { network, handle }, 60_000),
+          {
+            record: (url, read) => {
+              reads[url] = read;
+              saveReads(id, reads);
+            },
+          }
+        )
+      : undefined;
+  if (rereads) sources = sources.map((s) => (s.id === "links" ? rereads.source : s));
+
   try {
     const result = await runSync(
       {
@@ -103,7 +125,7 @@ export async function initSync(id: string, syncOptions: SyncOptions) {
         addLink: async (contactId, url) => void (await addContactLink(peopleContactsApi(gAuth), contactId, url)),
         savePin: (contactId, pin) => setPin(id, contactId, pin),
       },
-      requestedSources(syncOptions, whatsappClient, telegramConnection(id), storedProfilePhotos(loadProfiles(id).people)),
+      sources,
       mode,
       {
         progress: (update) => sendEvent(ws, EventType.SyncProgress, update),
@@ -134,6 +156,7 @@ export async function initSync(id: string, syncOptions: SyncOptions) {
         },
       }
     );
+    if (rereads) result.run.profileReads = rereads.report();
     saveRun(id, result);
     // The dashboard's photo coverage is out of date now.
     deleteFromCache(id, "google_stats");
