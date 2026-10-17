@@ -2,7 +2,7 @@ import { mkdirSync } from "fs";
 import path from "path";
 import { Page, Request, Route, WebSocketRoute, expect } from "@playwright/test";
 
-import { PinnedProfiles, ProfileScanState, ProfilesOverview, Contact, ContactLabel, TelegramState, CleanupActionSummary, CleanupScan, DesktopInfo, EventType, MergeRequest, GoogleAccount, GoogleStats, RunRecord, SessionStatus, UpdateCheck } from "../../interfaces/api";
+import { LinkedNetworks, PinnedProfiles, ProfileScanState, ProfilesOverview, Contact, ContactLabel, TelegramState, CleanupActionSummary, CleanupScan, DesktopInfo, EventType, MergeRequest, GoogleAccount, GoogleStats, RunRecord, SessionStatus, UpdateCheck } from "../../interfaces/api";
 import { avatars } from "./avatars";
 
 /**
@@ -65,6 +65,18 @@ export class FakeBackend {
   /** Sync's To review and Sources (issues #61, #81): what the page reads, and every request it sends. */
   profiles?: ProfilesOverview;
   profileRequests: { route: string; body?: any; query?: string }[] = [];
+  /** Sync › Sources (issue #83): profiles linked on contacts, per network. */
+  linkedNetworks: LinkedNetworks = {
+    contacts: 233,
+    profiles: 257,
+    networks: {
+      instagram: { profiles: 142, oldestRead: new Date(Date.now() - 9 * 86_400_000).toISOString() },
+      linkedin: { profiles: 61 },
+      facebook: { profiles: 38 },
+      bluesky: { profiles: 12 },
+      github: { profiles: 4 },
+    },
+  };
   /** Desktop: pinned profiles each network could read again (issue #80). */
   pinnedProfiles: PinnedProfiles = {};
   /** Desktop: the sites the app is signed in to. */
@@ -290,6 +302,7 @@ export class FakeBackend {
   private profilesRoute(route: Route, pathname: string, request: Request) {
     if (pathname === "/api/profiles/pinned") return route.fulfill({ json: this.pinnedProfiles });
     if (pathname === "/api/profiles/logins") return route.fulfill({ json: this.socialLogins });
+    if (pathname === "/api/profiles/networks") return route.fulfill({ json: this.linkedNetworks });
     if (pathname === "/api/profiles/count") return route.fulfill({ json: { count: this.profiles?.suggestions.length ?? 0 } });
     const data = this.profiles!;
     const sub = pathname.replace("/api/profiles", "") || "/";

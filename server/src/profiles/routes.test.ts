@@ -8,7 +8,7 @@ import { profilesRouter, ScanNetwork } from "../../routes/profiles";
 import { deleteFromCache, setInCache } from "../cache";
 import { setKeptPhoto } from "../contacts/keptPhotos";
 import { getPins, photoHash, setPin } from "../contacts/photoPins";
-import { ReadProfile } from "./rereads";
+import { ReadProfile, saveReads } from "./rereads";
 import { loadProfiles, mergePeople, saveProfiles } from "./store";
 import { loadQueue, queuePhotos } from "./queue";
 import { saveLookup } from "../linkLookups";
@@ -343,6 +343,17 @@ test("To review: a contact whose photo is kept shows no waiting photos (issue #8
   queuePhotos("profiles-82d", { id: "people/ec" }, "photo", [{ photo: Buffer.alloc(1500, 4).toString("base64"), source: "whatsapp", matchedBy: "+39 333 1" }]);
   setKeptPhoto("profiles-82d", "people/ec", true);
   assert.deepEqual((await call("GET", "/profiles")).json.suggestions, []);
+});
+
+test("Sources: the profiles linked on contacts per network, and the oldest read (issue #83)", async (t) => {
+  const { google, call } = await start(t, "profiles-83");
+  google.people.get("people/dg")!.urls = [{ value: "https://www.instagram.com/davide.gallo/" }, { value: "https://github.com/dgallo" }, { value: "https://example.com" }];
+  google.people.get("people/ec")!.urls = [{ value: "instagram.com/elena_conti" }, { value: "https://instagram.com/elena_conti?hl=it" }];
+  saveReads("profiles-83", { "https://instagram.com/davide.gallo": { readAt: "2026-10-08T10:00:00.000Z" }, "https://instagram.com/elena_conti": { readAt: "2026-10-12T10:00:00.000Z" } });
+  assert.deepEqual(await call("GET", "/profiles/networks"), {
+    status: 200,
+    json: { contacts: 2, profiles: 3, networks: { instagram: { profiles: 2, oldestRead: "2026-10-08T10:00:00.000Z" }, github: { profiles: 1 } } },
+  });
 });
 
 test("pinned profiles each network could read again (issue #80)", async (t) => {

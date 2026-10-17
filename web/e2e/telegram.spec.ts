@@ -66,8 +66,8 @@ test("once connected, Telegram is a sync source and can be signed out in Setting
   await expect(page.getByText("Telegram").locator("..").locator("..")).toContainText("Connected");
 
   await page.goto("/app/sync?tab=sources");
-  await expect(page.getByRole("checkbox", { name: "Telegram" })).toBeEnabled();
-  await page.getByRole("checkbox", { name: "Telegram" }).check();
+  await expect(page.getByRole("checkbox", { name: "Telegram", exact: true })).toBeEnabled();
+  await page.getByRole("checkbox", { name: "Telegram", exact: true }).check();
   await page.getByRole("tab", { name: "Run" }).click();
   await page.getByRole("button", { name: "Start sync" }).click();
   await expect.poll(() => backend.requested("/api/init_sync")).toBeTruthy();

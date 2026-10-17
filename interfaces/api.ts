@@ -170,7 +170,7 @@ export interface SyncOptions {
   decide_all?: string;
   reads_cap?: string; // desktop: profiles read with the login per network and sync
   sources?: string; // comma-separated SourceId list in priority order; default "whatsapp"
-  links_best_effort?: string; // "true": profile links also try Instagram, Facebook and LinkedIn
+  link_networks?: string; // profile link networks turned on in Sync › Sources, comma-separated (issue #83)
   linkedin_rereads?: string; // "false": the desktop app doesn't read pinned LinkedIn profiles with the login (issue #80)
 }
 
@@ -178,6 +178,13 @@ export interface SyncOptions {
 export type PinnedProfiles = Partial<Record<"instagram" | "facebook" | "linkedin", number>>;
 
 /** A profile picture looked up from a link (report and review, issue #51). */
+/** Sync › Sources (issue #83): contacts with profile links, and per network its profiles and the oldest read with the login. */
+export interface LinkedNetworks {
+  contacts: number;
+  profiles: number;
+  networks: Partial<Record<string, { profiles: number; oldestRead?: string }>>;
+}
+
 export interface LinkLookup {
   /** Refers to the looked-up photo on the server, to save it. */
   token: string;

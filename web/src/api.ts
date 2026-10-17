@@ -1,4 +1,4 @@
-import { PinnedProfiles, ProfileBulkState, ProfileLinked, ProfileLinkRequest, ProfileScanState, ProfileSearchState, ProfilesOverview, SocialNetwork, Contact, ContactInput, ContactLabel, ContactsList, ContactResult, LinkLookup, SyncCounters, TelegramState, CleanupActionSummary, CleanupScan, CleanupSummary, DesktopInfo, DuplicateGroup, GoogleAccount, MergeRequest, GoogleStats, RunRecord, RunSummary, SessionStatus, UpdateCheck } from "../../interfaces/api";
+import { LinkedNetworks, PinnedProfiles, ProfileBulkState, ProfileLinked, ProfileLinkRequest, ProfileScanState, ProfileSearchState, ProfilesOverview, SocialNetwork, Contact, ContactInput, ContactLabel, ContactsList, ContactResult, LinkLookup, SyncCounters, TelegramState, CleanupActionSummary, CleanupScan, CleanupSummary, DesktopInfo, DuplicateGroup, GoogleAccount, MergeRequest, GoogleStats, RunRecord, RunSummary, SessionStatus, UpdateCheck } from "../../interfaces/api";
 
 // Small typed wrappers around the server API.
 
@@ -104,6 +104,7 @@ export const api = {
   profilesCount: () => get<{ count: number }>("/api/profiles/count"),
   /** Desktop: pinned profiles each network could read again with the login (issue #80). */
   pinnedProfiles: () => get<PinnedProfiles>("/api/profiles/pinned"),
+  linkedNetworks: () => get<LinkedNetworks>("/api/profiles/networks"),
   /** Desktop: which sites the app is signed in to. */
   socialLogins: () => get<ProfileScanState[]>("/api/profiles/logins"),
   importProfiles: async (network: "instagram" | "linkedin", file: File) =>

@@ -1,6 +1,6 @@
 import express, { Request, Response } from "express";
 
-import { Contact, PinnedProfiles, ProfileBulkState, ProfileLinkRequest, ProfileScanState, ProfileSearchState, ProfileSuggestion, ProfilesOverview, SocialNetwork, SocialPerson } from "../../interfaces/api";
+import { Contact, LinkedNetworks, PinnedProfiles, ProfileBulkState, ProfileLinkRequest, ProfileScanState, ProfileSearchState, ProfileSuggestion, ProfilesOverview, SocialNetwork, SocialPerson } from "../../interfaces/api";
 import { getFromCache, setInCache } from "../src/cache";
 import { OAuth2Client } from "../src/gapi";
 import { ContactsApi, peopleContactsApi } from "../src/cleanup/people";
@@ -15,10 +15,10 @@ import { parseInstagramExport, parseLinkedInConnections } from "../src/profiles/
 import { candidatesFor } from "../src/profiles/match";
 import { runSearch, SearchNetwork, searchNetworks } from "../src/profiles/search";
 import { loadProfiles, mergePeople, ProfilesData, saveProfiles, StoredLinked } from "../src/profiles/store";
-import { downloadImage, lookupProfileLink, networkNames, parseProfileLink, shortLink } from "../src/sources/links";
+import { downloadImage, lookupProfileLink, networkNames, parseProfileLink, ProfileLink, shortLink } from "../src/sources/links";
 import { photoKey } from "../src/contacts/model";
 import { getPins, photoHash, setPin } from "../src/contacts/photoPins";
-import { desktopReader, lookupWithLogin, pinnedProfiles, ReadProfile, readsWithLogin, RereadNetwork } from "../src/profiles/rereads";
+import { desktopReader, getReads, lookupWithLogin, pinnedProfiles, ReadProfile, readsWithLogin, RereadNetwork } from "../src/profiles/rereads";
 import { cachedPhoto, cachePhoto } from "../src/profiles/photoCache";
 import { loadQueue, publicEntry, QueueData, queuedImage, recordApplied, resolveEntry, saveQueue } from "../src/profiles/queue";
 import { getLookup } from "../src/linkLookups";
@@ -195,6 +195,31 @@ export function profilesRouter(options: Options = {}): express.Router {
   router.get("/profiles/pinned", (req: Request, res: Response) => {
     const counts: PinnedProfiles = Object.fromEntries([...pinnedProfiles(getPins(req.sessionID))].map(([network, urls]) => [network, urls.length]));
     res.send(counts);
+  });
+
+  // Sync › Sources (issue #83): the profiles linked on contacts, per network, and the oldest read with the login.
+  router.get("/profiles/networks", async (req: Request, res: Response) => {
+    const api = google(req, res);
+    if (!api) return;
+    try {
+      const reads = getReads(req.sessionID);
+      const byNetwork = new Map<string, Set<string>>();
+      let withLinks = 0;
+      for (const contact of await contacts(req, api)) {
+        const links = contact.urls.map((u) => parseProfileLink(u.value)).filter((l): l is ProfileLink => Boolean(l));
+        if (links.length) withLinks++;
+        for (const link of links) byNetwork.set(link.network, (byNetwork.get(link.network) ?? new Set()).add(link.url));
+      }
+      const networks: LinkedNetworks["networks"] = {};
+      for (const [network, urls] of byNetwork) {
+        const oldestRead = [...urls].map((url) => reads[url]?.readAt).filter((at): at is string => Boolean(at)).sort()[0];
+        networks[network] = { profiles: urls.size, ...(oldestRead ? { oldestRead } : {}) };
+      }
+      const body: LinkedNetworks = { contacts: withLinks, profiles: [...byNetwork.values()].reduce((n, urls) => n + urls.size, 0), networks };
+      res.send(body);
+    } catch (e) {
+      failed(req, res, "Counting linked profiles", e);
+    }
   });
 
   // Desktop: which sites the app is signed in to, without reading the address book (issue #80).

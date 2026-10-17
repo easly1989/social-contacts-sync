@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { onMounted, onUnmounted, ref } from "vue";
-import { Check, CircleDashed, FlaskConical, Info } from "lucide-vue-next";
+import { Check, CircleDashed, Info } from "lucide-vue-next";
 
 import SettingsCard from "./SettingsCard.vue";
 import SourceMark from "../SourceMark.vue";
@@ -8,7 +8,7 @@ import TelegramLink from "../TelegramLink.vue";
 import WhatsAppLink from "../WhatsAppLink.vue";
 import { api } from "../../api";
 import { isDesktop } from "../../settings";
-import { bestEffortLinks, bestEffortNetworks, linkedinRereads, stableNetworks } from "../../profileLinks";
+import { linkedinRereads, stableNetworks } from "../../profileLinks";
 import { ProfileScanState, SessionStatus } from "../../../../interfaces/api";
 
 const status = ref<SessionStatus>();
@@ -113,16 +113,11 @@ onUnmounted(() => window.clearInterval(poll));
           </ul>
           <router-link v-if="logins.some((n) => !n.loggedIn)" to="/app/sync?tab=sources" class="btn btn-sm mt-3">{{ $t("links.signInFromProfiles") }}</router-link>
         </div>
-        <label v-else class="flex cursor-pointer items-start gap-3 rounded-xl border border-base-300 p-3">
-          <input v-model="bestEffortLinks" type="checkbox" class="toggle toggle-primary toggle-sm mt-0.5" />
-          <span class="flex-1">
-            <span class="flex flex-wrap items-center gap-2 text-sm font-medium">{{ $t("links.bestEffort") }}<span class="badge badge-warning badge-soft badge-xs">{{ $t("links.unofficial") }}</span></span>
-            <span class="mt-1 block text-xs text-base-content/60">{{ $t("links.bestEffortText") }}</span>
-            <span class="mt-2 flex flex-wrap gap-1.5">
-              <span v-for="n in bestEffortNetworks" :key="n" class="inline-flex items-center gap-1 rounded-full border border-base-300 px-2 py-0.5 text-xs text-base-content/60"><FlaskConical class="size-3" />{{ n }}</span>
-            </span>
-          </span>
-        </label>
+        <!-- Which networks a sync reads is chosen in Sync › Sources (issue #83). -->
+        <p class="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-xl border border-base-300 p-3 text-sm" data-testid="settings-link-networks">
+          <span class="min-w-[12rem] flex-1">{{ $t("links.networksHint") }}</span>
+          <router-link to="/app/sync?tab=sources" class="btn btn-sm">{{ $t("links.networksLink") }}</router-link>
+        </p>
         <label v-if="isDesktop" class="flex cursor-pointer items-start gap-3 rounded-xl border border-base-300 p-3" data-testid="settings-linkedin-rereads">
           <input v-model="linkedinRereads" type="checkbox" class="toggle toggle-primary toggle-sm mt-0.5" />
           <span class="flex-1">

@@ -2,8 +2,8 @@ import { computed, reactive } from "vue";
 
 import { api } from "./api";
 import { addHandler } from "./services/ws";
-import { bestEffortLinks, linkedinRereads } from "./profileLinks";
-import { syncPrefs } from "./syncPrefs";
+import { linkedinRereads } from "./profileLinks";
+import { networksOn, syncPrefs } from "./syncPrefs";
 import { EventType, SourceId, SyncCounters, SyncProgress } from "../../interfaces/api";
 
 /*
@@ -85,7 +85,7 @@ export function startRun(sources: SourceId[]): void {
     look_different: String(options.lookDifferent),
     decide_all: String(options.decideAll),
     reads_cap: String(readsCap),
-    links_best_effort: String(bestEffortLinks.value),
+    link_networks: networksOn.value.join(","),
     linkedin_rereads: String(linkedinRereads.value),
   });
   void fetch(`/api/init_sync?${params}`, { credentials: "include" });

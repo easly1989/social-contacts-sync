@@ -12,7 +12,7 @@ import { isDesktop } from "../../settings";
 import { linkedinNoticeSeen, linkedinRereads } from "../../profileLinks";
 import { networkInfo } from "../../profileNetworks";
 import { resetRun, run, running, startRun, stopRun } from "../../runState";
-import { syncPrefs } from "../../syncPrefs";
+import { networksOff, syncPrefs } from "../../syncPrefs";
 import { GoogleStats, PinnedProfiles, RunOptions, SessionStatus, SourceId } from "../../../../interfaces/api";
 
 // Sync › Run (issue #82, mockups in #76): what a sync does, then its progress.
@@ -44,7 +44,7 @@ const selected = computed(() => syncPrefs.value.order.filter((s) => available(s)
 const withoutPhoto = computed(() => (stats.value ? stats.value.totalContacts - stats.value.withPhoto : undefined));
 // Desktop: pinned profiles read again with the login, per network up to the cap.
 const toRead = computed(() =>
-  selected.value.includes("links") ? Object.entries(pinned.value).reduce((n, [network, count]) => n + (network === "linkedin" && !linkedinRereads.value ? 0 : Math.min(count ?? 0, syncPrefs.value.readsCap)), 0) : 0
+  selected.value.includes("links") ? Object.entries(pinned.value).reduce((n, [network, count]) => n + ((network === "linkedin" && !linkedinRereads.value) || networksOff.value.includes(network) ? 0 : Math.min(count ?? 0, syncPrefs.value.readsCap)), 0) : 0
 );
 // Google takes about 40 photos a minute; a profile is read every 3–7 seconds.
 const estimate = computed(() => {
@@ -57,7 +57,7 @@ const estimate = computed(() => {
 const linkedinNotice = ref<HTMLDialogElement>();
 async function start(): Promise<void> {
   await pinnedLoaded;
-  if (isDesktop.value && linkedinRereads.value && !linkedinNoticeSeen.value && selected.value.includes("links") && pinned.value.linkedin) return linkedinNotice.value?.showModal();
+  if (isDesktop.value && linkedinRereads.value && !linkedinNoticeSeen.value && selected.value.includes("links") && !networksOff.value.includes("linkedin") && pinned.value.linkedin) return linkedinNotice.value?.showModal();
   startRun(selected.value);
 }
 function answerNotice(keepReading: boolean): void {

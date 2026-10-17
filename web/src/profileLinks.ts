@@ -1,11 +1,20 @@
 import { ref, watch } from "vue";
 
 import { ApiError } from "./api";
+import { networkInfo } from "./profileNetworks";
 
-// Profile links (issue #51): which networks are read, and the user's choice
-// for the unofficial ones, kept in this browser like the sync setup.
+// Profile links (issue #51): which networks are read, and the user's choices, kept in this browser like the sync setup.
 export const stableNetworks = ["X", "Telegram", "YouTube", "Bluesky", "Mastodon", "GitHub"];
-export const bestEffortNetworks = ["Instagram", "Facebook", "LinkedIn"];
+
+/** Every network a profile link can be on (issue #83), as Sync › Sources lists them. */
+export const linkNetworks: Record<string, { name: string; color: string }> = {
+  ...networkInfo,
+  x: { name: "X", color: "#536471" },
+  telegram: { name: "Telegram", color: "#229ED9" },
+  youtube: { name: "YouTube", color: "#E62117" },
+};
+/** Read with the login in the desktop app; on the web, as an anonymous visitor they often turn away. */
+export const loginNetworks = ["instagram", "facebook", "linkedin"];
 
 /** The message for a failed link lookup: `links.errors.<code>` with the network's name. */
 export function lookupError(e: unknown, t: (key: string, values?: Record<string, unknown>) => string): string {
@@ -33,9 +42,6 @@ function storedFlag(key: string, fallback: boolean) {
   });
   return flag;
 }
-
-/** Also try Instagram, Facebook and LinkedIn during syncs. Off by default. */
-export const bestEffortLinks = storedFlag("scs.links.bestEffort", false);
 
 /** Desktop: read pinned LinkedIn profiles one by one with the login (issue #80). On by default. */
 export const linkedinRereads = storedFlag("scs.links.linkedinRereads", true);
