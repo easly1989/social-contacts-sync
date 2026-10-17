@@ -127,6 +127,9 @@ test("report: pinned profiles read again with the login, and why a network stopp
   );
   await expect(page.getByTestId("profile-reads-facebook")).toHaveText("Facebook: 1 profile read again with your login.");
   await screenshot(page, "25d-report-profile-reads", { fullPage: false });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.getByTestId("profile-reads-instagram").scrollIntoViewIfNeeded();
+  await screenshot(page, "25e-report-profile-reads-phone", { fullPage: false });
 });
 
 test("report: kept Google photos aren't 'no photo found', and an error stays one line", async ({ page }) => {
