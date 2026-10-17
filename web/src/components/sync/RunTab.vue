@@ -162,7 +162,7 @@ const stoppedReason = (network: keyof typeof networkInfo, stopped: string) => t(
     <section class="rounded-box border bg-base-100 p-6" :class="done ? 'border-success/40' : 'border-base-300'">
       <div class="flex flex-wrap items-center gap-3">
         <span v-if="done" class="grid size-10 place-items-center rounded-full bg-success text-success-content"><Check class="size-5" /></span>
-        <div class="flex-1">
+        <div class="min-w-[14rem] flex-1">
           <h2 class="text-lg font-bold">{{ title }}</h2>
           <p class="text-sm text-base-content/60">{{ done ? $t("syncRun.checked", { checked: number(run.checked, locale), total: number(run.total ?? run.checked, locale) }) : eta ? $t("syncRun.eta", { minutes: eta }) : $t("runTab.keepOpen") }}</p>
         </div>
