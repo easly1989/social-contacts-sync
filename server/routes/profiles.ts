@@ -175,6 +175,11 @@ export function profilesRouter(options: Options = {}): express.Router {
     res.send(counts);
   });
 
+  // Desktop: which sites the app is signed in to, without reading the address book (issue #80).
+  router.get("/profiles/logins", async (req: Request, res: Response) => {
+    res.send((await scanStates(req, loadProfiles(req.sessionID))) ?? []);
+  });
+
   router.get("/profiles", async (req: Request, res: Response) => {
     const api = google(req, res);
     if (!api) return;

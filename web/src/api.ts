@@ -101,6 +101,8 @@ export const api = {
   profiles: () => get<ProfilesOverview>("/api/profiles"),
   /** Desktop: pinned profiles each network could read again with the login (issue #80). */
   pinnedProfiles: () => get<PinnedProfiles>("/api/profiles/pinned"),
+  /** Desktop: which sites the app is signed in to. */
+  socialLogins: () => get<ProfileScanState[]>("/api/profiles/logins"),
   importProfiles: async (network: "instagram" | "linkedin", file: File) =>
     send<{ read: number; added: number }>("POST", `/api/profiles/import?network=${network}&file=${encodeURIComponent(file.name)}`, await file.text(), "text/plain"),
   searchProfiles: (networks: SocialNetwork[]) => post<ProfileSearchState>("/api/profiles/search", { networks }),

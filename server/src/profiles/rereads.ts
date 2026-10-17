@@ -59,6 +59,8 @@ export interface RereadPlan {
   selected: Set<string>;
   /** Per network, how many are left over the cap. */
   waiting: Partial<Record<RereadNetwork, number>>;
+  /** Per network the sync reads with the login, what the cap leaves for links that aren't pinned. */
+  spare: Partial<Record<RereadNetwork, number>>;
 }
 
 /** Pinned profiles that can be read with the login, by network (suspended pins aren't followed). */
@@ -75,14 +77,20 @@ export function pinnedProfiles(pins: Record<string, PhotoPin>, networks: readonl
   return byNetwork;
 }
 
-/** Which pinned profiles this sync reads again: per network, those read longest ago (never read first), up to the cap. */
+/**
+ * Which profiles this sync reads with the login: per network the pinned
+ * ones first, those read longest ago (never read first) up to the cap; what
+ * the cap leaves goes to other links as the sync meets them.
+ */
 export function planRereads(pins: Record<string, PhotoPin>, reads: Record<string, StoredRead>, cap: number, networks: readonly RereadNetwork[] = rereadNetworks): RereadPlan {
   const byNetwork = pinnedProfiles(pins, networks);
-  const plan: RereadPlan = { selected: new Set(), waiting: {} };
-  for (const [network, urls] of byNetwork) {
+  const plan: RereadPlan = { selected: new Set(), waiting: {}, spare: {} };
+  for (const network of networks) {
+    const urls = byNetwork.get(network) ?? [];
     urls.sort((a, b) => (reads[a]?.readAt ?? "").localeCompare(reads[b]?.readAt ?? ""));
     for (const url of urls.slice(0, cap)) plan.selected.add(url);
-    plan.waiting[network] = Math.max(0, urls.length - cap);
+    if (urls.length) plan.waiting[network] = Math.max(0, urls.length - cap);
+    plan.spare[network] = Math.max(0, cap - urls.length);
   }
   return plan;
 }
@@ -95,19 +103,26 @@ export interface RereadOptions {
 }
 
 /**
- * The links source, reading each planned profile again before its photo is
- * looked up, 3–7 seconds after the previous read.
+ * The links source, reading each profile in the plan with the login before
+ * its photo is looked up, 3–7 seconds after the previous read.
  */
 export function rereading(inner: PhotoSource, plan: RereadPlan, read: ReadProfile, options: RereadOptions): { source: PhotoSource; report(): RunReads } {
   const sleep = options.sleep ?? ((ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms)));
   const random = options.random ?? Math.random;
   const done = new Set<string>();
+  const readOk = new Set<string>();
+  const spare = { ...plan.spare };
   const stats: RunReads = {};
   let last = 0;
 
   async function reread(link: ProfileLink): Promise<void> {
     const network = link.network as RereadNetwork;
-    if (!plan.selected.has(link.url) || done.has(link.url) || stats[network]?.stopped) return;
+    if (done.has(link.url) || stats[network]?.stopped) return;
+    if (!plan.selected.has(link.url)) {
+      // A link that isn't pinned: read while the cap leaves room.
+      if (!spare[network]) return;
+      spare[network]!--;
+    }
     done.add(link.url);
     const entry = (stats[network] ??= { read: 0, waiting: 0 });
     const wait = last + 3000 + 4000 * random() - Date.now();
@@ -119,6 +134,7 @@ export function rereading(inner: PhotoSource, plan: RereadPlan, read: ReadProfil
       return;
     }
     entry.read++;
+    readOk.add(link.url);
     // A missing profile is recorded too, so it waits its turn like the others.
     options.record(link.url, { ...answer.profile, readAt: new Date().toISOString() });
   }
@@ -141,8 +157,8 @@ export function rereading(inner: PhotoSource, plan: RereadPlan, read: ReadProfil
       for (const network of rereadNetworks) {
         const planned = [...plan.selected].filter((url) => parseProfileLink(url)?.network === network);
         const entry = stats[network];
-        // After a stop, the planned profiles not read wait for the next sync.
-        const notReached = entry?.stopped ? planned.filter((url) => !done.has(url)).length + 1 : 0;
+        // After a stop, the pinned profiles not read wait for the next sync.
+        const notReached = entry?.stopped ? planned.filter((url) => !readOk.has(url)).length : 0;
         const waiting = (plan.waiting[network] ?? 0) + notReached;
         if (entry || waiting) report[network] = { read: entry?.read ?? 0, waiting, ...(entry?.stopped ? { stopped: entry.stopped } : {}) };
       }

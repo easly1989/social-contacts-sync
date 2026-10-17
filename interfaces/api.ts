@@ -101,7 +101,7 @@ export interface ProfileReadsReport {
   read: number;
   /** Left for the next sync: over the cap, or after the network stopped. */
   waiting: number;
-  /** Why the network stopped: "limited", "signin", "busy" (a login scan was running) or "error:…". */
+  /** Why the network stopped: "limited", "signin", "notSignedIn" (no login in the app), "busy" (a login scan was running) or "error:…". */
   stopped?: string;
 }
 

@@ -90,12 +90,15 @@ export async function initSync(id: string, syncOptions: SyncOptions) {
   const mode = syncMode(syncOptions);
   setInCache(id, "sync_stop", false);
 
-  // A profile read again with the login (issue #79) comes before the address a scan read.
+  // A profile read with the login (issues #79, #80) comes before the address a scan read.
   const reads = getReads(id);
   const scanned = storedProfilePhotos(loadProfiles(id).people);
-  let sources = requestedSources(syncOptions, whatsappClient, telegramConnection(id), (link) => reads[link.url]?.photoUrl ?? scanned(link));
+  const desktop = process.env.SCS_DESKTOP === "1";
+  // The desktop app reads Instagram, Facebook and LinkedIn with the login only: never as an anonymous visitor.
+  const options = desktop ? { ...syncOptions, links_best_effort: "false" } : syncOptions;
+  let sources = requestedSources(options, whatsappClient, telegramConnection(id), (link) => reads[link.url]?.photoUrl ?? scanned(link));
   const rereads =
-    process.env.SCS_DESKTOP === "1" && sources.some((s) => s.id === "links")
+    desktop && sources.some((s) => s.id === "links")
       ? rereading(
           sources.find((s) => s.id === "links")!,
           planRereads(

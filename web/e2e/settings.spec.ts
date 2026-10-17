@@ -139,6 +139,12 @@ test("desktop: LinkedIn reads are on by default, said once before a sync, and ca
   const setting = page.getByTestId("settings-linkedin-rereads");
   await expect(setting.getByRole("checkbox")).toBeChecked();
   await expect(setting).toContainText("LinkedIn may show this to the person as a profile visit from you.");
+  // Instagram, Facebook and LinkedIn are read with the login only: no anonymous visits to turn on.
+  const logins = page.getByTestId("settings-social-logins");
+  await expect(logins).toContainText("Instagram · signed in");
+  await expect(logins).toContainText("Facebook · not signed in");
+  await expect(logins.getByRole("link", { name: "Sign in from Find profiles" })).toHaveAttribute("href", "/app/profiles");
+  await expect(page.getByText("Also try Instagram, Facebook and LinkedIn")).toHaveCount(0);
   await setting.scrollIntoViewIfNeeded();
   await screenshot(page, "26b-settings-linkedin-rereads", { fullPage: false });
 
@@ -213,6 +219,13 @@ test("web: only the sections that apply, without desktop calls", async ({ page }
   await nav.getByRole("link", { name: "Google account" }).click();
   await expect(page.getByRole("button", { name: "Sign out" })).toHaveCount(0);
   expect(backend.count("/api/desktop/info")).toBe(0);
+
+  // No login reads on the web: the anonymous visits stay a choice, and LinkedIn's setting isn't there (issue #80).
+  await nav.getByRole("link", { name: "Sources" }).click();
+  await expect(page.getByText("Also try Instagram, Facebook and LinkedIn")).toBeVisible();
+  await expect(page.getByTestId("settings-social-logins")).toHaveCount(0);
+  await expect(page.getByTestId("settings-linkedin-rereads")).toHaveCount(0);
+  expect(backend.count("/api/profiles/logins")).toBe(0);
 });
 
 test("settings on a phone use a section picker", async ({ page }) => {

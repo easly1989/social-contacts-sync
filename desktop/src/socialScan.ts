@@ -261,7 +261,7 @@ function closeReader(network: ScanNetwork): void {
 export async function socialProfile(network: ScanNetwork, handle: string): Promise<{ profile?: ProfileRead; missing?: boolean; stopped?: string }> {
   const url = profilePageUrl(network, handle);
   if (!url) return { missing: true };
-  if (!(await cookie(network, sites[network].cookie))) return { stopped: "signin" };
+  if (!(await cookie(network, sites[network].cookie))) return { stopped: "notSignedIn" };
   // A login scan is reading the site already: two at once would double the requests.
   if (running.has(network)) return { stopped: "busy" };
   try {
