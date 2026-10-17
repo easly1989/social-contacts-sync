@@ -104,6 +104,7 @@ test("history: syncs, reviews and the profiles linked in To review, with undo (i
   await page.goto("/app/history");
   const rows = page.getByRole("row");
   await expect(rows).toHaveCount(4);
+  await screenshot(page, "24a-history-all");
   await page.getByRole("tab", { name: "Reviews" }).click();
   await expect(rows).toHaveCount(2);
   await expect(rows.nth(1)).toContainText("Decisions in To review");
