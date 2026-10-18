@@ -15,6 +15,7 @@ import { loadQueue, queuePhotos, saveQueue } from "./queue";
 import { cachePhoto } from "./photoCache";
 import { saveLookup } from "../linkLookups";
 import { parseProfileLink } from "../sources/links";
+import { WhatsAppLookup } from "../sources/whatsapp";
 import { FakeContacts } from "../cleanup/fakeContacts";
 import { Person } from "../cleanup/people";
 
@@ -33,6 +34,8 @@ async function start(t: { after(fn: () => void): void }, sessionId: string, logi
   const desktopCalls: string[] = [];
   // `down`: the sites' image addresses have expired.
   const web = { down: false };
+  // The connected WhatsApp, if any (issue #85).
+  const whatsapp: { lookup?: WhatsAppLookup } = {};
   const desktop = {
     status: async (): Promise<ProfileScanState[]> => [{ network: "instagram", loggedIn: true, account: "easly1989" }],
     login: async (network: ScanNetwork) => (desktopCalls.push(`login ${network}`), { network, loggedIn: true }),
@@ -52,7 +55,7 @@ async function start(t: { after(fn: () => void): void }, sessionId: string, logi
     (req as unknown as { sessionID: string }).sessionID = sessionId;
     next();
   });
-  app.use("/api", profilesRouter({ contactsApi: () => google, desktop, fetchImpl, sleep: async () => {}, loginReader: () => loginReader }));
+  app.use("/api", profilesRouter({ contactsApi: () => google, desktop, fetchImpl, sleep: async () => {}, loginReader: () => loginReader, whatsapp: async () => whatsapp.lookup }));
   app.use("/api", runsRouter({ contactsApi: () => google }));
   setInCache(sessionId, "gauth", {});
   const server = app.listen(0, "127.0.0.1");
@@ -73,7 +76,7 @@ async function start(t: { after(fn: () => void): void }, sessionId: string, logi
     }
     assert.fail("undo didn't finish");
   };
-  return { google, call, desktopCalls, base, web, undo };
+  return { google, call, desktopCalls, base, web, undo, whatsapp };
 }
 
 test("import, search and scan feed one review queue; link with photo, then undo", async (t) => {
@@ -454,4 +457,33 @@ test("History: links and photos from To review before issue #84 become Review en
 
   await undo(runs[1].id, [1]);
   assert.deepEqual(google.people.get("people/dg")!.urls, []);
+});
+
+test("Dashboard: the address book in three parts and what to do next, from stored state (issue #85)", async (t) => {
+  const { google, call, whatsapp } = await start(t, "profiles-85");
+  // Mamma: a linked Instagram profile whose photo a scan read. Davide: a WhatsApp photo waiting in To review, and a LinkedIn suggestion.
+  google.people.get("people/m")!.urls = [{ value: "https://www.instagram.com/mamma.r/", type: "profile" }];
+  google.people.set("people/nn", { resourceName: "people/nn", names: [{ displayName: "Nora Neri" }], phoneNumbers: [{ value: "+39 333 000 0000" }] });
+  const data = loadProfiles("profiles-85");
+  mergePeople(data, [{ id: "instagram:mamma.r", network: "instagram", url: "https://instagram.com/mamma.r", handle: "mamma.r", photoUrl: "https://scontent.cdninstagram.com/m.jpg", source: "scan" }]);
+  data.searches.bluesky = "2026-10-10T09:00:00.000Z";
+  saveProfiles("profiles-85", data);
+  await call("POST", "/profiles/import?network=linkedin", "First Name,Last Name,URL\nDavide,Gallo,https://www.linkedin.com/in/davidegallo", "text/plain");
+  queuePhotos("profiles-85", { id: "people/dg", name: "Davide Gallo" }, "photo", [{ photo: Buffer.alloc(1500, 4).toString("base64"), source: "whatsapp", matchedBy: "+39 338 555 0412" }]);
+  // Elena's photo was changed outside the app.
+  queuePhotos("profiles-85", { id: "people/ec" }, "changed", [], { source: "links", network: "Instagram", matchedBy: "instagram.com/elena_conti" });
+
+  const before = await call("GET", "/profiles/coverage");
+  assert.deepEqual(before, {
+    status: 200,
+    json: {
+      total: 4, withPhoto: 1, ready: 2, readySources: ["links", "whatsapp"], noSource: 1,
+      toReview: 1, toReviewWithoutPhoto: 1, changed: 1,
+      lastSearch: "2026-10-10T09:00:00.000Z", linkedProfiles: 1, linkedContacts: 1,
+    },
+  });
+
+  // WhatsApp connected: the contacts whose number it knows, in any spelling.
+  whatsapp.lookup = { contacts: async () => new Map([["393385550412", "393385550412@c.us"]]), numberId: async () => null, photo: async () => null, ownNumber: () => "393400000000" };
+  assert.equal((await call("GET", "/profiles/coverage")).json.whatsapp, 1);
 });

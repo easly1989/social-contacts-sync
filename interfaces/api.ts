@@ -193,6 +193,30 @@ export interface LinkedNetworks {
   networks: Partial<Record<string, { profiles: number; oldestRead?: string }>>;
 }
 
+/** The Dashboard (issue #85): the address book in three parts and what to do next, from stored state. */
+export interface Coverage {
+  total: number;
+  withPhoto: number;
+  /** Without a photo, but one is ready: a linked or pinned profile whose photo is known, or a photo waiting in To review. */
+  ready: number;
+  /** Where the ready photos come from. */
+  readySources: SourceId[];
+  /** Without a photo and without any of those. */
+  noSource: number;
+  /** Contacts waiting in To review, apart from photos changed outside the app, and how many of them have no photo. */
+  toReview: number;
+  toReviewWithoutPhoto: number;
+  /** Photos changed outside the app, waiting in To review. */
+  changed: number;
+  /** When the public search last ran. */
+  lastSearch?: string;
+  /** Profiles linked on contacts, and on how many contacts. */
+  linkedProfiles: number;
+  linkedContacts: number;
+  /** Contacts whose number WhatsApp knows, while it's connected. */
+  whatsapp?: number;
+}
+
 export interface LinkLookup {
   /** Refers to the looked-up photo on the server, to save it. */
   token: string;
