@@ -9,9 +9,11 @@ import { ContactsApi, Person, updateHeader } from "./cleanup/people";
 type Url = NonNullable<Person["urls"]>[number];
 
 /** Same link, however it was typed: no scheme, www. or trailing slash. */
+/** A profile address without protocol, www, trailing slash or case, to compare links. */
+export const linkKey = (u: string) => u.trim().toLowerCase().replace(/^https?:\/\/(www\.)?/, "").replace(/\/+$/, "");
+
 export function sameLink(a: string, b: string): boolean {
-  const key = (u: string) => u.trim().toLowerCase().replace(/^https?:\/\/(www\.)?/, "").replace(/\/+$/, "");
-  return key(a) === key(b);
+  return linkKey(a) === linkKey(b);
 }
 
 function contactUrls(person: Person): Url[] {

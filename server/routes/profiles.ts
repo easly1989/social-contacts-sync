@@ -5,7 +5,7 @@ import { Contact, ContactResult, Coverage, LinkedNetworks, PinnedProfiles, Profi
 import { getFromCache, setInCache } from "../src/cache";
 import { OAuth2Client } from "../src/gapi";
 import { ContactsApi, peopleContactsApi } from "../src/cleanup/people";
-import { addContactLinks } from "../src/contactLinks";
+import { addContactLinks, linkKey } from "../src/contactLinks";
 import { toContact } from "../src/contacts/model";
 import { clearPlaceholder, getPlaceholders } from "../src/contacts/placeholders";
 import { getKeptPhotos } from "../src/contacts/keptPhotos";
@@ -148,9 +148,11 @@ export function profilesRouter(options: Options = {}): express.Router {
     const linked = new Set(data.linked.filter((l) => !l.undone).map((l) => l.person.id));
     const skipped = new Set(data.skipped);
     const onContact = linkedPeople(data);
+    // A profile already on a contact, linked here or written in Google, isn't suggested for another one.
+    const taken = new Set(list.flatMap((c) => c.urls.map((u) => linkKey(u.value))));
     return list
       // A kept photo is never replaced: its contact only gets profiles.
-      .map((c) => ({ contact: c, candidates: candidatesFor(c, data.people, { rejected: data.rejected, linked }), entry: c.photoKept ? undefined : queue.entries[c.id] }))
+      .map((c) => ({ contact: c, candidates: candidatesFor(c, data.people, { rejected: data.rejected, linked, taken }), entry: c.photoKept ? undefined : queue.entries[c.id] }))
       .filter((s) => s.candidates.length || s.entry)
       .sort(
         (a, b) =>

@@ -7,6 +7,7 @@ import { candidatesFor, contactWords, scoreMatch } from "./match";
 import { runSearch, searchNetwork } from "./search";
 import { storedProfilePhotos } from "./store";
 import { parseProfileLink } from "../sources/links";
+import { linkKey } from "../contactLinks";
 
 const contact = (id: string, extra: Partial<Contact>): Contact => ({ id, phones: [], emails: [], urls: [], addresses: [], labels: [], hasPhoto: false, ...extra });
 
@@ -66,6 +67,21 @@ test("candidates leave out refused profiles and networks the contact is already 
   assert.deepEqual(
     candidatesFor(davide, people, { rejected: { "people/dg": ["bluesky:dgallo.bsky.social"] } }).map((c) => [c.person.id, c.reason]),
     [["instagram:davide.gallo", "handleMatchesName"]]
+  );
+});
+
+test("a profile already on another contact isn't suggested again", () => {
+  const people: SocialPerson[] = [
+    { id: "instagram:davide.gallo", network: "instagram", url: "https://instagram.com/davide.gallo", name: "Davide Gallo", source: "scan" },
+    { id: "facebook:davide.gallo.9", network: "facebook", url: "https://facebook.com/davide.gallo.9", name: "Davide Gallo", source: "scan" },
+  ];
+  // Another Davide Gallo in the address book has this Instagram already, written by hand.
+  const other = contact("people/dg2", { name: "Davide Gallo", urls: [{ value: "https://www.instagram.com/Davide.Gallo/" }] });
+  const davide = contact("people/dg", { name: "Davide Gallo", givenName: "Davide", familyName: "Gallo" });
+  const taken = new Set([davide, other].flatMap((c) => c.urls.map((u) => linkKey(u.value))));
+  assert.deepEqual(
+    candidatesFor(davide, people, { taken }).map((c) => c.person.id),
+    ["facebook:davide.gallo.9"]
   );
 });
 
