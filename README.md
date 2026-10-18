@@ -329,7 +329,7 @@ Every pull request runs the [CI workflow](.github/workflows/ci.yml): server
 build and unit tests, web type-check and build, a smoke test of the built
 server, a Docker build and browser end-to-end tests. The end-to-end tests mock
 the backend inside the browser, so they need no WhatsApp or Google account; the
-screenshots they take are posted on the pull request.
+screenshots they take are kept as a workflow artifact.
 
 ```bash
 cd server && npm test             # unit tests
