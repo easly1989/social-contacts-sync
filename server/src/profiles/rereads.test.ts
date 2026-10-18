@@ -81,19 +81,21 @@ async function sync(contacts: SimpleContact[], answers: Record<string, Awaited<R
 test("phase 1: pinned profiles are read before any photo, with progress per network; not read twice (issue #82)", async () => {
   const { askedFirst, asked, phases, writes, report } = await sync(
     [contact("c/anna", "anna", 1), contact("c/bruno", "bruno", 1)],
-    { anna: { profile: { photoUrl: "https://cdn.example/v2.jpg" } }, bruno: { stopped: "limited" } },
+    { anna: { profile: { photoUrl: "https://cdn.example/v2.jpg" } }, bruno: { stopped: "limited", answer: "HTTP 429: Please wait a few minutes before you try again." } },
     10,
     true
   );
   assert.deepEqual(askedFirst, ["instagram:anna", "instagram:bruno"]);
   assert.deepEqual(asked, askedFirst);
+  // The site's own answer travels with the reason, to the progress and the report.
+  const answer = "HTTP 429: Please wait a few minutes before you try again.";
   assert.deepEqual(phases, [
     { instagram: { read: 0, total: 2 } },
     { instagram: { read: 1, total: 2 } },
-    { instagram: { read: 1, total: 2, stopped: "limited" } },
+    { instagram: { read: 1, total: 2, stopped: "limited", answer } },
   ]);
   assert.deepEqual(writes, ["c/anna"]);
-  assert.deepEqual(report.instagram, { read: 1, waiting: 1, stopped: "limited" });
+  assert.deepEqual(report.instagram, { read: 1, waiting: 1, stopped: "limited", answer });
 });
 
 test("a changed photo is written, an unchanged one isn't; reads are spaced out", async () => {

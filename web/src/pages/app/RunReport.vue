@@ -191,7 +191,10 @@ onUnmounted(() => window.clearInterval(poll));
       <!-- Pinned profiles read again with the login (issue #79). -->
       <p v-for="(reads, network) in run.profileReads" :key="network" class="-mt-2 flex items-start gap-1.5 text-sm text-base-content/60" :data-testid="`profile-reads-${network}`">
         <RefreshCw class="mt-0.5 size-4 shrink-0" :class="{ 'text-warning': reads?.stopped }" />
-        <span>{{ readsText(network, reads) }}</span>
+        <span>
+          {{ readsText(network, reads) }}
+          <span v-if="reads?.answer" class="block text-xs">{{ $t("report.profileReads.answer", { network: networkNames[network] }) }} <code class="select-all break-words">{{ reads.answer }}</code></span>
+        </span>
       </p>
 
       <section class="rounded-box border border-base-300 bg-base-100 px-4 pt-4 sm:px-6">

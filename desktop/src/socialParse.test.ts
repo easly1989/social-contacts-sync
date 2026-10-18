@@ -8,12 +8,14 @@ import {
   facebookProfile,
   FacebookProfilePage,
   instagramPage,
+  instagramPageProfile,
   instagramProfile,
   isAbortedLoad,
   linkedinPage,
   linkedinProfile,
   pause,
   profilePageUrl,
+  siteAnswer,
 } from "./socialParse";
 
 // Shaped like the sites' answers (issue #61); the scan itself needs the real sites.
@@ -164,4 +166,31 @@ test("sign-in pages and limits stop the scan; pauses vary", () => {
   assert.equal(blockedReason(200, "https://www.facebook.com/checkpoint/123"), "signin");
   assert.equal(blockedReason(200, "https://www.facebook.com/me/friends"), undefined);
   assert.equal(pause(3000, 7000, () => 0.5), 5000);
+});
+
+test("Instagram's 'Please wait' with require_login asks to sign in, not to slow down", () => {
+  const body = '{"message":"Please wait a few minutes before you try again.","require_login":true,"status":"fail"}';
+  assert.equal(blockedReason(429, "https://www.instagram.com/api/v1/users/web_profile_info/?username=x", body), "signin");
+  assert.equal(blockedReason(401, "https://www.instagram.com/api/v1/x", body), "signin");
+  assert.equal(blockedReason(429, "https://www.instagram.com/api/v1/x", '{"message":"Please wait a few minutes before you try again.","status":"fail"}'), "limited");
+});
+
+test("the site's answer is kept short: the status and its message", () => {
+  assert.equal(siteAnswer(429, '{"message":"Please wait a few minutes before you try again.","status":"fail"}'), "HTTP 429: Please wait a few minutes before you try again.");
+  assert.equal(siteAnswer(400, '{"status":"fail","require_login":true}'), 'HTTP 400: {"status":"fail","require_login":true}');
+  assert.equal(siteAnswer(500, "<html><head><title>Error</title></head><body><script>var x=1</script></body></html>"), "HTTP 500: Error");
+  assert.equal(siteAnswer(503), "HTTP 503");
+  assert.equal(siteAnswer(429, "x".repeat(500)).length, "HTTP 429: ".length + 200);
+});
+
+test("Instagram profile page: the picture and name from its og tags", () => {
+  const page = (ogImage: string, ogTitle = "") => ({ ogImage, ogTitle, text: "" });
+  assert.deepEqual(instagramPageProfile(page("https://scontent-mxp2-1.cdninstagram.com/v/t51/p.jpg?stp=s150x150", "Elisa Tasini (@elisa.tasini) • Instagram photos and videos")), {
+    name: "Elisa Tasini",
+    photoUrl: "https://scontent-mxp2-1.cdninstagram.com/v/t51/p.jpg?stp=s150x150",
+  });
+  assert.deepEqual(instagramPageProfile(page("https://instagram.fmxp1-1.fna.fbcdn.net/v/p.jpg", "@solo.handle")), { name: undefined, photoUrl: "https://instagram.fmxp1-1.fna.fbcdn.net/v/p.jpg" });
+  // Instagram's own logo, or nothing: no picture there.
+  assert.equal(instagramPageProfile(page("https://static.cdninstagram.com/rsrc.php/v4/yG/r/logo.png")), undefined);
+  assert.equal(instagramPageProfile(page("")), undefined);
 });

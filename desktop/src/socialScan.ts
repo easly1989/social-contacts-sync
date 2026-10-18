@@ -8,7 +8,10 @@ import {
   facebookProfile,
   facebookProfileScript,
   instagramPage,
+  instagramPageProfile,
   instagramProfile,
+  InstagramProfilePage,
+  instagramProfilePageScript,
   isAbortedLoad,
   linkedinPage,
   linkedinProfile,
@@ -17,6 +20,7 @@ import {
   profilePageUrl,
   ScannedPerson,
   ScanNetwork,
+  siteAnswer,
 } from "./socialParse";
 
 /*
@@ -233,7 +237,50 @@ export async function socialScan(network: ScanNetwork): Promise<{ people: Scanne
   paces the reads. One hidden window per network serves a sync's reads and
   closes once they stop coming.
 */
-const readers = new Map<ScanNetwork, { win: BrowserWindow; idle?: NodeJS.Timeout }>();
+const readers = new Map<ScanNetwork, { win: BrowserWindow; idle?: NodeJS.Timeout; apiRefused?: ProfileAnswer }>();
+
+type ProfileAnswer = { profile?: ProfileRead; missing?: boolean; stopped?: string; answer?: string };
+
+/** The headers Instagram's own web page sends with its API calls. */
+async function instagramHeaders(win: BrowserWindow): Promise<Record<string, string>> {
+  const claim = await win.webContents.executeJavaScript(`sessionStorage.getItem("www-claim-v2") || "0"`).catch(() => "0");
+  return {
+    "X-IG-App-ID": "936619743392459",
+    "X-ASBD-ID": "129477",
+    "X-CSRFToken": (await cookie("instagram", "csrftoken")) ?? "",
+    "X-IG-WWW-Claim": String(claim),
+    "X-Requested-With": "XMLHttpRequest",
+  };
+}
+
+/**
+ * Instagram's API first. When it says no for any reason but "sign in", the
+ * profile's own page, as a browser opens it; the rest of this sync's reads
+ * then go straight to the pages.
+ */
+async function readInstagram(win: BrowserWindow, handle: string, url: string): Promise<ProfileAnswer> {
+  const known = readers.get("instagram");
+  let refused = known?.apiRefused;
+  if (!refused) {
+    const answer = await pageFetch(win, `/api/v1/users/web_profile_info/?username=${encodeURIComponent(handle)}`, await instagramHeaders(win));
+    const blocked = blockedReason(answer.status, answer.url, answer.body);
+    if (!blocked && answer.status === 200) {
+      const profile = instagramProfile(JSON.parse(answer.body));
+      return profile ? { profile } : { missing: true };
+    }
+    if (!blocked && answer.status === 404) return { missing: true };
+    refused = { stopped: blocked ?? `error:${answer.status}`, answer: siteAnswer(answer.status, answer.body) };
+    if (blocked === "signin") return refused;
+    if (known) known.apiRefused = refused;
+  }
+  await load(win, url);
+  const page: InstagramProfilePage = await win.webContents.executeJavaScript(instagramProfilePageScript);
+  const blocked = blockedReason(200, win.webContents.getURL(), page.text);
+  if (blocked) return { stopped: blocked, answer: `${refused.answer}; page: ${page.text.replace(/\s+/g, " ").trim().slice(0, 120)}` };
+  const profile = instagramPageProfile(page);
+  // No picture on the page either: say what the API answered rather than guess the profile is gone.
+  return profile ? { profile } : refused;
+}
 
 async function reader(network: ScanNetwork): Promise<BrowserWindow> {
   const known = readers.get(network);
@@ -258,7 +305,7 @@ function closeReader(network: ScanNetwork): void {
 }
 
 /** A profile's photo address and name, read with the user's login; `stopped` when the site said no. Nothing is posted or changed. */
-export async function socialProfile(network: ScanNetwork, handle: string): Promise<{ profile?: ProfileRead; missing?: boolean; stopped?: string }> {
+export async function socialProfile(network: ScanNetwork, handle: string): Promise<ProfileAnswer> {
   const url = profilePageUrl(network, handle);
   if (!url) return { missing: true };
   if (!(await cookie(network, sites[network].cookie))) return { stopped: "notSignedIn" };
@@ -271,24 +318,16 @@ export async function socialProfile(network: ScanNetwork, handle: string): Promi
       closeReader(network);
       return { stopped: atHome };
     }
-    if (network === "instagram") {
-      const answer = await pageFetch(win, `/api/v1/users/web_profile_info/?username=${encodeURIComponent(handle)}`, { "X-IG-App-ID": "936619743392459", "X-Requested-With": "XMLHttpRequest" });
-      const blocked = blockedReason(answer.status, answer.url, answer.body);
-      if (blocked) return { stopped: blocked };
-      if (answer.status === 404) return { missing: true };
-      if (answer.status !== 200) return { stopped: `error:${answer.status}` };
-      const profile = instagramProfile(JSON.parse(answer.body));
-      return profile ? { profile } : { missing: true };
-    }
+    if (network === "instagram") return await readInstagram(win, handle, url);
     if (network === "linkedin") {
       const csrf = (await cookie("linkedin", "JSESSIONID"))?.replace(/"/g, "");
       if (!csrf) return { stopped: "signin" };
       const path = `/voyager/api/identity/dash/profiles?q=memberIdentity&memberIdentity=${encodeURIComponent(handle)}`;
       const answer = await pageFetch(win, path, { "csrf-token": csrf, "x-restli-protocol-version": "2.0.0", accept: "application/vnd.linkedin.normalized+json+2.1" });
       const blocked = blockedReason(answer.status, answer.url, answer.body);
-      if (blocked) return { stopped: blocked };
+      if (blocked) return { stopped: blocked, answer: siteAnswer(answer.status, answer.body) };
       if (answer.status === 404) return { missing: true };
-      if (answer.status !== 200) return { stopped: `error:${answer.status}` };
+      if (answer.status !== 200) return { stopped: `error:${answer.status}`, answer: siteAnswer(answer.status, answer.body) };
       const profile = linkedinProfile(JSON.parse(answer.body), handle);
       return profile ? { profile } : { missing: true };
     }

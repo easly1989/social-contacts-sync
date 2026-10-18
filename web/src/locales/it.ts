@@ -200,6 +200,7 @@ const it: typeof en = {
       busy: "Una scansione con l'accesso stava leggendo {network}, quindi questa volta la sincronizzazione non l'ha letto.",
       notSignedIn: "L'app non ha l'accesso a {network}: accedi da Sincronizza › Sorgenti per avere le foto dei suoi profili.",
       error: "La lettura si è fermata dopo un errore.",
+      answer: "Risposta di {network}:",
     },
     tabs: { changed: "Modificati", noMatch: "Nessuna foto", errors: "Errori", all: "Tutti" },
     search: "Cerca contatti",

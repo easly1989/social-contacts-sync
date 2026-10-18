@@ -198,6 +198,7 @@ export default {
       busy: "A login scan was reading {network}, so the sync didn't read it this time.",
       notSignedIn: "The app isn't signed in to {network}: sign in from Sync › Sources to get photos from its profiles.",
       error: "Reading stopped after an error.",
+      answer: "{network} answered:",
     },
     tabs: { changed: "Changed", noMatch: "No photo found", errors: "Errors", all: "All" },
     search: "Search contacts",

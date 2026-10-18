@@ -151,11 +151,12 @@ test("I decide every contact applies nothing: the options that apply photos turn
 test("a sync reads pinned profiles first, then the photos, and goes on while you move around the app (issue #82)", async ({ page }) => {
   Object.assign(backend.status, { whatsappConnected: true, googleConnected: true });
   await startSync(page);
-  await backend.send(EventType.SyncProgress, { progress: 0, syncCount: 0, phase: "profiles", reads: { instagram: { read: 1, total: 4 }, facebook: { read: 2, total: 2, stopped: "limited" } } });
+  await backend.send(EventType.SyncProgress, { progress: 0, syncCount: 0, phase: "profiles", reads: { instagram: { read: 1, total: 4 }, facebook: { read: 2, total: 2, stopped: "limited", answer: "HTTP 429: Please wait a few minutes before you try again." } } });
   const profiles = page.getByTestId("phase-profiles");
   await expect(profiles).toContainText("Instagram");
   await expect(profiles).toContainText("1 of 4");
   await expect(profiles).toContainText("Facebook asked to slow down");
+  await expect(page.getByTestId("reads-answer")).toHaveText("Facebook answered: HTTP 429: Please wait a few minutes before you try again.");
   await screenshot(page, "05b-sync-phases");
 
   const nav = page.getByRole("navigation").first();
