@@ -151,6 +151,35 @@ test("an error on one contact is counted and the run continues", async () => {
   assert.equal(run.counters.errors, 1);
 });
 
+// A source call that never answers, like a WhatsApp Web page that stopped responding.
+const silent: PhotoSource = { id: "whatsapp", find: () => new Promise(() => {}) };
+
+test("a source that doesn't answer in time is an error for that contact, and the run goes on", async () => {
+  const { target, writes } = fakeTarget([], contacts.slice(0, 3));
+  const { run } = await runSync(target, [silent, gravatar], options({ lookDifferent: false }), callbacks().callbacks, { shuffle: false, deadline: 50 });
+  assert.deepEqual(
+    run.results.map((r) => [r.name, r.outcome, r.error]),
+    [
+      ["Ada", "error", "WhatsApp didn't answer within 0.05 seconds."],
+      ["Bob", "alreadyHadPhoto", undefined],
+      ["Cy", "error", "WhatsApp didn't answer within 0.05 seconds."],
+    ]
+  );
+  assert.deepEqual(writes, []);
+});
+
+test("Stop ends the wait for a source at once, without an error for that contact", async () => {
+  const { target } = fakeTarget([], contacts.slice(0, 1));
+  let stop = false;
+  setTimeout(() => (stop = true), 30);
+  const started = Date.now();
+  const { run } = await runSync(target, [silent], options(), callbacks({ cancelled: () => stop }).callbacks, { shuffle: false });
+  assert.ok(Date.now() - started < 2000);
+  assert.equal(run.cancelled, true);
+  assert.deepEqual(run.results, []);
+  assert.equal(run.counters.errors, 0);
+});
+
 test("a cancelled run stops before the next contact", async () => {
   const { target, writes } = fakeTarget();
   let checks = 0;

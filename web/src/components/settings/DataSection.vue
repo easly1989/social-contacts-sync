@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref } from "vue";
 import { useI18n } from "vue-i18n";
-import { FileText, FolderOpen, History, Trash2 } from "lucide-vue-next";
+import { FileText, FolderOpen, History, RotateCcw, Trash2 } from "lucide-vue-next";
 
 import SettingRow from "./SettingRow.vue";
 import SettingsCard from "./SettingsCard.vue";
@@ -14,6 +14,13 @@ const { locale } = useI18n();
 const dialog = ref<HTMLDialogElement>();
 const deleting = ref(false);
 const deleteError = ref(false);
+const restarting = ref(false);
+
+// The window reloads once the new server is up.
+function restart(): void {
+  restarting.value = true;
+  void api.restartServer().catch(() => (restarting.value = false));
+}
 
 async function deleteAll(): Promise<void> {
   deleting.value = true;
@@ -47,6 +54,11 @@ async function deleteAll(): Promise<void> {
           · {{ $t("settings.data.backupsUsage", { count: desktopInfo.history.runs, size: bytes(desktopInfo.history.bytes, locale) }, desktopInfo.history.runs) }}</template>
       </template>
       <router-link to="/app/history" class="btn btn-ghost btn-sm"><History class="size-4" />{{ $t("settings.data.manage") }}</router-link>
+    </SettingRow>
+    <SettingRow :title="$t('settings.data.restart')" :description="$t('settings.data.restartHint')">
+      <button type="button" class="btn btn-ghost btn-sm" :disabled="restarting" data-testid="restart-server" @click="restart">
+        <span v-if="restarting" class="loading loading-spinner loading-xs"></span><RotateCcw v-else class="size-4" />{{ restarting ? $t("settings.data.restarting") : $t("settings.data.restartButton") }}
+      </button>
     </SettingRow>
     <SettingRow :title="$t('settings.data.delete')" :description="$t('settings.data.deleteHint')">
       <button type="button" class="btn btn-outline btn-error btn-sm" @click="dialog?.showModal()"><Trash2 class="size-4" />{{ $t("settings.data.deleteButton") }}</button>

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
-import { ArrowRight, Check, CircleAlert, ImagePlus, Info, ListChecks, Pin, RefreshCw, Search, ShieldCheck, Square } from "lucide-vue-next";
+import { ArrowRight, Check, CircleAlert, ImagePlus, Info, ListChecks, Pin, RefreshCw, RotateCcw, Search, ShieldCheck, Square } from "lucide-vue-next";
 
 import PhotoZoom from "../PhotoZoom.vue";
 import SourceBadge from "../SourceBadge.vue";
@@ -83,6 +83,12 @@ const counts = () => t("runTab.counts", { applied: number(applied.value, locale.
 const announced = ref("");
 let timer: number | undefined;
 const disconnected = ref(false);
+const restarting = ref(false);
+// Desktop: a sync stuck on a call that never answers; the window reloads once the new server is up.
+function restart(): void {
+  restarting.value = true;
+  void api.restartServer().catch(() => (restarting.value = false));
+}
 watch(
   () => run.started,
   (started) => {
@@ -157,6 +163,9 @@ const stoppedReason = (network: keyof typeof networkInfo, stopped: string) => t(
     <p class="sr-only" role="status">{{ announced }}</p>
     <div v-if="run.error || disconnected" role="alert" class="alert alert-error alert-soft">
       <CircleAlert class="size-5" /><span>{{ run.error ?? $t("sync.disconnected") }}</span>
+      <button v-if="disconnected && isDesktop" type="button" class="btn btn-sm" :disabled="restarting" data-testid="run-restart" @click="restart">
+        <span v-if="restarting" class="loading loading-spinner loading-xs"></span><RotateCcw v-else class="size-4" />{{ $t("sync.restartServer") }}
+      </button>
     </div>
 
     <section class="rounded-box border bg-base-100 p-6" :class="done ? 'border-success/40' : 'border-base-300'">
