@@ -1,5 +1,5 @@
 import { Contact, ProfileCandidate, SocialPerson } from "../../../interfaces/api";
-import { sameLink } from "../contactLinks";
+import { linkKey, sameLink } from "../contactLinks";
 
 /*
   Which profiles may belong to which contact (issue #61), by name only:
@@ -59,6 +59,8 @@ export interface MatchOptions {
   rejected?: Record<string, string[]>;
   /** person ids already linked to some contact. */
   linked?: Set<string>;
+  /** Profile addresses already on some contact (`linkKey`), however they got there. */
+  taken?: Set<string>;
   max?: number;
 }
 
@@ -69,7 +71,7 @@ export function candidatesFor(contact: Contact, people: SocialPerson[], options:
   const rejected = new Set(options.rejected?.[contact.id] ?? []);
   const found: ProfileCandidate[] = [];
   for (const person of people) {
-    if (rejected.has(person.id) || options.linked?.has(person.id)) continue;
+    if (rejected.has(person.id) || options.linked?.has(person.id) || options.taken?.has(linkKey(person.url))) continue;
     const match = scoreMatch(name, person);
     if (match && !contact.urls.some((u) => sameLink(u.value, person.url))) found.push({ person, ...match });
   }
