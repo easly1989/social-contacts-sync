@@ -50,17 +50,23 @@ test("desktop: data & privacy shows the folders and deletes after confirming", a
     { route: "open", body: { target: "config" } },
   ]);
 
+  // Restart the server, without closing the app.
+  await page.getByTestId("restart-server").click();
+  await expect.poll(() => backend.desktopActions[2]?.route).toBe("restart");
+  await expect(page.getByTestId("restart-server")).toHaveText("Restarting…");
+  await expect(page.getByTestId("restart-server")).toBeDisabled();
+
   await page.getByRole("button", { name: "Delete…" }).click();
   const dialog = page.getByRole("dialog", { name: "Delete all local data?" });
   await expect(dialog).toBeVisible();
   await dialog.getByRole("button", { name: "Cancel" }).click();
   await expect(dialog).toBeHidden();
-  expect(backend.desktopActions).toHaveLength(2);
+  expect(backend.desktopActions).toHaveLength(3);
 
   await page.getByRole("button", { name: "Delete…" }).click();
   await screenshot(page, "32-settings-delete", { fullPage: false });
   await dialog.getByRole("button", { name: "Delete and restart" }).click();
-  await expect.poll(() => backend.desktopActions[2]).toEqual({ route: "delete_all_data", body: { confirm: true } });
+  await expect.poll(() => backend.desktopActions[3]).toEqual({ route: "delete_all_data", body: { confirm: true } });
   await expect(dialog.getByRole("button", { name: "Deleting…" })).toBeDisabled();
 });
 

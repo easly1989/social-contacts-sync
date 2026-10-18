@@ -35,6 +35,9 @@ let mainWindow: BrowserWindow | undefined;
 let server: UtilityProcess | undefined;
 let serverLog: fs.WriteStream | undefined;
 let quitting = false;
+// What the server was started with, and where it answers: a restart reuses the first and moves the second.
+let serverEnv: NodeJS.ProcessEnv | undefined;
+let appOrigin = "";
 
 function background(): string {
   return nativeTheme.shouldUseDarkColors ? "#101118" : "#f5f5fa";
@@ -134,6 +137,9 @@ async function answer({ id, request, payload = {} }: ServerMessage): Promise<voi
         if (lastUpdate?.status !== "ready") return reply(undefined, "No update is ready to install.");
         reply();
         return void setTimeout(() => void installUpdate(true).catch((error) => console.warn("Installing the update failed:", error)), 500);
+      case "restart-server":
+        reply();
+        return void setTimeout(() => void restartServer(), 200);
       case "delete-data":
         reply();
         return void deleteDataAndRestart();
@@ -205,8 +211,9 @@ async function deleteDataAndRestart(): Promise<void> {
   app.exit(0);
 }
 
-function keepLinksOutside(win: BrowserWindow, origin: string): void {
-  const isApp = (url: string) => url === origin || url.startsWith(`${origin}/`);
+function keepLinksOutside(win: BrowserWindow): void {
+  // The origin is read on each navigation: a restarted server answers on another port.
+  const isApp = (url: string) => url === appOrigin || url.startsWith(`${appOrigin}/`);
   const openOutside = (url: string) => {
     if (/^https?:\/\//.test(url)) void shell.openExternal(url);
   };
@@ -250,7 +257,7 @@ async function start(): Promise<void> {
 
   try {
     const chromePath = await resolveBrowser(win);
-    const port = await startServer({
+    serverEnv = {
       ...process.env,
       ...config,
       ...telegramEnv(app.getAppPath(), config),
@@ -262,14 +269,34 @@ async function start(): Promise<void> {
       SCS_DATA_DIR: paths.dataDir,
       // Encrypts saved sign-ins; see dataKey.ts.
       SCS_DATA_KEY: loadDataKey(path.join(paths.dataDir, "secret.key"), safeStorage),
-    });
-    const origin = `http://127.0.0.1:${port}`;
-    keepLinksOutside(win, origin);
+    };
+    appOrigin = `http://127.0.0.1:${await startServer(serverEnv)}`;
+    keepLinksOutside(win);
     // /start opens the app once set up, otherwise the welcome page.
-    await win.loadURL(`${origin}/start`);
+    await win.loadURL(`${appOrigin}/start`);
     void checkForUpdates();
     // A long session still hears of a new version.
     setInterval(() => void checkForUpdates(), 6 * 60 * 60 * 1000);
+  } catch (error) {
+    await showStatus(win, `${productName} could not start`, error instanceof Error ? error.message : String(error));
+  }
+}
+
+/** The server again, without closing the app (Settings, or a sync that stopped answering). */
+async function restartServer(): Promise<void> {
+  const win = mainWindow;
+  if (!win || !serverEnv) return;
+  await showStatus(win, `Restarting ${productName}…`);
+  const old = server;
+  await new Promise<void>((resolve) => {
+    if (!old?.pid) return resolve();
+    old.once("exit", () => resolve());
+    old.kill();
+  });
+  serverLog?.end();
+  try {
+    appOrigin = `http://127.0.0.1:${await startServer(serverEnv)}`;
+    await win.loadURL(`${appOrigin}/start`);
   } catch (error) {
     await showStatus(win, `${productName} could not start`, error instanceof Error ? error.message : String(error));
   }

@@ -177,7 +177,7 @@ export class FakeBackend {
         return route.fulfill({ json: { ok: true } });
       }
       if (pathname === "/api/desktop/info") return route.fulfill({ json: this.desktopInfo });
-      const action = /^\/api\/desktop\/(open|check_updates|install_update|auto_updates|remember_sign_ins|delete_all_data)$/.exec(pathname);
+      const action = /^\/api\/desktop\/(open|check_updates|install_update|auto_updates|remember_sign_ins|delete_all_data|restart)$/.exec(pathname);
       if (action) {
         const body = request.postDataJSON() ?? {};
         this.desktopActions.push({ route: action[1], body });

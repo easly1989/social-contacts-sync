@@ -53,6 +53,36 @@ export interface SyncRunResult {
   photos: RunPhotos[];
 }
 
+/** Thrown when the run is stopped while a source is still answering. */
+class RunStopped extends Error {}
+
+const sourceNames: Record<SourceId, string> = { whatsapp: "WhatsApp", telegram: "Telegram", gravatar: "Gravatar", links: "Profile links" };
+
+/**
+ * The source's answer, or an error once it takes longer than `deadline`; a
+ * stop ends the wait at once. A WhatsApp or Telegram call that never answers
+ * would otherwise hold the whole run, Stop included.
+ */
+function guarded(source: PhotoSource, deadline: number, cancelled: () => boolean): PhotoSource {
+  const wait = <T>(work: Promise<T>): Promise<T> => {
+    let timer: NodeJS.Timeout | undefined;
+    let poll: NodeJS.Timeout | undefined;
+    const limit = new Promise<never>((_, reject) => {
+      timer = setTimeout(() => reject(new Error(`${sourceNames[source.id] ?? source.id} didn't answer within ${deadline / 1000} seconds.`)), deadline);
+      poll = setInterval(() => cancelled() && reject(new RunStopped()), 250);
+    });
+    return Promise.race([work, limit]).finally(() => {
+      clearTimeout(timer);
+      clearInterval(poll);
+    });
+  };
+  return {
+    id: source.id,
+    find: (contact) => wait(source.find(contact)),
+    ...(source.findAll ? { findAll: (contact: SimpleContact) => wait(source.findAll!(contact)) } : {}),
+  };
+}
+
 const emptyCounters = (): SyncCounters => ({ added: 0, replaced: 0, kept: 0, queued: 0, alreadyHadPhoto: 0, noMatch: 0, errors: 0 });
 
 function shuffle<T>(items: T[]): T[] {
@@ -104,7 +134,7 @@ export async function runSync(
   sources: PhotoSource[],
   options: RunOptions,
   callbacks: SyncCallbacks,
-  settings: { shuffle?: boolean } = {}
+  settings: { shuffle?: boolean; deadline?: number } = {}
 ): Promise<SyncRunResult> {
   const counters = emptyCounters();
   const results: ContactResult[] = [];
@@ -122,6 +152,8 @@ export async function runSync(
 
   const contacts = await target.listContacts();
   for (const source of sources) await source.prepare?.();
+  // 90 seconds leaves room for a profile read with the login, which the desktop app gives 60.
+  sources = sources.map((source) => guarded(source, settings.deadline ?? 90_000, callbacks.cancelled));
   const ordered = settings.shuffle === false ? contacts : shuffle(contacts);
   run.totalContacts = ordered.length;
 
@@ -217,6 +249,10 @@ export async function runSync(
       // isn't one of the contacts without a photo.
       if (result.outcome === "noMatch" && contact.hasPhoto) result.outcome = "alreadyHadPhoto";
     } catch (e) {
+      if (e instanceof RunStopped) {
+        run.cancelled = true;
+        break;
+      }
       // One contact's failure must not end the whole run.
       result.outcome = "error";
       result.error = googleErrorMessage(e);

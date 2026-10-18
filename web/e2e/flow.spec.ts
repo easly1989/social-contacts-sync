@@ -129,6 +129,20 @@ test("full flow: WhatsApp QR, Google sign-in, sync options, progress, done", asy
   await expect(page.getByRole("button", { name: "Start sync" })).toBeVisible();
 });
 
+test("desktop: a sync with no news for a minute offers to restart the server", async ({ page }) => {
+  Object.assign(backend.status, { whatsappConnected: true, googleConnected: true, desktop: true, setupDone: true, googleConfigured: true });
+  await page.clock.install();
+  await startSync(page);
+  await backend.send(EventType.SyncProgress, { progress: 25, syncCount: 0, totalContacts: 839, checked: 215, phase: "photos", counters: counters({ queued: 126, noMatch: 46 }) });
+  await expect(page.getByText("Checked 215 of 839 contacts")).toBeVisible();
+  await expect(page.getByTestId("run-restart")).toBeHidden();
+  await page.clock.fastForward(65_000);
+  await expect(page.getByRole("alert")).toContainText("The sync hasn't sent any news for over a minute.");
+  await screenshot(page, "05c-sync-stuck");
+  await page.getByTestId("run-restart").click();
+  await expect.poll(() => backend.desktopActions.map((a) => a.route)).toEqual(["restart"]);
+});
+
 const startSync = async (page: Page) => {
   await page.goto("/app/sync?tab=run");
   await page.getByRole("button", { name: "Start sync" }).click();

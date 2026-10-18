@@ -70,6 +70,19 @@ router.post("/desktop/whatsapp_unlink", async (req: Request, res: Response) => {
   res.send({ ok: true });
 });
 
+/*
+  Restart the server without closing the app (Settings, or a sync that
+  stopped answering). The sign-ins come back on start, as when the app opens.
+*/
+router.post("/desktop/restart", async (req: Request, res: Response) => {
+  if (!desktopAction(req, res)) return;
+  res.send({ ok: true });
+  // WhatsApp Web's browser has to close with the server, or it keeps the session locked; a page that hangs gets 5 seconds.
+  const client = getFromCache(req.sessionID, "whatsapp");
+  await Promise.race([client?.destroy().catch(() => undefined), new Promise((resolve) => setTimeout(resolve, 5000))]);
+  await askDesktop("restart-server").catch((e) => console.error("Restarting the server failed:", e));
+});
+
 // Settings: version, package, folders, updates, and this server's own state.
 router.get("/desktop/info", async (_req: Request, res: Response) => {
   if (!desktopMode) return res.status(404).send({ error: "not_found" });

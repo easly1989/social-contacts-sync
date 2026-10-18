@@ -60,6 +60,7 @@ export const api = {
   installUpdate: () => post("/api/desktop/install_update"),
   setAutoUpdates: (enabled: boolean) => post<DesktopInfo>("/api/desktop/auto_updates", { enabled }),
   setRememberSignIns: (enabled: boolean) => post("/api/desktop/remember_sign_ins", { enabled }),
+  restartServer: () => post("/api/desktop/restart"),
   deleteAllData: () => post("/api/desktop/delete_all_data", { confirm: true }),
   googleSignOut: () => post("/api/desktop/google_sign_out"),
   whatsappUnlink: () => post("/api/desktop/whatsapp_unlink"),
