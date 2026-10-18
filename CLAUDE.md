@@ -76,14 +76,16 @@ them to `syncEngine.ts` (`runSync` with `RunOptions`): what is safe is applied, 
 the To review queue (`profiles/queue.ts`). Progress travels over the `/api/ws` WebSocket as
 `interfaces/api.ts` `EventType`s. Google writes go through `gapi.ts` behind a rate limiter (~40
 photo updates/min) with `googleRetry.ts`. Every run is saved by `runs.ts` with before/after photos
-so `undo.ts` can revert a whole run or one contact.
+so `undo.ts` can revert a whole run or one contact; decisions made in To review are saved the same
+way as Review entries (`recordDecision`), and undo also puts back their links and photo pin.
 
 **Photo protection rules** that every writer must respect: `contacts/placeholders.ts` (photos
 uploaded by hand — a sync may replace them) and `contacts/keptPhotos.ts` (kept photos — never
-replaced by sync or Find profiles).
+replaced by a sync or from To review), and `contacts/photoPins.ts` (the source a photo follows).
 
 **Other server areas:** `cleanup/` (duplicate scan, field-by-field merge, backups for undo),
-`profiles/` (Find profiles: data-export imports, public searches, matching, `profiles.json` store),
+`profiles/` (To review and its suggestions: data-export imports, public searches, matching, the
+`profiles.json` store, the review queue, login rereads, the History migration),
 `contactLinks.ts` / `linkLookups.ts` (profile-link pictures), `secretStore.ts` (AES-256-GCM token
 storage keyed by an OS-keychain-protected key).
 
