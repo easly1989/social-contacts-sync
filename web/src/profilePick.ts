@@ -36,13 +36,19 @@ export function wantsPhotoFor(suggestion: ProfileSuggestion): boolean {
  */
 export function photoCandidates(suggestion: ProfileSuggestion, pick?: ProfilePick): PhotoOption[] {
   if (suggestion.photoKept || suggestion.queue?.kind === "changed") return [];
+  const queued = suggestion.queue?.photos ?? [];
+  // A linked profile whose photo the sync just read from the same link is offered once, as the sync's.
+  const read = new Set(queued.filter((q) => q.source === "links").map((q) => sameLink(q.matchedBy)));
   return [
-    ...(suggestion.queue?.photos ?? []).map((queued) => ({ id: queued.id, queued })),
+    ...queued.map((q) => ({ id: q.id, queued: q })),
     ...suggestion.candidates.filter((c) => c.person.photoUrl).map((c) => ({ id: c.person.id, person: c.person, suggested: true })),
-    ...(suggestion.linked ?? []).map((person) => ({ id: person.id, person, suggested: false })),
+    ...(suggestion.linked ?? []).filter((person) => !read.has(sameLink(person.url))).map((person) => ({ id: person.id, person, suggested: false })),
     ...(pick?.link ? [{ id: "link", lookup: pick.link }] : []),
   ];
 }
+
+/** A profile address as the sync's links write it: no protocol, www or trailing slash. */
+const sameLink = (url: string) => url.replace(/^https?:\/\/(www\.)?/i, "").replace(/\/+$/, "").toLowerCase();
 
 /** The photo a sync offers, else when the contact wants one: a ticked profile's, else a linked one's. */
 function firstPhoto(suggestion: ProfileSuggestion, ticked: string[]): string | undefined {
