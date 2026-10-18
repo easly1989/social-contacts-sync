@@ -39,7 +39,7 @@ export interface SyncProgress {
   /** Profiles read again first (desktop, with the login), then photos from every source (issue #82). */
   phase?: "profiles" | "photos";
   /** Phase "profiles": per network, profiles read so far, how many to read, and why it stopped. */
-  reads?: Partial<Record<"instagram" | "facebook" | "linkedin", { read: number; total: number; stopped?: string }>>;
+  reads?: Partial<Record<"instagram" | "facebook" | "linkedin", { read: number; total: number; stopped?: string; answer?: string }>>;
   /** Contacts processed so far. */
   checked?: number;
   counters?: SyncCounters;
@@ -131,6 +131,8 @@ export interface ProfileReadsReport {
   waiting: number;
   /** Why the network stopped: "limited", "signin", "notSignedIn" (no login in the app), "busy" (a login scan was running) or "error:…". */
   stopped?: string;
+  /** The site's own answer when it stopped, e.g. "HTTP 429: Please wait a few minutes before you try again." */
+  answer?: string;
 }
 
 export interface SessionStatus {

@@ -30,7 +30,7 @@ export interface StoredRead {
   readAt: string;
 }
 
-export type ReadProfile = (network: RereadNetwork, handle: string) => Promise<{ profile?: { name?: string; photoUrl?: string }; missing?: boolean; stopped?: string }>;
+export type ReadProfile = (network: RereadNetwork, handle: string) => Promise<{ profile?: { name?: string; photoUrl?: string }; missing?: boolean; stopped?: string; answer?: string }>;
 
 function file(): string | undefined {
   return process.env.SCS_DESKTOP === "1" && process.env.SCS_DATA_DIR ? path.join(process.env.SCS_DATA_DIR, "profile-reads.json") : undefined;
@@ -137,6 +137,8 @@ export function rereading(
     last = Date.now();
     if (answer.stopped) {
       entry.stopped = answer.stopped;
+      if (answer.answer) entry.answer = answer.answer;
+      console.warn(`Reading ${network} profiles stopped (${answer.stopped}): ${answer.answer ?? "no answer from the site"}`);
       return;
     }
     entry.read++;
@@ -166,7 +168,7 @@ export function rereading(
         totals.set(network, (totals.get(network) ?? 0) + 1);
       }
       const snapshot = () =>
-        Object.fromEntries([...totals].map(([network, total]) => [network, { read: stats[network]?.read ?? 0, total, ...(stats[network]?.stopped ? { stopped: stats[network]!.stopped } : {}) }]));
+        Object.fromEntries([...totals].map(([network, total]) => [network, { read: stats[network]?.read ?? 0, total, ...stopInfo(stats[network]) }]));
       progress(snapshot());
       for (const url of plan.selected) {
         if (cancelled()) return;
@@ -184,12 +186,15 @@ export function rereading(
         // After a stop, the pinned profiles not read wait for the next sync.
         const notReached = entry?.stopped ? planned.filter((url) => !readOk.has(url)).length : 0;
         const waiting = (plan.waiting[network] ?? 0) + notReached;
-        if (entry || waiting) report[network] = { read: entry?.read ?? 0, waiting, ...(entry?.stopped ? { stopped: entry.stopped } : {}) };
+        if (entry || waiting) report[network] = { read: entry?.read ?? 0, waiting, ...stopInfo(entry) };
       }
       return report;
     },
   };
 }
+
+/** Why a network stopped, and what the site said. */
+const stopInfo = (entry?: ProfileReadsReport) => (entry?.stopped ? { stopped: entry.stopped, ...(entry.answer ? { answer: entry.answer } : {}) } : {});
 
 export type RunReads = Partial<Record<RereadNetwork, ProfileReadsReport>>;
 export type RunProgressReads = NonNullable<SyncProgress["reads"]>;
@@ -231,6 +236,7 @@ export async function lookupWithLogin(
   if (lastLookup.has(key) && wait > 0) await (options.sleep ?? ((ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms))))(wait);
   lastLookup.set(key, now());
   const answer = await read(link.network, link.handle);
+  if (answer.stopped && answer.stopped !== "notSignedIn") console.warn(`Reading a ${link.network} profile stopped (${answer.stopped}): ${answer.answer ?? "no answer from the site"}`);
   if (answer.stopped === "notSignedIn") throw new LoginNeededError(link.network);
   if (answer.stopped === "signin" || answer.stopped === "limited") {
     restingUntil.set(key, now() + rest);

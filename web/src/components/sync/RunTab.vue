@@ -13,7 +13,7 @@ import { linkedinNoticeSeen, linkedinRereads } from "../../profileLinks";
 import { networkInfo } from "../../profileNetworks";
 import { resetRun, run, running, startRun, stopRun } from "../../runState";
 import { networksOff, syncPrefs } from "../../syncPrefs";
-import { GoogleStats, PinnedProfiles, RunOptions, SessionStatus, SourceId } from "../../../../interfaces/api";
+import { GoogleStats, PinnedProfiles, RunOptions, SessionStatus, SourceId, SyncProgress } from "../../../../interfaces/api";
 
 // Sync › Run (issue #82, mockups in #76): what a sync does, then its progress.
 const emit = defineEmits<{ review: []; sources: [] }>();
@@ -71,7 +71,7 @@ function answerNotice(keepReading: boolean): void {
 const done = computed(() => Boolean(run.runId));
 const applied = computed(() => run.counters.added + run.counters.replaced);
 const queued = computed(() => run.counters.queued ?? 0);
-const readNetworks = computed(() => Object.entries(run.reads) as [keyof typeof networkInfo, { read: number; total: number; stopped?: string }][]);
+const readNetworks = computed(() => Object.entries(run.reads) as [keyof typeof networkInfo, NonNullable<NonNullable<SyncProgress["reads"]>["instagram"]>][]);
 const title = computed(() => (run.cancelled ? t("syncRun.stopped") : done.value ? t("syncRun.done") : t("syncRun.running")));
 const eta = computed(() => {
   if (!run.total || run.checked < 5 || done.value) return undefined;
@@ -183,6 +183,9 @@ const stoppedReason = (network: keyof typeof networkInfo, stopped: string) => t(
               <progress class="progress progress-primary h-1.5 w-32" :value="read.read" :max="read.total || 1"></progress>
               <span class="text-base-content/60">{{ $t("runTab.readOf", { read: number(read.read, locale), total: number(read.total, locale) }) }}</span>
               <span v-if="read.stopped" class="text-xs text-warning">{{ stoppedReason(network, read.stopped) }}</span>
+              <span v-if="read.answer" class="w-full text-xs text-base-content/60" data-testid="reads-answer">
+                {{ $t("report.profileReads.answer", { network: networkInfo[network].name }) }} <code class="select-all break-words">{{ read.answer }}</code>
+              </span>
             </li>
           </ul>
         </li>

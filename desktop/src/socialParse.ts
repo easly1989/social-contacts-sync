@@ -189,8 +189,45 @@ export const facebookProfileScript = `(() => {
   return { heading: (header.querySelector("h1")?.innerText || "").split("\\n")[0].trim(), images };
 })()`;
 
+/** A profile's own page, read when Instagram's API says no. */
+export interface InstagramProfilePage {
+  ogImage: string;
+  ogTitle: string;
+  /** The start of the page's text, to spot a limit or sign-in message. */
+  text: string;
+}
+
+/** The og:image of a profile page is its picture; og:title is "Name (@handle) • Instagram …". Undefined when there's no picture. */
+export function instagramPageProfile(page: InstagramProfilePage): ProfileRead | undefined {
+  const photoUrl = httpsUrl(page.ogImage);
+  if (!photoUrl || !/^https:\/\/[^/]+\.(cdninstagram\.com|fbcdn\.net)\//.test(photoUrl) || photoUrl.includes("/rsrc.php/")) return undefined;
+  return { name: text(page.ogTitle.match(/^(.*?)\s*\(@[\w.]+\)/)?.[1]), photoUrl };
+}
+
+/** Runs in an Instagram profile page. */
+export const instagramProfilePageScript = `(() => ({
+  ogImage: document.querySelector('meta[property="og:image"]')?.content || "",
+  ogTitle: document.querySelector('meta[property="og:title"]')?.content || "",
+  text: (document.body?.innerText || "").slice(0, 300),
+}))()`;
+
+/** The site's own answer when it said no, short enough for a report: the status and its message. */
+export function siteAnswer(status: number, body = ""): string {
+  let message = body;
+  try {
+    const json = JSON.parse(body) as { message?: unknown };
+    if (typeof json?.message === "string") message = json.message;
+  } catch {
+    if (body.trimStart().startsWith("<")) message = body.match(/<title[^>]*>([^<]*)<\/title>/i)?.[1] ?? "";
+  }
+  message = message.replace(/\s+/g, " ").trim().slice(0, 200);
+  return message ? `HTTP ${status}: ${message}` : `HTTP ${status}`;
+}
+
 /** Why a site's answer means stop: a sign-in or check page, or a limit. */
 export function blockedReason(status: number, finalUrl: string, body = ""): string | undefined {
+  // Instagram says "Please wait a few minutes" also when the session is gone; require_login tells them apart.
+  if (/"require_login"\s*:\s*true/.test(body)) return "signin";
   if (status === 429 || status === 999) return "limited";
   if (/\/(accounts\/login|login|checkpoint|challenge|authwall|uas\/login)/i.test(finalUrl)) return "signin";
   if (status === 401 || status === 403) return "signin";
