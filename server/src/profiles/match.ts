@@ -27,17 +27,25 @@ export function contactWords(c: Pick<Contact, "name" | "givenName" | "middleName
 const same = (a: string[], b: string[]) => a.length === b.length && a.every((w) => b.includes(w));
 const within = (small: string[], big: string[]) => small.every((w) => big.includes(w));
 
-/** How `person` matches a contact's name words, or undefined. */
-export function scoreMatch(name: string[], person: SocialPerson): Pick<ProfileCandidate, "score" | "reason"> | undefined {
-  if (name.length < 2) return undefined;
-  const theirs = [...new Set(words(person.name))];
-  if (theirs.length >= 2 && same(name, theirs)) return { score: 1, reason: "sameName" };
-  // One word more or less (a middle name), not a sentence that happens to contain the name.
-  if (theirs.length >= 2 && Math.abs(theirs.length - name.length) <= 1 && (within(name, theirs) || within(theirs, name))) return { score: 0.7, reason: "similarName" };
+// Each profile's name words and handle, worked out once: To review compares every contact with every profile (issue #85).
+const memo = new WeakMap<SocialPerson, { theirs: string[]; handle: string }>();
+function personKey(person: SocialPerson): { theirs: string[]; handle: string } {
+  let key = memo.get(person);
+  if (key) return key;
   // Usernames: "davide.gallo", "gallo_davide", "davidegallo89".
   // Bluesky handles are domains: "paulfrazee.bsky.social", "pfrazee.com".
   const raw = person.network === "bluesky" ? (person.handle ?? "").replace(/\.bsky\.social$/i, "").replace(/\.[a-z]+$/i, "") : person.handle ?? "";
-  const handle = raw.toLowerCase().replace(/[^a-z]/g, "");
+  memo.set(person, (key = { theirs: [...new Set(words(person.name))], handle: raw.toLowerCase().replace(/[^a-z]/g, "") }));
+  return key;
+}
+
+/** How `person` matches a contact's name words, or undefined. */
+export function scoreMatch(name: string[], person: SocialPerson): Pick<ProfileCandidate, "score" | "reason"> | undefined {
+  if (name.length < 2) return undefined;
+  const { theirs, handle } = personKey(person);
+  if (theirs.length >= 2 && same(name, theirs)) return { score: 1, reason: "sameName" };
+  // One word more or less (a middle name), not a sentence that happens to contain the name.
+  if (theirs.length >= 2 && Math.abs(theirs.length - name.length) <= 1 && (within(name, theirs) || within(theirs, name))) return { score: 0.7, reason: "similarName" };
   if (handle.length >= 5) {
     const [first, last] = [name[0], name[name.length - 1]];
     if (handle === first + last || handle === last + first) return { score: 0.85, reason: "handleMatchesName" };
@@ -62,9 +70,8 @@ export function candidatesFor(contact: Contact, people: SocialPerson[], options:
   const found: ProfileCandidate[] = [];
   for (const person of people) {
     if (rejected.has(person.id) || options.linked?.has(person.id)) continue;
-    if (contact.urls.some((u) => sameLink(u.value, person.url))) continue;
     const match = scoreMatch(name, person);
-    if (match) found.push({ person, ...match });
+    if (match && !contact.urls.some((u) => sameLink(u.value, person.url))) found.push({ person, ...match });
   }
   return found.sort((a, b) => b.score - a.score || a.person.network.localeCompare(b.person.network)).slice(0, options.max ?? 6);
 }

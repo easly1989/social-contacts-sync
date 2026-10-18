@@ -25,6 +25,16 @@ export function clientLookup(client: Client): WhatsAppLookup {
 }
 
 /**
+ * How many of the contacts have a number WhatsApp Web has loaded (issue #85),
+ * spelled as the sync matches it. A lower bound: it loads part of the phone's address book.
+ */
+export async function whatsappContacts(whatsapp: WhatsAppLookup, contacts: { phones: { value: string }[] }[]): Promise<number> {
+  const known = await whatsapp.contacts();
+  const region = inferRegion(whatsapp.ownNumber());
+  return contacts.filter((c) => c.phones.some((p) => matchCandidates(p.value, region).some((n) => known.has(n)))).length;
+}
+
+/**
  * WhatsApp profile photos, matched by phone number.
  *
  * WhatsApp Web only loads part of the phone's address book, so a number it

@@ -14,20 +14,56 @@ test.beforeEach(async ({ page }) => {
   await backend.install();
 });
 
-test("dashboard: coverage, sources, activity and latest photos", async ({ page }) => {
+test("dashboard: coverage in three parts, next steps, sources and activity (issue #85)", async ({ page }) => {
+  backend.runs.unshift(sampleReview());
   await page.goto("/app");
   await expect(page.getByRole("heading", { name: "Dashboard" })).toBeVisible();
   const coverage = page.getByTestId("coverage");
   await expect(coverage).toContainText("62%");
-  await expect(coverage).toContainText("774");
-  await expect(coverage).toContainText("of 1,248 contacts have a photo");
   await expect(coverage).toContainText("ada@example.com");
+  await expect(coverage.getByRole("list", { name: "1,248 contacts" }).getByRole("listitem")).toHaveText([
+    /Have a photo\s*774\s*62%/,
+    /No photo, but one is ready\s*190\s*15%/,
+    /No photo and no source\s*284\s*23%/,
+  ]);
+  // The last sync, not the review made after it.
   await expect(page.getByText("Last sync added 7 photos")).toBeVisible();
-  await expect(page.getByRole("link", { name: /Photo sync · Replace all/ })).toHaveAttribute("href", `/app/history/${backend.runs[0].id}`);
+
+  const steps = page.getByTestId("next-steps").getByRole("listitem");
+  await expect(steps).toHaveText([
+    /190 contacts without a photo already have one ready\s*From Gravatar, a linked profile, or WhatsApp/,
+    /21 contacts wait in To review\s*12 of them have no photo yet/,
+    /4 photos changed outside the app/,
+    /Find profiles for 284 contacts without a source\s*Last search Oct 10, 2026/,
+  ]);
+  await expect(steps.nth(0).getByRole("link", { name: "Sync photos" })).toHaveAttribute("href", "/app/sync?tab=run");
+  await expect(steps.nth(1).getByRole("link", { name: "Review" })).toHaveAttribute("href", "/app/sync?tab=review");
+  await expect(steps.nth(3).getByRole("link", { name: "Sources" })).toHaveAttribute("href", "/app/sync?tab=sources");
+
+  const sources = page.getByTestId("dashboard-sources");
+  await expect(sources.getByRole("listitem").filter({ hasText: "WhatsApp" })).toContainText("812 contacts");
+  await expect(sources.getByRole("listitem").filter({ hasText: "Linked profiles" })).toContainText("257 on 233 contacts");
+
+  await expect(page.getByRole("link", { name: /Review · Decisions in To review\s*2 contacts changed/ })).toHaveAttribute("href", `/app/history/${backend.runs[0].id}`);
+  await expect(page.getByRole("link", { name: /Photo sync · Replace all/ })).toHaveAttribute("href", `/app/history/${backend.runs[1].id}`);
   await expect(page.getByText("7 contacts got a face in the last sync.")).toBeVisible();
   // Sync comes right after the Dashboard (issue #82).
   await expect(page.getByRole("navigation", { name: "Main navigation" }).first().getByRole("link")).toHaveText([/^Dashboard/, /^Sync/, /^Contacts/, /^Clean up/, /^History/, /^Settings/]);
   await screenshot(page, "20-dashboard");
+});
+
+test("dashboard: next steps show only what has something to do (issue #85)", async ({ page }) => {
+  Object.assign(backend.coverage, { withPhoto: 1100, ready: 0, noSource: 148, toReview: 0, toReviewWithoutPhoto: 0, changed: 2, lastSearch: undefined });
+  backend.status.whatsappConnected = false;
+  await page.goto("/app");
+  const steps = page.getByTestId("next-steps").getByRole("listitem");
+  await expect(steps).toHaveText([/2 photos changed outside the app/, /Find profiles for 148 contacts without a source\s*Import your followers/]);
+  await expect(page.getByTestId("dashboard-sources").getByRole("listitem").filter({ hasText: "WhatsApp" }).getByRole("link", { name: "Connect" })).toBeVisible();
+
+  Object.assign(backend.coverage, { withPhoto: 1248, noSource: 0, changed: 0 });
+  await page.getByRole("button", { name: "Refresh" }).click();
+  await expect(page.getByTestId("next-steps")).toContainText("Nothing to do right now.");
+  await expect(page.getByTestId("coverage")).toContainText("100%");
 });
 
 test("dashboard in dark mode", async ({ page }) => {
@@ -45,6 +81,8 @@ test("dashboard on a phone uses bottom tabs", async ({ page }) => {
   await expect(tabs.getByRole("link")).toHaveCount(6);
   // The tab bar is fixed to the viewport, so capture what a phone shows.
   await screenshot(page, "22-dashboard-mobile", { fullPage: false });
+  await page.getByTestId("next-steps").scrollIntoViewIfNeeded();
+  await screenshot(page, "22b-dashboard-next-steps-mobile", { fullPage: false });
 });
 
 const syncSources = () => new URL(backend.requested("/api/init_sync")!.url()).searchParams.get("sources");

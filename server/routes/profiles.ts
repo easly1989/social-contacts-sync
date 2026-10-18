@@ -1,6 +1,7 @@
 import express, { Request, Response } from "express";
+import { Client, WAState } from "whatsapp-web.js";
 
-import { Contact, ContactResult, LinkedNetworks, PinnedProfiles, ProfileBulkState, ProfileLinkRequest, ProfileScanState, ProfileSearchState, ProfileSuggestion, ProfilesOverview, SocialNetwork, SocialPerson } from "../../interfaces/api";
+import { Contact, ContactResult, Coverage, LinkedNetworks, PinnedProfiles, ProfileBulkState, ProfileLinkRequest, ProfileScanState, ProfileSearchState, ProfileSuggestion, ProfilesOverview, SocialNetwork, SocialPerson, SourceId } from "../../interfaces/api";
 import { getFromCache, setInCache } from "../src/cache";
 import { OAuth2Client } from "../src/gapi";
 import { ContactsApi, peopleContactsApi } from "../src/cleanup/people";
@@ -14,7 +15,8 @@ import { googleErrorMessage } from "../src/googleRetry";
 import { parseInstagramExport, parseLinkedInConnections } from "../src/profiles/imports";
 import { candidatesFor } from "../src/profiles/match";
 import { runSearch, SearchNetwork, searchNetworks } from "../src/profiles/search";
-import { loadProfiles, mergePeople, ProfilesData, saveProfiles, StoredLinked } from "../src/profiles/store";
+import { loadProfiles, mergePeople, ProfilesData, saveProfiles, StoredLinked, storedProfilePhotos } from "../src/profiles/store";
+import { clientLookup, WhatsAppLookup, whatsappContacts } from "../src/sources/whatsapp";
 import { downloadImage, lookupProfileLink, networkNames, parseProfileLink, ProfileLink, shortLink } from "../src/sources/links";
 import { photoKey } from "../src/contacts/model";
 import { getPins, photoHash, setPin } from "../src/contacts/photoPins";
@@ -56,6 +58,13 @@ interface Options {
   sleep?: (ms: number) => Promise<void>;
   /** The desktop app's login reads; undefined in the web version. */
   loginReader?: () => ReadProfile | undefined;
+  /** WhatsApp, while it's connected. */
+  whatsapp?: (sessionId: string) => Promise<WhatsAppLookup | undefined>;
+}
+
+async function connectedWhatsApp(sessionId: string): Promise<WhatsAppLookup | undefined> {
+  const client: Client | undefined = getFromCache(sessionId, "whatsapp");
+  return client && (await client.getState().catch(() => undefined)) === WAState.CONNECTED ? clientLookup(client) : undefined;
 }
 
 /** What the desktop app read, checked like any link: known profile addresses only. */
@@ -221,6 +230,77 @@ export function profilesRouter(options: Options = {}): express.Router {
       res.send(body);
     } catch (e) {
       failed(req, res, "Counting linked profiles", e);
+    }
+  });
+
+  /** Contacts whose number WhatsApp knows, counted again at most every five minutes. */
+  async function whatsappCount(sessionId: string, list: Contact[]): Promise<number | undefined> {
+    const cached: { at: number; count: number } | undefined = getFromCache(sessionId, "whatsapp_count");
+    if (cached && Date.now() - cached.at < 5 * 60 * 1000) return cached.count;
+    const whatsapp = await (options.whatsapp ?? connectedWhatsApp)(sessionId).catch(() => undefined);
+    if (!whatsapp) return undefined;
+    const count = await whatsappContacts(whatsapp, list).catch(() => undefined);
+    if (count !== undefined) setInCache(sessionId, "whatsapp_count", { at: Date.now(), count });
+    return count;
+  }
+
+  // The Dashboard (issue #85): the address book in three parts and what to do next, from what is stored, never asking the sites.
+  router.get("/profiles/coverage", async (req: Request, res: Response) => {
+    const api = google(req, res);
+    if (!api) return;
+    try {
+      const sessionId = req.sessionID;
+      const list = await contacts(req, api, req.query.refresh !== undefined);
+      const data = loadProfiles(sessionId);
+      const queue = loadQueue(sessionId);
+      const pins = getPins(sessionId);
+      const reads = getReads(sessionId);
+      const scanned = storedProfilePhotos(data.people);
+      const readySources = new Set<SourceId>();
+      let withPhoto = 0;
+      let ready = 0;
+      let linkedProfiles = 0;
+      let linkedContacts = 0;
+      for (const contact of list) {
+        const links = contact.urls.map((u) => parseProfileLink(u.value)).filter((l): l is ProfileLink => Boolean(l));
+        linkedProfiles += new Set(links.map((l) => l.url)).size;
+        if (links.length) linkedContacts++;
+        if (contact.hasPhoto) {
+          withPhoto++;
+          continue;
+        }
+        const pin = pins[contact.id];
+        const entry = queue.entries[contact.id];
+        const sources: SourceId[] = [
+          ...(links.some((l) => reads[l.url]?.photoUrl || scanned(l)) ? ["links" as const] : []),
+          ...(pin?.hash ? [pin.source] : []),
+          ...(entry?.kind === "photo" ? entry.photos.map((p) => p.source) : []),
+        ];
+        if (!sources.length) continue;
+        ready++;
+        for (const source of sources) readySources.add(source);
+      }
+      const cards = suggestions(data, list, queue);
+      const waiting = cards.filter((s) => s.queue?.kind !== "changed" || s.candidates.length);
+      const lastSearch = Object.values(data.searches).sort().pop();
+      const whatsapp = await whatsappCount(sessionId, list);
+      const body: Coverage = {
+        total: list.length,
+        withPhoto,
+        ready,
+        readySources: [...readySources].sort(),
+        noSource: list.length - withPhoto - ready,
+        toReview: waiting.length,
+        toReviewWithoutPhoto: waiting.filter((s) => !s.hasPhoto).length,
+        changed: cards.filter((s) => s.queue?.kind === "changed").length,
+        ...(lastSearch ? { lastSearch } : {}),
+        linkedProfiles,
+        linkedContacts,
+        ...(whatsapp !== undefined ? { whatsapp } : {}),
+      };
+      res.send(body);
+    } catch (e) {
+      failed(req, res, "Reading the Dashboard", e);
     }
   });
 

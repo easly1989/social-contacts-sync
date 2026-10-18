@@ -2,7 +2,7 @@ import { mkdirSync } from "fs";
 import path from "path";
 import { Page, Request, Route, WebSocketRoute, expect } from "@playwright/test";
 
-import { LinkedNetworks, PinnedProfiles, ProfileScanState, ProfilesOverview, Contact, ContactLabel, TelegramState, CleanupActionSummary, CleanupScan, DesktopInfo, EventType, MergeRequest, GoogleAccount, GoogleStats, RunRecord, SessionStatus, UpdateCheck } from "../../interfaces/api";
+import { Coverage, LinkedNetworks, PinnedProfiles, ProfileScanState, ProfilesOverview, Contact, ContactLabel, TelegramState, CleanupActionSummary, CleanupScan, DesktopInfo, EventType, MergeRequest, GoogleAccount, GoogleStats, RunRecord, SessionStatus, UpdateCheck } from "../../interfaces/api";
 import { avatars } from "./avatars";
 
 /**
@@ -22,6 +22,12 @@ export class FakeBackend {
   credentialsResult: { status: number; body: unknown } = { status: 200, body: { ok: true } };
   account: GoogleAccount = { email: "ada@example.com", name: "Ada Lovelace", totalContacts: 1248 };
   stats: GoogleStats = { totalContacts: 1248, withPhoto: 774, updatedAt: "2026-10-03T12:00:00.000Z" };
+  /** The Dashboard (issue #85), shaped like its mockup. */
+  coverage: Coverage = {
+    total: 1248, withPhoto: 774, ready: 190, readySources: ["gravatar", "links", "whatsapp"], noSource: 284,
+    toReview: 21, toReviewWithoutPhoto: 12, changed: 4, lastSearch: "2026-10-10T09:00:00.000Z",
+    linkedProfiles: 257, linkedContacts: 233, whatsapp: 812,
+  };
   runs: RunRecord[] = [];
   undoRequests: { id: string; body: unknown }[] = [];
   desktopInfo: DesktopInfo = {
@@ -126,6 +132,7 @@ export class FakeBackend {
       }
       if (pathname === "/api/google_account") return route.fulfill({ json: this.account });
       if (pathname === "/api/google_stats") return route.fulfill({ json: this.stats });
+      if (pathname === "/api/profiles/coverage") return route.fulfill({ json: this.coverage });
       if (pathname === "/api/runs") return route.fulfill({ json: this.runs.map(({ results: _r, ...summary }) => summary) });
       if (pathname === "/api/links/lookup") {
         const body = request.postDataJSON();
