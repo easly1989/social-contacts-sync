@@ -24,6 +24,24 @@ export function sampleRun(id = "2026-10-03T13-42-00-000Z-abc123", startedAt = "2
   };
 }
 
+/** Decisions made in To review (issue #84): a photo with its profile, and a profile without a photo. */
+export function sampleReview(id = "2026-10-04T09-10-00-000Z-rev001", startedAt = "2026-10-04T09:10:00.000Z"): RunRecord {
+  const at = (minutes: number) => new Date(Date.parse(startedAt) + minutes * 60_000).toISOString();
+  return {
+    id,
+    startedAt,
+    finishedAt: at(12),
+    mode: "session",
+    sources: ["links"],
+    totalContacts: 2,
+    counters: { added: 0, replaced: 1, linked: 1, kept: 0, alreadyHadPhoto: 0, noMatch: 0, errors: 0 },
+    results: [
+      { contactId: "people/ec", name: "Elena Conti", outcome: "replaced", source: "links", matchedBy: "instagram.com/elena_conti", hasPhoto: true, hasPrevious: true, at: at(0), previousPin: null, profiles: [{ url: "https://instagram.com/elena_conti", network: "instagram", added: true }] },
+      { contactId: "people/dg", name: "Davide Gallo", outcome: "linked", at: at(12), profiles: [{ url: "https://linkedin.com/in/davidegallo", network: "linkedin", added: true }, { url: "https://bsky.app/profile/dgallo.bsky.social", network: "bluesky", added: true }] },
+    ],
+  };
+}
+
 const daysAgo = (days: number) => new Date(Date.now() - days * 86_400_000).toISOString();
 const photo = (i: number) => `/api/e2e-photos/${i}`;
 

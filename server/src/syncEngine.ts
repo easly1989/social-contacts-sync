@@ -9,6 +9,9 @@ import { FoundPhoto, PhotoSource } from "./sources/types";
 import { Base64 } from "./types";
 import { googleErrorMessage } from "./googleRetry";
 
+/** A History entry's id: when it started, and a few random characters. */
+export const newRunId = (at = new Date()) => `${at.toISOString().replace(/[:.]/g, "-")}-${crypto.randomBytes(3).toString("hex")}`;
+
 /*
   The photo sync, independent of WhatsApp, Google and the WebSocket: they
   come in as a target, sources and callbacks, which keeps it testable.
@@ -107,7 +110,7 @@ export async function runSync(
   const results: ContactResult[] = [];
   const photos: RunPhotos[] = [];
   const run: RunRecord = {
-    id: `${new Date().toISOString().replace(/[:.]/g, "-")}-${crypto.randomBytes(3).toString("hex")}`,
+    id: newRunId(),
     startedAt: new Date().toISOString(),
     mode: "sync",
     options,
@@ -139,7 +142,7 @@ export async function runSync(
       const existing = contact.hasPhoto ? await target.currentPhoto(contact) : null;
       await callbacks.beforeWrite?.();
       const googleUrl = await target.setPhoto(contact.id, found.photo);
-      Object.assign(result, { outcome: existing ? "replaced" : "added", source: found.source, matchedBy: found.matchedBy });
+      Object.assign(result, { outcome: existing ? "replaced" : "added", source: found.source, matchedBy: found.matchedBy, previousPin: contact.pin ?? null });
       Object.assign(kept, { photo: found.photo, previous: existing ?? undefined });
       latest = { name: contact.name, source: found.source, ...(found.network ? { network: found.network } : {}), ...(pinned ? { pinned } : {}) };
       return googleUrl;

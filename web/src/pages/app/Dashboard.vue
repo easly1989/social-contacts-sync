@@ -23,6 +23,8 @@ const stats = ref<GoogleStats>();
 const statsError = ref(false);
 const runs = ref<RunSummary[]>([]);
 const lastRun = ref<RunRecord>();
+// Review entries (issue #84) are in the activity, but the last sync is a sync.
+const lastSync = computed(() => runs.value.find((r) => r.mode !== "session"));
 const loading = ref(false);
 
 const coverage = computed(() => (stats.value?.totalContacts ? Math.round((stats.value.withPhoto / stats.value.totalContacts) * 100) : 0));
@@ -46,7 +48,7 @@ async function load(refresh = false): Promise<void> {
   status.value = s;
   account.value = a;
   runs.value = r;
-  lastRun.value = r[0] ? await api.run(r[0].id).catch(() => undefined) : undefined;
+  lastRun.value = lastSync.value ? await api.run(lastSync.value.id).catch(() => undefined) : undefined;
   try {
     stats.value = await api.stats(refresh);
   } catch {
@@ -92,8 +94,8 @@ onMounted(() => load());
             </div>
             <div v-else-if="statsError" class="mt-2 flex items-center gap-1.5 text-sm text-error"><CircleAlert class="size-4" />{{ $t("dashboard.statsError") }}</div>
             <div v-else class="skeleton mt-2 h-8 w-64"></div>
-            <div v-if="runs[0]" class="mt-1 flex items-center gap-1.5 text-sm text-success">
-              <ImagePlus class="size-4" />{{ $t("dashboard.lastSync", { count: runs[0].counters.added + runs[0].counters.replaced, when: relativeTime(runs[0].startedAt, locale) }) }}
+            <div v-if="lastSync" class="mt-1 flex items-center gap-1.5 text-sm text-success">
+              <ImagePlus class="size-4" />{{ $t("dashboard.lastSync", { count: lastSync.counters.added + lastSync.counters.replaced, when: relativeTime(lastSync.startedAt, locale) }) }}
             </div>
             <div v-else class="mt-1 text-sm text-base-content/60">{{ $t("dashboard.noSyncYet") }}</div>
           </div>
@@ -163,9 +165,9 @@ onMounted(() => load());
             <router-link :to="`/app/history/${run.id}`" class="flex items-center gap-3 py-2.5">
               <span class="grid size-8 place-items-center rounded-lg bg-base-200 text-primary"><RefreshCw class="size-4" /></span>
               <div class="flex-1">
-                <div class="font-medium">{{ $t("history.photoSync") }} · {{ $t(`history.modes.${run.mode}`) }}</div>
+                <div class="font-medium">{{ run.mode === "session" ? $t("history.review") : $t("history.photoSync") }} · {{ $t(`history.modes.${run.mode}`) }}</div>
                 <div class="text-xs text-base-content/60">
-                  {{ $t("history.resultText", { added: run.counters.added + run.counters.replaced, errors: run.counters.errors }) }}
+                  {{ run.mode === "session" ? $t("history.reviewResult", run.totalContacts) : $t("history.resultText", { added: run.counters.added + run.counters.replaced, errors: run.counters.errors }) }}
                   <template v-if="run.finishedAt"> · {{ duration(Date.parse(run.finishedAt) - Date.parse(run.startedAt), locale) }}</template>
                 </div>
               </div>

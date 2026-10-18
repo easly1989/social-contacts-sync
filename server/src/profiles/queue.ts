@@ -30,11 +30,11 @@ export interface QueueData {
   entries: Record<string, StoredEntry>;
   /** Contact → hashes of photos turned down ("Keep current"): a sync doesn't offer them again. */
   dismissed: Record<string, string[]>;
-  /** Photos applied from To review, with the photo each replaced (in the photo cache) and a link a confirm saved, for undo in History (issue #84). */
-  applied: { contactId: string; at: string; source: SourceId; matchedBy?: string; previous?: string; link?: string }[];
+  /** Photos applied from To review before issue #84, with the photo each replaced (in the photo cache): they become Review entries in History once. */
+  applied?: { contactId: string; at: string; source: SourceId; matchedBy?: string; previous?: string; link?: string }[];
 }
 
-const empty = (): QueueData => ({ entries: {}, dismissed: {}, applied: [] });
+const empty = (): QueueData => ({ entries: {}, dismissed: {} });
 
 function file(): string | undefined {
   return process.env.SCS_DESKTOP === "1" && process.env.SCS_DATA_DIR ? path.join(process.env.SCS_DATA_DIR, "review-queue.json") : undefined;
@@ -53,7 +53,6 @@ export function loadQueue(sessionId: string, now = Date.now()): QueueData {
   }
   // Older entries have lost their photos: they leave the queue.
   for (const [id, entry] of Object.entries(data.entries)) if (now - Date.parse(entry.addedAt) > retentionDays * 86_400_000) delete data.entries[id];
-  data.applied = data.applied.filter((a) => now - Date.parse(a.at) <= retentionDays * 86_400_000);
   return data;
 }
 
@@ -100,12 +99,4 @@ export function resolveEntry(data: QueueData, contactId: string, used: boolean):
   delete data.entries[contactId];
   if (!used && entry.kind === "photo") data.dismissed[contactId] = [...new Set([...(data.dismissed[contactId] ?? []), ...entry.photos.map((p) => p.hash)])];
   return entry;
-}
-
-/** Keeps the photo a confirm from To review replaced, for undo. */
-export function recordApplied(data: QueueData, contactId: string, source: SourceId, matchedBy: string | undefined, previous: Base64 | null | undefined, link?: string): void {
-  const at = new Date().toISOString();
-  const id = `previous:${contactId}:${at}`;
-  if (previous) cachePhoto({ id }, Buffer.from(previous, "base64"));
-  data.applied.push({ contactId, at, source, ...(matchedBy ? { matchedBy } : {}), ...(previous ? { previous: id } : {}), ...(link ? { link } : {}) });
 }

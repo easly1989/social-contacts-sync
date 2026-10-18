@@ -74,3 +74,36 @@ test("undo also removes a profile link the run saved", async () => {
   assert.deepEqual(calls, ["delete c/added"]);
   assert.deepEqual(removed, ["c/added https://instagram.com/ada"]);
 });
+
+test("a review session: links come off with the photo, and the previous pin comes back (issue #84)", async () => {
+  const r = run();
+  r.mode = "session";
+  const pin = { source: "whatsapp" as const, readAt: "2026-10-01T00:00:00.000Z" };
+  r.results = [
+    { contactId: "c/photo", outcome: "replaced", previousPin: pin, profiles: [{ url: "https://instagram.com/ada", network: "Instagram", added: true }, { url: "https://x.com/ada", network: "X" }] },
+    { contactId: "c/links", outcome: "linked", profiles: [{ url: "https://github.com/bea", network: "GitHub", added: true }] },
+    { contactId: "c/old", outcome: "added" },
+  ];
+  const { calls, target: t } = target();
+  const pins: string[] = [];
+  const undone: string[] = [];
+  await undoRun(r, () => "old", {
+    ...t,
+    removeLink: async (id, url) => void calls.push(`unlink ${id} ${url}`),
+    restorePin: (id, p) => void pins.push(`${id} ${p === undefined ? "unknown" : p ? p.source : "none"}`),
+    afterUndo: (result) => void undone.push(result.contactId),
+  });
+  assert.deepEqual(calls, ["set c/photo old", "unlink c/photo https://instagram.com/ada", "unlink c/links https://github.com/bea", "delete c/old"]);
+  // A link only: the photo and its pin stay. A run from before issue #84: the pin is cleared, as it was.
+  assert.deepEqual(pins, ["c/photo whatsapp", "c/old unknown"]);
+  assert.deepEqual(undone, ["c/photo", "c/links", "c/old"]);
+  assert.equal(r.undone, true);
+});
+
+test("a pin on the source that sent the undone photo isn't put back: the next sync would bring the photo back", async () => {
+  const r = run();
+  r.results = [{ contactId: "c/wa", outcome: "replaced", source: "whatsapp", matchedBy: "+39 1", previousPin: { source: "whatsapp", matchedBy: "+39 1", readAt: "2026-10-01T00:00:00.000Z" } }];
+  const pins: unknown[] = [];
+  await undoRun(r, () => "old", { ...target().target, restorePin: (_id, p) => void pins.push(p) });
+  assert.deepEqual(pins, [null]);
+});
