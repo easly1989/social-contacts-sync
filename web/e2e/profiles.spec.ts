@@ -270,6 +270,45 @@ test("web version: no login scan", async ({ page }) => {
   await expect(page.getByTestId("profile-scan")).toContainText("Available in the desktop app.");
 });
 
+test("To review: a linked profile the sync just read is offered once, and every photo grows on hover", async ({ page }) => {
+  const readAt = "2026-10-15T09:00:00.000Z";
+  const linked = (network: "facebook" | "instagram" | "linkedin", url: string, i: number) =>
+    ({ id: `${network}:${i}`, network, url, handle: url.split("/").pop()!, name: "Alessandro Ciaschini", photoUrl: `/api/e2e-photos/${i}`, source: "scan" }) as const;
+  backend.profiles!.suggestions.push({
+    contactId: "people/ac",
+    name: "Alessandro Ciaschini",
+    hasPhoto: true,
+    photoUrl: "/api/e2e-photos/5",
+    candidates: [],
+    linked: [linked("facebook", "https://facebook.com/theciascone", 1), linked("instagram", "https://www.instagram.com/alessandrociaschini/", 2), linked("linkedin", "https://linkedin.com/in/alessandro-ciaschini", 3)],
+    queue: {
+      kind: "photo",
+      photos: [
+        { id: "photo:wa", source: "whatsapp", matchedBy: "+39 333 913 9471", readAt },
+        { id: "photo:fb", source: "links", network: "Facebook", matchedBy: "facebook.com/theciascone", readAt },
+        { id: "photo:ig", source: "links", network: "Instagram", matchedBy: "instagram.com/alessandrociaschini", readAt },
+      ],
+      addedAt: readAt,
+    },
+  });
+  await page.goto("/app/sync?tab=review");
+  const card = page.getByTestId("profile-card").filter({ hasText: "Alessandro Ciaschini" });
+  // The current photo, the sync's three, and LinkedIn, which the sync didn't read: no second Facebook or Instagram.
+  await expect(card.getByRole("radio")).toHaveCount(5);
+  await expect(card.getByRole("radio", { name: "Facebook · facebook.com/theciascone" })).toHaveCount(1);
+  await expect(card.getByRole("radio", { name: /^Instagram/ })).toHaveCount(1);
+  await expect(card.getByRole("radio", { name: "LinkedIn · linkedin.com/in/alessandro-ciaschini" })).toHaveCount(1);
+  await card.evaluate((e) => e.scrollIntoView({ block: "end" }));
+  await screenshot(page, "71a-sync-review-once", { fullPage: false });
+
+  await card.locator("img[src='/api/profiles/queue-photo?id=photo%3Afb']").hover();
+  await expect(page.getByTestId("photo-zoom")).toBeVisible();
+  await expect(page.getByTestId("photo-zoom")).toContainText("Facebook");
+  await screenshot(page, "71b-sync-review-zoom", { fullPage: false });
+  await card.locator("label", { has: page.getByRole("radio", { name: /^LinkedIn/ }) }).locator("img").hover();
+  await expect(page.getByTestId("photo-zoom")).toContainText("Alessandro Ciaschini");
+});
+
 test("To review: a sync's different photo, and a pinned photo changed outside the app (issue #82)", async ({ page }) => {
   const readAt = "2026-10-15T09:00:00.000Z";
   backend.profiles!.suggestions.push(

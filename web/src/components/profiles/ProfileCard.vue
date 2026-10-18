@@ -5,6 +5,7 @@ import { ArrowLeftRight, ArrowRight, Check, ExternalLink, Link, Lock, Pin } from
 
 import ContactAvatar from "../ContactAvatar.vue";
 import NetworkMark from "./NetworkMark.vue";
+import PhotoZoom from "../PhotoZoom.vue";
 import ProfilePhoto from "./ProfilePhoto.vue";
 import ProfileLinkLookup from "../ProfileLinkLookup.vue";
 import SourceBadge from "../SourceBadge.vue";
@@ -33,6 +34,7 @@ const sourceName = (source: SourceId, network?: string) => network ?? sourceInfo
 /** Where a photo comes from, in words: "Instagram", "WhatsApp"… */
 const optionName = (o: PhotoOption) => (o.person ? networkInfo[o.person.network].name : o.queued ? sourceName(o.queued.source, o.queued.network) : o.lookup!.network);
 const caption = (o: PhotoOption) => (o.person ? (o.suggested ? handle(o.person) : t("sync.card.linked")) : o.queued ? o.queued.matchedBy : o.lookup!.url.replace(/^https:\/\//, ""));
+const optionSrc = (o: PhotoOption) => (o.queued ? api.queuePhotoUrl(o.id) : `data:image/jpeg;base64,${o.lookup!.photo}`);
 const pinnedName = computed(() => (queued.value?.pinned ? sourceName(queued.value.pinned.source, queued.value.pinned.network) : ""));
 const ticked = (c: ProfileCandidate) => props.pick.ticked.includes(c.person.id);
 const why = (c: ProfileCandidate) =>
@@ -132,7 +134,9 @@ defineExpose({ act, pickAt: (i: number) => photos.value[i] && choose(photos.valu
       </figure>
       <ArrowLeftRight class="size-4 text-base-content/40" aria-hidden="true" />
       <figure class="flex flex-col items-center gap-1.5 text-center">
-        <img v-if="queued!.photos.length" :src="api.queuePhotoUrl(queued!.photos[0].id)" :alt="$t('sync.card.fromSource', { source: pinnedName })" class="size-14 rounded-full object-cover" />
+        <PhotoZoom v-if="queued!.photos.length" :src="api.queuePhotoUrl(queued!.photos[0].id)" :name="pinnedName">
+          <img :src="api.queuePhotoUrl(queued!.photos[0].id)" :alt="$t('sync.card.fromSource', { source: pinnedName })" class="size-14 rounded-full object-cover" />
+        </PhotoZoom>
         <span v-else class="grid size-14 place-items-center rounded-full border-2 border-dashed border-base-300 text-[11px] text-base-content/50">?</span>
         <figcaption><SourceBadge :source="queued!.pinned?.source ?? 'links'" :label="queued!.pinned?.network" /></figcaption>
       </figure>
@@ -159,8 +163,8 @@ defineExpose({ act, pickAt: (i: number) => photos.value[i] && choose(photos.valu
           >
             <input type="radio" class="sr-only" :name="`photo-${suggestion.contactId}`" :checked="pick.photoFrom === c.id" :disabled="disabled" :aria-label="`${optionName(c)} · ${c.person ? handle(c.person) : caption(c)}`" @change="choose(c.id)" />
             <span class="relative rounded-full p-0.5 ring-2" :class="pick.photoFrom === c.id ? 'ring-primary' : 'ring-transparent'">
-              <ProfilePhoto v-if="c.person" :person="c.person" size="size-14" plain />
-              <img v-else :src="c.queued ? api.queuePhotoUrl(c.id) : `data:image/jpeg;base64,${c.lookup!.photo}`" alt="" class="size-14 rounded-full object-cover" />
+              <ProfilePhoto v-if="c.person" :person="c.person" size="size-14" />
+              <PhotoZoom v-else :src="optionSrc(c)" :name="optionName(c)"><img :src="optionSrc(c)" alt="" class="size-14 rounded-full object-cover" /></PhotoZoom>
               <Check v-if="pick.photoFrom === c.id" class="absolute -right-1 -top-1 size-5 rounded-full bg-primary p-0.5 text-primary-content" aria-hidden="true" />
             </span>
             <span class="flex items-center gap-1"
