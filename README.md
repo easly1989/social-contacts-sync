@@ -24,7 +24,7 @@
 > [support him too](https://www.buymeacoffee.com/guyzyl).
 
 <p align="center">
-    <img src="docs/images/dashboard.png" alt="Dashboard: photo coverage, sources, recent activity" width="820"/>
+    <img src="docs/images/dashboard.png" alt="Dashboard: photo coverage in three parts, next steps, sources and recent activity" width="820"/>
 </p>
 
 ## Features
@@ -36,25 +36,35 @@
   profiles saved on a contact give it their public picture, with no sign-in.
   Instagram, Facebook and LinkedIn can be turned on too, unofficially. Add a
   link right from a sync report's "No photo found" list, or while reviewing.
-- **You stay in control.** Fill in only missing photos, replace them all, or
-  review each one with the keyboard.
-- **Nothing changes without a way back.** Every sync has a report and can be
-  undone, as a whole or one contact at a time.
-- **Find profiles.** Suggests the social profiles of your contacts, from your
-  own Instagram and LinkedIn data exports, a public search by name on Bluesky,
-  Mastodon and GitHub, and, experimental and off by default, a slow scan of
-  your own followers, friends and connections with your Instagram, Facebook or
-  LinkedIn login (against those sites' terms: your account may be limited or
-  suspended). Review them as a list or one contact at a time, link several
-  profiles to a contact and pick whose photo to use, or select many contacts
-  and link them in one go.
+- **A sync that applies what is safe.** It fills in missing photos and updates
+  the ones that follow a source. Everything else waits in *To review*: a
+  different photo for a contact that already has one, or a photo changed
+  outside the app. Or decide every contact yourself.
+- **Photos follow their source.** A photo picked from WhatsApp, Gravatar or a
+  profile keeps following it, so later syncs bring its new picture. A photo you
+  change by hand in Google is never overwritten.
+- **To review.** One card per contact, kept between sessions. Tick the social
+  profiles that are really them, and pick one photo among every source and
+  every profile. Confirm one contact, or select many and confirm them in one
+  go. The suggestions come from:
+  - your own Instagram and LinkedIn data exports;
+  - a public search by name on Bluesky, Mastodon and GitHub;
+  - experimental and off by default, a slow scan of your own followers, friends
+    and connections with your Instagram, Facebook or LinkedIn login. This goes
+    against those sites' terms: your account may be limited or suspended.
+- **Nothing changes without a way back.** Every sync and every review session
+  is in History, with a report. Undo one contact or the whole entry: the photo,
+  the profile links and the source the photo followed go back together.
+- **A dashboard that says what to do next.** How many contacts have a photo,
+  how many have one ready, and how many have no source yet, with the next steps
+  in order of impact.
 - **Contacts.** Every Google contact in one list, with the ones still without a
   photo one click away: edit every field, add, duplicate, delete, merge and
   label them, add a profile link to anyone, and upload photos by hand, one at a
   time or many at once. A photo uploaded by hand is a placeholder: the next sync
-  replaces it as soon as a source has a real one. Or keep a photo: then no sync
-  and no Find profiles replaces it, while links to WhatsApp and social profiles
-  still work for that contact.
+  replaces it as soon as a source has a real one. Or keep a photo: then nothing
+  in the app replaces it, while links to WhatsApp and social profiles still
+  work for that contact.
 - **Clean up.** Find duplicate contacts and merge them field by field, find
   numbers saved on different people, and add missing country codes. Every
   change is backed up and can be undone from History.
@@ -63,15 +73,15 @@
   and sign-ins are kept encrypted with your system's keychain.
 - **English and Italian; light, dark or system theme.**
 
-| Sync photos | Report and undo |
+| To review | Run a sync |
 |---|---|
-| ![Sync setup](docs/images/sync-setup.png) | ![Sync report](docs/images/sync-report.png) |
-| **Contacts** | **Edit every field, or keep a photo** |
-| ![Contacts](docs/images/contacts.png) | ![Contact editor](docs/images/contact-edit.png) |
-| **Find profiles** | **Where the profiles come from** |
-| ![Find profiles](docs/images/find-profiles.png) | ![Find profiles sources](docs/images/find-profiles-sources.png) |
-| **Add a profile link from a report** | **Updates with progress** |
-| ![Add a profile link](docs/images/report-add-link.png) | ![Update ready](docs/images/updates.png) |
+| ![To review](docs/images/sync-review.png) | ![Run a sync](docs/images/sync-run.png) |
+| **Where photos come from** | **Report and undo** |
+| ![Sync sources](docs/images/sync-sources.png) | ![Sync report](docs/images/sync-report.png) |
+| **History: syncs and reviews** | **Contacts** |
+| ![History](docs/images/history.png) | ![Contacts](docs/images/contacts.png) |
+| **Edit every field, or keep a photo** | **Updates with progress** |
+| ![Contact editor](docs/images/contact-edit.png) | ![Update ready](docs/images/updates.png) |
 | **Clean up duplicates** | **Setup wizard** |
 | ![Clean up](docs/images/cleanup.png) | ![Google project setup](docs/images/setup-google.png) |
 
@@ -123,7 +133,8 @@ The packages are not code-signed yet:
 4. **Link WhatsApp** by scanning a QR code, like WhatsApp Web, and/or **sign in
    to Telegram** with your phone number and the code Telegram sends you.
    Gravatar and profile links need no sign-in.
-5. **Sync photos** from the dashboard, and look at **Clean up** for duplicates.
+5. **Run a sync** from **Sync**, then go through what waits in **To review**.
+   The dashboard says what to do next, and **Clean up** finds duplicates.
 
 Google allows about 40 photo updates per minute, so a large address book takes a
 while; the app shows progress and an estimate.
@@ -285,12 +296,15 @@ The app stays signed in between launches, unless you turn off
 | `secret.key` | the key for `google-token.enc`, itself protected by the OS keychain (DPAPI, Keychain, libsecret/kwallet) |
 | `whatsapp/` | WhatsApp's linked-device session |
 | `telegram-session.enc` | the Telegram sign-in, encrypted like the Google one |
-| `history/` | past syncs with the photos they changed, for reports and undo (kept 90 days) |
+| `history/` | past syncs and review sessions with the photos they changed, for reports and undo (kept 90 days) |
 | `history/cleanup/` | backups of merged contacts (all their fields and photos), for undo (kept 90 days) |
 | `cleanup.json` | clean-up choices, such as groups marked *Not duplicates* |
 | `placeholders.json` | which contacts have a photo uploaded by hand on the Contacts page, so a sync can replace it |
 | `kept-photos.json` | which contacts' photos are kept: the app never replaces them |
-| `profiles.json` | Find profiles: the people read from your exports, searches and scans, and your answers |
+| `profiles.json` | the people read from your exports, searches and scans, and your answers in To review |
+| `review-queue.json` | the photos a sync sent to *To review*, and the ones you turned down |
+| `photo-pins.json` | which source each contact's photo follows |
+| `profile-reads.json` | desktop: what was read from each pinned profile with your login, and when |
 | `review-photos/` | the profile photos shown in Sync's *To review*, so a card keeps its photo after the site's address for it expires (kept 90 days) |
 | `update-pending.json` | for a moment while an update installs: what to do when it's done |
 | `logs/` | server logs |
