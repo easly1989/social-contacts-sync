@@ -46,7 +46,8 @@ plain TypeScript 5. Set `PUPPETEER_SKIP_DOWNLOAD=true` for installs that don't d
 
 CI (`.github/workflows/ci.yml`) runs: server build + tests, web build + e2e, a smoke test of the
 built server (`.github/scripts/smoke-test.sh`), a Docker build, desktop tests + packaged-app launch,
-and shellcheck on `.github/scripts/`. E2e screenshots are posted on PRs.
+and shellcheck on `.github/scripts/`. E2e screenshots are kept as workflow artifacts;
+images for issues and PRs go on the `pr-assets` branch.
 
 ## Architecture
 
