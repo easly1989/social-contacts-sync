@@ -30,25 +30,38 @@
 ## Features
 
 - **Photos from your sources.** WhatsApp and Telegram (matched by phone number)
-  and Gravatar (matched by email), in the priority order you choose. Only your
+  and Gravatar (matched by email), with each profile network as a source of its
+  own, all in one priority order you choose. Each source shows whether it is
+  ready, and connecting or signing in is done right on its row. Only your
   existing Telegram contacts are read; nothing is added to your account.
 - **Profile links.** The X, YouTube, Bluesky, Mastodon and GitHub
   profiles saved on a contact give it their public picture, with no sign-in.
   Instagram, Facebook and LinkedIn can be turned on too, unofficially. Add a
-  link right from a sync report's "No photo found" list, or while reviewing.
+  link right from a sync report's "No photo found" list, or from Sync.
+- **Sync, step by step.** *Sources*, *Profiles*, *Sync*, *Photos*, *To search*
+  and *Summary*: skip any step but the first.
 - **A sync that applies what is safe.** It fills in missing photos and updates
-  the ones that follow a source. Everything else waits in *To review*: a
-  different photo for a contact that already has one, or a photo changed
-  outside the app. Or decide every contact yourself.
+  the ones that follow a source. Everything else waits in *Photos*: a different
+  photo for a contact that already has one, or a photo changed outside the app.
+  Or decide every contact yourself.
+- **A sync that doesn't give up.** A source that stops working is left out and
+  the sync goes on. A site that signs you out offers *Sign in again* right
+  where it happened. The *Summary* lists what didn't finish, each with its fix.
 - **Photos follow their source.** A photo picked from WhatsApp, Gravatar or a
   profile keeps following it, so later syncs bring its new picture. A photo you
   change by hand in Google is never overwritten.
-- **To review.** One card per contact, kept between sessions, including every
-  contact still without a photo. Filter by what a card needs, or search by
-  name. Tick the social profiles that are really them, and pick one photo among
-  every source and every profile; only photos sharp enough and different from
-  the current one are offered. Confirm one contact, or select many and confirm
-  them in one go. The suggestions come from:
+- **Profiles, Photos and To search.** One card per contact, kept between
+  sessions.
+  - In *Profiles*, tick the social profiles that are really them.
+  - In *Photos*, pick one photo among every source and the profiles you just
+    linked. Only photos sharp enough and different from the current one are
+    offered.
+  - *To search* holds the contacts where nothing was found: search a profile,
+    look up a link, or upload a photo.
+  - Filter by what a card needs, or search by name. Confirm one contact, or
+    select many and confirm them in one go.
+
+  The suggestions come from:
   - your own Instagram and LinkedIn data exports;
   - a public search by name on Bluesky, Mastodon and GitHub;
   - experimental and only when you start it, on the desktop app, with your
@@ -77,11 +90,13 @@
   and sign-ins are kept encrypted with your system's keychain.
 - **English and Italian; light, dark or system theme.**
 
-| To review | Run a sync |
+| Sources, in one order | A sync in progress |
 |---|---|
-| ![To review](docs/images/sync-review.png) | ![Run a sync](docs/images/sync-run.png) |
-| **Where photos come from** | **Report and undo** |
-| ![Sync sources](docs/images/sync-sources.png) | ![Sync report](docs/images/sync-report.png) |
+| ![Sync sources](docs/images/sync-sources.png) | ![A sync in progress](docs/images/sync-run.png) |
+| **Choose photos** | **Summary, with the fixes** |
+| ![Photos](docs/images/sync-review.png) | ![Summary](docs/images/sync-summary.png) |
+| **Report and undo** | |
+| ![Sync report](docs/images/sync-report.png) | |
 | **History: syncs and reviews** | **Contacts** |
 | ![History](docs/images/history.png) | ![Contacts](docs/images/contacts.png) |
 | **Edit every field, or keep a photo** | **Updates with progress** |
@@ -137,7 +152,8 @@ The packages are not code-signed yet:
 4. **Link WhatsApp** by scanning a QR code, like WhatsApp Web, and/or **sign in
    to Telegram** with your phone number and the code Telegram sends you.
    Gravatar and profile links need no sign-in.
-5. **Run a sync** from **Sync**, then go through what waits in **To review**.
+5. **Sync** walks you through it: check the sources, link the profiles found,
+   run the sync, then choose the photos it left for you.
    The dashboard says what to do next, and **Clean up** finds duplicates.
 
 Google allows about 40 photo updates per minute, so a large address book takes a
@@ -305,11 +321,11 @@ The app stays signed in between launches, unless you turn off
 | `cleanup.json` | clean-up choices, such as groups marked *Not duplicates* |
 | `placeholders.json` | which contacts have a photo uploaded by hand on the Contacts page, so a sync can replace it |
 | `kept-photos.json` | which contacts' photos are kept: the app never replaces them |
-| `profiles.json` | the people read from your exports, searches and scans, and your answers in To review |
-| `review-queue.json` | the photos a sync sent to *To review*, and the ones you turned down |
+| `profiles.json` | the people read from your exports, searches and scans, and your answers in Sync |
+| `review-queue.json` | the photos a sync left for Sync's *Photos* step, and the ones you turned down |
 | `photo-pins.json` | which source each contact's photo follows |
 | `profile-reads.json` | desktop: what was read from each pinned profile with your login, and when |
-| `review-photos/` | the profile photos shown in Sync's *To review*, so a card keeps its photo after the site's address for it expires (kept 90 days) |
+| `review-photos/` | the profile photos shown in Sync's *Profiles* and *Photos* steps, so a card keeps its photo after the site's address for it expires (kept 90 days) |
 | `update-pending.json` | for a moment while an update installs: what to do when it's done |
 | `logs/` | server logs |
 

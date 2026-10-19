@@ -3,7 +3,59 @@
 What changed in each release of Social Contacts Sync. The packages are on the
 [releases page](https://github.com/easly1989/social-contacts-sync/releases).
 
-## Unreleased
+## 1.4.3 — 2026-10-19
+
+### Added
+
+- **Sync is a step-by-step wizard.**
+  ([#107](https://github.com/easly1989/social-contacts-sync/issues/107))
+  - The steps are *Sources*, *Profiles*, *Sync*, *Photos*, *To search* and
+    *Summary*.
+  - Every step except Sources can be skipped.
+  - Each step shows how many contacts wait in it.
+  - Sync opens on Sources, or on the sync itself while one is running.
+  - On a phone, the steps fold into a menu.
+- **Profiles before photos.** Profiles links the profiles found for each
+  contact. Photos then offers their pictures, marked *linked now*, next to the
+  photos the sync found.
+- **To search.** The contacts where no source found anything get their own
+  step. From there you can search their name with your login, look up a profile
+  link, upload a photo, or leave them without one.
+- **Summary.** It shows what the sync did and what didn't finish, each with its
+  fix: run again with only that source, sign in and read again, or open the
+  report and undo.
+
+### Changed
+
+- **One list of sources.** WhatsApp, Gravatar, Telegram and each profile
+  network share a single priority order.
+  - Each row shows its real state, such as *Connected*, *Signed in* or
+    *Session closed*.
+  - Each row has its own fix: *Connect*, *Sign in* or *Sign in again*.
+  - A network with no linked profiles waits behind *Show all* and isn't sent
+    to the sync.
+- **Desktop: sign-ins are watched live.** A site that closes the app's session
+  shows at once, with no need to restart.
+- **A sync is never stopped by one source.**
+  - A source that fails to start, or fails three times in a row, is left out.
+    The sync goes on and says so where it happens, with *Reconnect*.
+  - When a site signs the app out during the profile reads, its row offers
+    *Sign in again*, which resumes the reads in the same sync, or *Skip*.
+  - A network without a sign-in isn't read, and Sync offers the sign-in before
+    starting.
+- The sync shows two options; *Look for different photos* and *I decide every
+  contact* are under *Advanced*.
+
+### Fixed
+
+- A failed sync can always be left: *Stop* goes away and *Back* starts again.
+  Before, *Stop* did nothing and no new sync could start.
+- The photo copies kept for undo are saved at full size. They used to be
+  100 px.
+- Signing in to Google also asks for the basic profile, so the account summary
+  no longer fails with *403*.
+
+## 1.4.2 — 2026-10-19
 
 ### Added
 
