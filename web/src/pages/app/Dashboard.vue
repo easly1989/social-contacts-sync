@@ -59,24 +59,24 @@ const steps = computed(() => {
   const c = coverage.value;
   if (!c) return [];
   return [
-    { key: "ready", count: c.ready, icon: ImagePlus, tone: "bg-accent/15 text-accent", detail: readyFrom.value, to: "/app/sync?tab=run", action: t("dashboard.syncNow"), primary: true },
+    { key: "ready", count: c.ready, icon: ImagePlus, tone: "bg-accent/15 text-accent", detail: readyFrom.value, to: "/app/sync?step=run", action: t("dashboard.syncNow"), primary: true },
     {
       key: "toReview",
       count: c.toReview,
       icon: UserSearch,
       tone: "bg-primary/10 text-primary",
       detail: c.toReviewWithoutPhoto ? t("dashboard.steps.toReviewWithoutPhoto", c.toReviewWithoutPhoto) : "",
-      to: "/app/sync?tab=review",
+      to: "/app/sync?step=profiles",
       action: t("dashboard.review"),
     },
-    { key: "changed", count: c.changed, icon: PinOff, tone: "bg-warning/15 text-warning", detail: t("dashboard.steps.changedDetail"), to: "/app/sync?tab=review", action: t("dashboard.review") },
+    { key: "changed", count: c.changed, icon: PinOff, tone: "bg-warning/15 text-warning", detail: t("dashboard.steps.changedDetail"), to: "/app/sync?step=photos", action: t("dashboard.review") },
     {
       key: "noSource",
       count: c.noSource,
       icon: Search,
       tone: "bg-base-200 text-base-content/60",
       detail: c.lastSearch ? t("dashboard.steps.lastSearch", { when: dateTime(c.lastSearch, locale.value) }) : t("dashboard.steps.noSearchYet"),
-      to: "/app/sync?tab=sources",
+      to: "/app/sync?step=search",
       action: t("dashboard.steps.sources"),
     },
   ].filter((s) => s.count > 0);
@@ -229,7 +229,7 @@ onMounted(() => load());
           <li class="flex items-center gap-3 py-3">
             <SourceMark source="links" />
             <div class="flex-1 text-sm font-semibold">{{ $t("dashboard.linkedProfiles") }}</div>
-            <router-link v-if="coverage" to="/app/sync?tab=sources" class="link link-hover text-xs text-base-content/60">
+            <router-link v-if="coverage" to="/app/sync?step=sources" class="link link-hover text-xs text-base-content/60">
               {{ $t("dashboard.linkedCount", { profiles: number(coverage.linkedProfiles, locale), contacts: number(coverage.linkedContacts, locale) }) }}
             </router-link>
           </li>

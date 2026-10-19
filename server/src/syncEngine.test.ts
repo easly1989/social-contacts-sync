@@ -366,3 +366,47 @@ test("only photos worth it go to To review (issue #104)", async () => {
   // The contact's photo is read once, only for the one that has a photo.
   assert.equal(reads, 1);
 });
+
+test("a source that can't start is left out and reported; the others still apply (issue #107)", async () => {
+  const { target, writes } = fakeTarget();
+  const broken: PhotoSource = { ...whatsapp, prepare: async () => Promise.reject(new TypeError("Cannot read properties of undefined (reading 'getContacts')")) };
+  const { events, callbacks: cb } = callbacks();
+  const { run } = await runSync(target, [broken, gravatar], options(), cb, { shuffle: false });
+
+  assert.deepEqual(writes, [
+    ["c/ada", "gr-Ada"],
+    ["c/cy", "gr-Cy"],
+  ]);
+  assert.deepEqual(run.issues, [{ source: "whatsapp", reason: "disconnected", message: "Cannot read properties of undefined (reading 'getContacts')", checked: 0 }]);
+  assert.deepEqual(events[events.length - 1].issues, run.issues);
+});
+
+test("a source that fails three contacts in a row is left out for the rest of the run (issue #107)", async () => {
+  const { target, writes } = fakeTarget([], [...contacts, { id: "c/fay", name: "Fay", numbers: [], emails: ["fay@example.com"], hasPhoto: false }]);
+  let calls = 0;
+  const flaky: PhotoSource = { id: "whatsapp", find: async () => (calls++, Promise.reject(new Error("WhatsApp didn't answer within 90 seconds."))) };
+  const { run } = await runSync(target, [flaky, gravatar], options({ lookDifferent: false }), callbacks().callbacks, { shuffle: false });
+
+  assert.equal(calls, 3);
+  assert.deepEqual(run.issues, [{ source: "whatsapp", reason: "disconnected", message: "WhatsApp didn't answer within 90 seconds.", checked: 3 }]);
+  // Fay, after WhatsApp was left out, is checked with Gravatar only.
+  assert.deepEqual(run.results.map((r) => r.outcome), ["error", "alreadyHadPhoto", "error", "error", "added"]);
+  assert.deepEqual(writes, [["c/fay", "gr-Fay"]]);
+});
+
+test("profile networks are sources of their own: their order decides, and a pin reads its network's source (issue #107)", async () => {
+  const linked: SimpleContact = { id: "c/eva", name: "Eva", numbers: ["+391"], hasPhoto: false, urls: ["https://instagram.com/eva", "https://github.com/eva"] };
+  const network = (key: string): PhotoSource => ({
+    id: "links",
+    network: key,
+    find: async (c) => (c.urls?.some((u) => u.includes(key)) ? { photo: `${key}-${c.name}`, source: "links", matchedBy: `${key}.com/eva`, network: key } : null),
+  });
+  const { target, writes } = fakeTarget([], [linked]);
+  await runSync(target, [network("github"), whatsapp, network("instagram")], options(), callbacks().callbacks, { shuffle: false });
+  assert.deepEqual(writes, [["c/eva", "github-Eva"]]);
+
+  const pin: PhotoPin = { source: "links", network: "Instagram", matchedBy: "instagram.com/eva", hash: "old", readAt: "2026-10-01T00:00:00.000Z" };
+  const pinned = fakeTarget([], [{ ...linked, hasPhoto: true, photoUrl: "https://photo/eva", pin }]);
+  await runSync(pinned.target, [network("github"), whatsapp, network("instagram")], options(), callbacks().callbacks, { shuffle: false });
+  assert.deepEqual(pinned.writes, [["c/eva", "instagram-Eva"]]);
+});

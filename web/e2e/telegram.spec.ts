@@ -65,13 +65,14 @@ test("once connected, Telegram is a sync source and can be signed out in Setting
   await page.goto("/app");
   await expect(page.getByText("Telegram").locator("..").locator("..")).toContainText("Connected");
 
-  await page.goto("/app/sync?tab=sources");
-  await expect(page.getByRole("checkbox", { name: "Telegram", exact: true })).toBeEnabled();
-  await page.getByRole("checkbox", { name: "Telegram", exact: true }).check();
-  await page.getByRole("tab", { name: "Run" }).click();
+  await page.goto("/app/sync?step=sources");
+  await expect(page.getByTestId("state-telegram")).toHaveText("Connected");
+  await expect(page.getByRole("checkbox", { name: "Use Telegram" })).toBeEnabled();
+  await page.getByRole("checkbox", { name: "Use Telegram" }).check();
+  await page.getByTestId("wizard-step-run").click();
   await page.getByRole("button", { name: "Start sync" }).click();
   await expect.poll(() => backend.requested("/api/init_sync")).toBeTruthy();
-  expect(new URL(backend.requested("/api/init_sync")!.url()).searchParams.get("sources")).toBe("whatsapp,gravatar,telegram,links");
+  expect(new URL(backend.requested("/api/init_sync")!.url()).searchParams.get("sources")).toBe("whatsapp,gravatar,instagram,linkedin,facebook,bluesky,github,telegram");
 
   await page.goto("/app/settings/sources");
   const row = page.getByTestId("settings-source-telegram");

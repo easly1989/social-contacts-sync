@@ -2,7 +2,7 @@
 import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { useI18n } from "vue-i18n";
-import { List, RefreshCw, Search, SquareStack } from "lucide-vue-next";
+import { ArrowLeft, ArrowRight, ChevronDown, List, RefreshCw, Search, SquareStack } from "lucide-vue-next";
 
 import AppShell from "../../components/AppShell.vue";
 import LoginSearchNotice from "../../components/profiles/LoginSearchNotice.vue";
@@ -11,6 +11,7 @@ import ProfileReview from "../../components/profiles/ProfileReview.vue";
 import ProfileSources from "../../components/profiles/ProfileSources.vue";
 import RunTab from "../../components/sync/RunTab.vue";
 import SourceOrder from "../../components/sync/SourceOrder.vue";
+import SyncSummary from "../../components/sync/SyncSummary.vue";
 import { api } from "../../api";
 import { number } from "../../format";
 import { socialLogins } from "../../loginSearch";
@@ -20,18 +21,27 @@ import { run, running } from "../../runState";
 import { signInAgainIfNeeded } from "../../signInAgain";
 import { notify, notifyError } from "../../toasts";
 import { networkInfo } from "../../profileNetworks";
-import { ProfilesOverview, ProfileSuggestion, SocialNetwork } from "../../../../interfaces/api";
+import { ProfilesOverview, ProfileSuggestion, ReviewStep, SocialNetwork } from "../../../../interfaces/api";
 
-// Sync (issue #81): To review, Sources and Run in one page, each tab with its
-// own address. /app/sync on its own opens Run, Sync photos' old page.
+// Sync (issue #107): six steps, each with its own address, all skippable and reachable from the stepper.
 const route = useRoute();
 const router = useRouter();
 const { t, locale } = useI18n();
 
-type Tab = "review" | "sources" | "run";
-const tabs: Tab[] = ["review", "sources", "run"];
-const tab = computed<Tab>(() => (tabs.includes(route.query.tab as Tab) ? (route.query.tab as Tab) : "run"));
-const setTab = (key: Tab) => router.replace({ query: { ...route.query, tab: key } });
+const steps = ["sources", "profiles", "run", "photos", "search", "summary"] as const;
+type Step = (typeof steps)[number];
+// The tabs before issue #107 lead to their step.
+const legacy: Record<string, Step> = { review: "photos", sources: "sources", run: "run" };
+const step = computed<Step>(() => {
+  const asked = (route.query.step ?? legacy[String(route.query.tab)]) as Step;
+  if (steps.includes(asked)) return asked;
+  return running.value ? "run" : "sources";
+});
+const index = computed(() => steps.indexOf(step.value));
+const go = (key: Step) => router.replace({ query: { step: key } });
+const next = () => index.value < steps.length - 1 && go(steps[index.value + 1]);
+const back = () => index.value > 0 && go(steps[index.value - 1]);
+const reviewStep = computed(() => (["profiles", "photos", "search"].includes(step.value) ? (step.value as ReviewStep) : undefined));
 
 type View = "list" | "single";
 const viewKey = "scs-profiles-view";
@@ -57,36 +67,34 @@ const loadError = ref(false);
 async function load(): Promise<void> {
   try {
     overview.value = await api.profiles();
-    reviewCount.value = overview.value.suggestions.length;
-    socialLogins.value = overview.value.scans ?? [];
+    // As the sidebar counts them: every card outside To search, once.
+    reviewCount.value = overview.value.suggestions.filter((s) => !s.steps.includes("search")).length;
+    socialLogins.value = overview.value.scans ?? socialLogins.value;
     loadError.value = false;
   } catch {
     loadError.value = !overview.value;
     await signInAgainIfNeeded(router);
   }
 }
-
-// To review and Sources read the address book; Run doesn't need to.
-watch(tab, (key) => key !== "run" && !overview.value && void load(), { immediate: true });
+// The counts in the stepper come with the address book.
+onMounted(() => void load());
 
 // While a search, a scan, a bulk confirm or a sync runs, its progress (and what a sync queues) comes in.
 let poll: number | undefined;
 const busy = computed(
   () => running.value || overview.value?.search.running || overview.value?.bulk?.running || overview.value?.loginSearch?.running || overview.value?.scans?.some((s) => s.running)
 );
-onMounted(() => (poll = window.setInterval(() => busy.value && tab.value !== "run" && void load(), 2500)));
+onMounted(() => (poll = window.setInterval(() => busy.value && step.value !== "run" && void load(), 2500)));
 onBeforeUnmount(() => window.clearInterval(poll));
-// A finished sync leaves new contacts to review.
+// A finished sync leaves new cards.
 watch(
   () => run.runId,
   (runId) => {
     if (!runId) return;
-    if (tab.value === "run") overview.value = undefined;
-    else void load();
+    void load();
     void loadReviewCount(true);
   }
 );
-const runLabel = computed(() => (running.value ? ` · ${Math.floor(run.progress)}%` : ""));
 
 // When a bulk confirm ends: how it went.
 watch(
@@ -103,24 +111,6 @@ watch(
       );
   }
 );
-
-// To review's filters and search by name (issue #104): one kind of card at a time.
-type Filter = "noPhoto" | "different" | "profiles" | "changed" | "all";
-const filters: Filter[] = ["noPhoto", "different", "profiles", "changed", "all"];
-const matches: Record<Filter, (s: ProfileSuggestion) => boolean> = {
-  noPhoto: wantsPhotoFor,
-  different: (s) => s.queue?.kind === "photo" && s.hasPhoto && !s.placeholder,
-  profiles: (s) => s.candidates.length > 0,
-  changed: (s) => s.queue?.kind === "changed",
-  all: () => true,
-};
-const suggestions = computed(() => overview.value?.suggestions ?? []);
-const counts = computed(() => Object.fromEntries(filters.map((f) => [f, suggestions.value.filter(matches[f]).length])) as Record<Filter, number>);
-const chosenFilter = ref<Filter>();
-// Contacts without a photo first, while there are some: a choice there adds a face rather than swapping one.
-const filter = computed<Filter>(() => chosenFilter.value ?? (counts.value.noPhoto ? "noPhoto" : "all"));
-const search = ref("");
-const fold = (text: string) => text.normalize("NFD").replace(/\p{Diacritic}/gu, "").toLowerCase();
 // When a search with the login ends: what it found, and which site said no.
 watch(
   () => overview.value?.loginSearch?.running,
@@ -136,10 +126,27 @@ watch(
   }
 );
 
-const queue = computed(() => suggestions.value.filter(matches[filter.value]).filter((s) => !search.value.trim() || fold(s.name).includes(fold(search.value.trim()))));
-const hasSources = computed(() => overview.value?.sources.some((s) => s.people > 0));
+// Photos' filters (issue #104), and a search by name in every review step.
+type Filter = "noPhoto" | "different" | "changed" | "all";
+const filters: Filter[] = ["noPhoto", "different", "changed", "all"];
+const matches: Record<Filter, (s: ProfileSuggestion) => boolean> = {
+  noPhoto: wantsPhotoFor,
+  different: (s) => s.queue?.kind === "photo" && s.hasPhoto && !s.placeholder,
+  changed: (s) => s.queue?.kind === "changed",
+  all: () => true,
+};
+const suggestions = computed(() => overview.value?.suggestions ?? []);
+const inStep = computed(() => (reviewStep.value ? suggestions.value.filter((s) => s.steps.includes(reviewStep.value!)) : []));
+const counts = computed(() => Object.fromEntries(filters.map((f) => [f, inStep.value.filter(matches[f]).length])) as Record<Filter, number>);
+const chosenFilter = ref<Filter>();
+// Contacts without a photo first, while there are some: a choice there adds a face rather than swapping one.
+const filter = computed<Filter>(() => (step.value !== "photos" ? "all" : (chosenFilter.value ?? (counts.value.noPhoto ? "noPhoto" : "all"))));
+const search = ref("");
+const fold = (text: string) => text.normalize("NFD").replace(/\p{Diacritic}/gu, "").toLowerCase();
+const queue = computed(() => inStep.value.filter(matches[filter.value]).filter((s) => !search.value.trim() || fold(s.name).includes(fold(search.value.trim()))));
+watch(step, () => (search.value = ""));
 
-// What each card has ticked, kept while moving between views and pages.
+// What each card has ticked, kept while moving between steps and pages.
 const picks = reactive<Record<string, ProfilePick>>({});
 /** When each card's sync photos came, and which profiles it suggested: a card starts afresh when a later sync or a search (issue #104) changes them. */
 const queuedAt: Record<string, string | undefined> = {};
@@ -160,88 +167,140 @@ watch(
   { immediate: true }
 );
 const setPick = (contactId: string, pick: ProfilePick) => (picks[contactId] = pick);
-const toReview = computed(() => overview.value?.suggestions.length ?? reviewCount.value);
+
+const count = (key: Step) => (key === "profiles" || key === "photos" || key === "search" ? overview.value?.steps[key] : undefined);
+const runLabel = computed(() => (running.value ? `${Math.floor(run.progress)}%` : ""));
+const menuOpen = ref(false);
 </script>
 
 <template>
   <AppShell :title="$t('sync.title')" :subtitle="$t('sync.subtitle')">
-    <template v-if="tab !== 'run'" #actions>
+    <template #actions>
       <button type="button" class="btn btn-ghost btn-sm" @click="load"><RefreshCw class="size-4" />{{ $t("dashboard.refresh") }}</button>
     </template>
 
     <div class="flex flex-col gap-4">
-      <div class="flex flex-wrap items-end gap-3">
-        <div role="tablist" class="tabs tabs-border flex-1">
-          <button v-for="key in tabs" :key="key" type="button" role="tab" class="tab" :class="{ 'tab-active': tab === key }" :aria-selected="tab === key" @click="setTab(key)">
-            {{ $t(`sync.tabs.${key}`) }}<template v-if="key === 'review' && toReview !== undefined"> ({{ number(toReview, locale) }})</template><template v-if="key === 'run'">{{ runLabel }}</template>
+      <!-- The stepper; on a phone, folded into "Step N of 6" with the steps in a menu. -->
+      <nav :aria-label="$t('wizard.label')" data-testid="wizard-steps">
+        <ol class="hidden items-center gap-2 md:flex">
+          <template v-for="(key, i) in steps" :key="key">
+            <li v-if="i" class="h-px min-w-3 flex-1 bg-base-300" aria-hidden="true"></li>
+            <li>
+              <button
+                type="button"
+                class="flex items-center gap-2 rounded-full px-1 py-1 text-sm whitespace-nowrap"
+                :class="key === step ? 'font-semibold text-base-content' : 'text-base-content/60 hover:text-base-content'"
+                :aria-current="key === step ? 'step' : undefined"
+                :data-testid="`wizard-step-${key}`"
+                @click="go(key)"
+              >
+                <span
+                  class="grid size-6 place-items-center rounded-full border text-xs font-semibold"
+                  :class="key === step ? 'border-primary bg-primary text-primary-content' : i < index ? 'border-primary/40 text-primary' : 'border-base-300'"
+                  >{{ i + 1 }}</span
+                >{{ $t(`wizard.steps.${key}`) }}<span v-if="count(key)" class="badge badge-primary badge-soft badge-sm">{{ number(count(key)!, locale) }}</span
+                ><span v-if="key === 'run' && runLabel" class="text-xs text-primary">{{ runLabel }}</span>
+              </button>
+            </li>
+          </template>
+        </ol>
+        <div class="md:hidden">
+          <button type="button" class="flex w-full items-center gap-3 rounded-box border border-base-300 bg-base-100 px-3 py-2 text-left" :aria-expanded="menuOpen" @click="menuOpen = !menuOpen">
+            <span class="radial-progress text-[10px] text-primary" :style="{ '--value': ((index + 1) / steps.length) * 100, '--size': '2rem', '--thickness': '3px' }" aria-hidden="true">{{ index + 1 }}/6</span>
+            <span class="flex-1"
+              ><span class="block text-xs text-base-content/60">{{ $t("wizard.stepOf", { step: index + 1, total: steps.length }) }}</span><b>{{ $t(`wizard.steps.${step}`) }}</b></span
+            ><ChevronDown class="size-4" aria-hidden="true" />
           </button>
+          <ol v-if="menuOpen" class="menu mt-1 w-full rounded-box border border-base-300 bg-base-100">
+            <li v-for="(key, i) in steps" :key="key">
+              <button type="button" :class="{ 'menu-active': key === step }" :aria-current="key === step ? 'step' : undefined" @click="go(key), (menuOpen = false)">
+                {{ i + 1 }}. {{ $t(`wizard.steps.${key}`) }}<span v-if="count(key)" class="badge badge-sm">{{ number(count(key)!, locale) }}</span>
+              </button>
+            </li>
+          </ol>
         </div>
-      </div>
-      <div v-if="tab === 'review' && overview && suggestions.length" class="flex flex-wrap items-center gap-2" data-testid="review-filters">
-        <div class="flex flex-wrap gap-2" role="group" :aria-label="$t('sync.filters.label')">
-          <template v-for="f in filters" :key="f">
-            <button
-              v-if="counts[f] || f === 'all' || f === filter"
-              type="button"
-              class="btn btn-sm rounded-full"
-              :class="f === filter ? 'btn-primary' : 'btn-ghost border-base-300'"
-              :aria-pressed="f === filter"
-              @click="chosenFilter = f"
-            >
-              {{ $t(`sync.filters.${f}`) }}<span class="badge badge-sm" :class="f === filter ? 'badge-ghost' : ''">{{ number(counts[f], locale) }}</span>
-            </button>
-          </template>
-        </div>
-        <label class="input input-sm w-full sm:ml-auto sm:w-56">
-          <Search class="size-4 opacity-50" aria-hidden="true" /><input v-model="search" type="search" :placeholder="$t('sync.filters.search')" :aria-label="$t('sync.filters.search')" />
-        </label>
-      </div>
+      </nav>
 
-      <RunTab v-if="tab === 'run'" @review="setTab('review')" @sources="setTab('sources')" />
-      <!-- The sources a sync uses don't need the address book. -->
-      <SourceOrder v-if="tab === 'sources'" />
-      <template v-if="tab !== 'run' && overview">
-        <template v-if="tab === 'review'">
-          <template v-if="queue.length">
-            <ProfileList v-if="view === 'list'" :queue="queue" :picks="picks" :bulk="overview.bulk" :login-search="overview.loginSearch" @update:pick="setPick" @changed="load">
-              <template #view>
-                <div class="join" role="group" :aria-label="$t('profiles.view.label')">
-                  <button type="button" class="btn join-item btn-sm btn-active" :aria-label="$t('profiles.view.list')" :title="$t('profiles.view.list')" aria-pressed="true"><List class="size-4" /></button>
-                  <button type="button" class="btn join-item btn-sm" :aria-label="$t('profiles.view.single')" :title="$t('profiles.view.single')" aria-pressed="false" @click="view = 'single'"><SquareStack class="size-4" /></button>
-                </div>
-              </template>
-            </ProfileList>
-            <template v-else>
-              <div class="flex justify-end">
-                <div class="join" role="group" :aria-label="$t('profiles.view.label')">
-                  <button type="button" class="btn join-item btn-sm" :aria-label="$t('profiles.view.list')" :title="$t('profiles.view.list')" aria-pressed="false" @click="view = 'list'"><List class="size-4" /></button>
-                  <button type="button" class="btn join-item btn-sm btn-active" :aria-label="$t('profiles.view.single')" :title="$t('profiles.view.single')" aria-pressed="true"><SquareStack class="size-4" /></button>
-                </div>
-              </div>
-              <ProfileReview :key="queue[0].contactId" :suggestion="queue[0]" :pick="picks[queue[0].contactId]" :total="queue.length" @update:pick="setPick(queue[0].contactId, $event)" @done="load" />
+      <header>
+        <div class="hidden text-xs font-semibold text-base-content/50 md:block">{{ $t("wizard.stepOf", { step: index + 1, total: steps.length }) }}</div>
+        <h2 class="text-xl font-bold">{{ $t(`wizard.titles.${step}`) }}</h2>
+        <p class="text-sm text-base-content/60">{{ $t(`wizard.leads.${step}`) }}</p>
+      </header>
+
+      <SourceOrder v-if="step === 'sources'" />
+      <RunTab v-else-if="step === 'run'" @review="go('photos')" @sources="go('sources')" />
+      <SyncSummary v-else-if="step === 'summary'" :overview="overview" @run="go('run')" />
+      <template v-else-if="overview">
+        <details v-if="step === 'profiles'" class="rounded-box border border-base-300 bg-base-100 px-4 py-3" data-testid="find-more">
+          <summary class="cursor-pointer text-sm font-semibold">{{ $t("sync.findNew") }}</summary>
+          <p class="mt-1 text-sm text-base-content/60">{{ $t("sync.findNewLead") }}</p>
+          <ProfileSources class="mt-3" :overview="overview" @changed="load" />
+        </details>
+        <div v-if="inStep.length" class="flex flex-wrap items-center gap-2" data-testid="review-filters">
+          <div v-if="step === 'photos'" class="flex flex-wrap gap-2" role="group" :aria-label="$t('sync.filters.label')">
+            <template v-for="f in filters" :key="f">
+              <button
+                v-if="counts[f] || f === 'all' || f === filter"
+                type="button"
+                class="btn btn-sm rounded-full"
+                :class="f === filter ? 'btn-primary' : 'btn-ghost border-base-300'"
+                :aria-pressed="f === filter"
+                @click="chosenFilter = f"
+              >
+                {{ $t(`sync.filters.${f}`) }}<span class="badge badge-sm" :class="f === filter ? 'badge-ghost' : ''">{{ number(counts[f], locale) }}</span>
+              </button>
             </template>
-          </template>
-          <p v-else-if="suggestions.length" class="rounded-box border border-base-300 bg-base-100 p-8 text-center text-sm text-base-content/60">
-            {{ search.trim() ? $t("sync.filters.empty", { query: search.trim() }) : $t("profiles.emptyReview") }}
-          </p>
-          <section v-else class="rounded-box border border-base-300 bg-base-100 p-8 text-center text-sm text-base-content/60">
-            <p>{{ hasSources ? $t("profiles.emptyReview") : $t("profiles.noSources") }}</p>
-            <button type="button" class="btn btn-primary btn-sm mt-4" @click="setTab('sources')">{{ $t("profiles.goSources") }}</button>
-          </section>
-        </template>
-
-        <section v-else class="space-y-3">
-          <div>
-            <h2 class="text-lg font-semibold">{{ $t("sync.findNew") }}</h2>
-            <p class="text-sm text-base-content/60">{{ $t("sync.findNewLead") }}</p>
           </div>
-          <ProfileSources :overview="overview" @changed="load" />
-        </section>
+          <label class="input input-sm w-full sm:ml-auto sm:w-56">
+            <Search class="size-4 opacity-50" aria-hidden="true" /><input v-model="search" type="search" :placeholder="$t('sync.filters.search')" :aria-label="$t('sync.filters.search')" />
+          </label>
+        </div>
+        <template v-if="queue.length">
+          <ProfileList
+            v-if="view === 'list' || step !== 'photos'"
+            :queue="queue"
+            :picks="picks"
+            :bulk="overview.bulk"
+            :login-search="overview.loginSearch"
+            :mode="reviewStep"
+            @update:pick="setPick"
+            @changed="load"
+          >
+            <template v-if="step === 'photos'" #view>
+              <div class="join" role="group" :aria-label="$t('profiles.view.label')">
+                <button type="button" class="btn join-item btn-sm btn-active" :aria-label="$t('profiles.view.list')" :title="$t('profiles.view.list')" aria-pressed="true"><List class="size-4" /></button>
+                <button type="button" class="btn join-item btn-sm" :aria-label="$t('profiles.view.single')" :title="$t('profiles.view.single')" aria-pressed="false" @click="view = 'single'"><SquareStack class="size-4" /></button>
+              </div>
+            </template>
+          </ProfileList>
+          <template v-else>
+            <div class="flex justify-end">
+              <div class="join" role="group" :aria-label="$t('profiles.view.label')">
+                <button type="button" class="btn join-item btn-sm" :aria-label="$t('profiles.view.list')" :title="$t('profiles.view.list')" aria-pressed="false" @click="view = 'list'"><List class="size-4" /></button>
+                <button type="button" class="btn join-item btn-sm btn-active" :aria-label="$t('profiles.view.single')" :title="$t('profiles.view.single')" aria-pressed="true"><SquareStack class="size-4" /></button>
+              </div>
+            </div>
+            <ProfileReview :key="queue[0].contactId" :suggestion="queue[0]" :pick="picks[queue[0].contactId]" :total="queue.length" mode="photos" @update:pick="setPick(queue[0].contactId, $event)" @done="load" />
+          </template>
+        </template>
+        <p v-else class="rounded-box border border-base-300 bg-base-100 p-8 text-center text-sm text-base-content/60" data-testid="step-empty">
+          {{ search.trim() ? $t("sync.filters.empty", { query: search.trim() }) : $t(`wizard.empty.${step}`) }}
+        </p>
       </template>
-      <div v-else-if="tab !== 'run' && loadError" class="flex flex-col items-center gap-3 py-12 text-sm text-base-content/60">
+      <div v-else-if="loadError" class="flex flex-col items-center gap-3 py-12 text-sm text-base-content/60">
         {{ $t("contacts.errors.load") }}<button type="button" class="btn btn-sm" @click="load"><RefreshCw class="size-4" />{{ $t("contacts.retry") }}</button>
       </div>
-      <div v-else-if="tab !== 'run'" class="grid place-items-center py-12"><span class="loading loading-spinner"></span></div>
+      <div v-else class="grid place-items-center py-12"><span class="loading loading-spinner"></span></div>
+
+      <!-- Back, Skip and Next on every step. -->
+      <footer class="sticky bottom-16 z-10 lg:bottom-0 flex flex-wrap items-center gap-2 border-t border-base-300 bg-base-200/95 py-3 backdrop-blur" data-testid="wizard-footer">
+        <button v-if="index > 0" type="button" class="btn btn-ghost btn-sm" @click="back"><ArrowLeft class="size-4" />{{ $t(`wizard.steps.${steps[index - 1]}`) }}</button>
+        <span class="flex-1"></span>
+        <button v-if="index > 0 && index < steps.length - 1" type="button" class="btn btn-ghost btn-sm" data-testid="wizard-skip" @click="next">{{ $t("wizard.skip") }}</button>
+        <button v-if="index < steps.length - 1" type="button" class="btn btn-primary btn-sm" data-testid="wizard-next" @click="next">
+          {{ $t(`wizard.steps.${steps[index + 1]}`) }}<ArrowRight class="size-4" />
+        </button>
+      </footer>
     </div>
     <LoginSearchNotice />
   </AppShell>

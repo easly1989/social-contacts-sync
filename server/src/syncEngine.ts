@@ -1,6 +1,6 @@
 import crypto from "crypto";
 
-import { ContactResult, PhotoPin, RunOptions, RunRecord, SourceId, SyncCounters, SyncProgress } from "../../interfaces/api";
+import { ContactResult, PhotoPin, RunOptions, RunRecord, SourceId, SyncCounters, SyncIssue, SyncProgress } from "../../interfaces/api";
 import { SimpleContact } from "./interfaces";
 import { photoKey } from "./contacts/model";
 import { photoHash } from "./contacts/photoPins";
@@ -62,13 +62,29 @@ class RunStopped extends Error {}
 
 const sourceNames: Record<SourceId, string> = { whatsapp: "WhatsApp", telegram: "Telegram", gravatar: "Gravatar", links: "Profile links" };
 
+/** Failures in a row after which a source is left out of the run (issue #107). */
+const failuresToLeave = 3;
+
 /**
  * The source's answer, or an error once it takes longer than `deadline`; a
  * stop ends the wait at once. A WhatsApp or Telegram call that never answers
- * would otherwise hold the whole run, Stop included.
+ * would otherwise hold the whole run, Stop included. After a few failures in
+ * a row the source is left out: `down` is told once, and it answers nothing.
  */
-function guarded(source: PhotoSource, deadline: number, cancelled: () => boolean): PhotoSource {
-  const wait = <T>(work: Promise<T>): Promise<T> => {
+function guarded(source: PhotoSource, deadline: number, cancelled: () => boolean, down: (message: string) => void): PhotoSource {
+  let failures = 0;
+  const wait = async <T>(work: () => Promise<T>, nothing: T): Promise<T> => {
+    if (failures >= failuresToLeave) return nothing;
+    try {
+      const answer = await timed(work());
+      failures = 0;
+      return answer;
+    } catch (e) {
+      if (!(e instanceof RunStopped) && ++failures === failuresToLeave) down(e instanceof Error ? e.message : String(e));
+      throw e;
+    }
+  };
+  const timed = <T>(work: Promise<T>): Promise<T> => {
     let timer: NodeJS.Timeout | undefined;
     let poll: NodeJS.Timeout | undefined;
     const limit = new Promise<never>((_, reject) => {
@@ -82,8 +98,9 @@ function guarded(source: PhotoSource, deadline: number, cancelled: () => boolean
   };
   return {
     id: source.id,
-    find: (contact) => wait(source.find(contact)),
-    ...(source.findAll ? { findAll: (contact: SimpleContact) => wait(source.findAll!(contact)) } : {}),
+    network: source.network,
+    find: (contact) => wait(() => source.find(contact), null),
+    ...(source.findAll ? { findAll: (contact: SimpleContact) => wait(() => source.findAll!(contact), []) } : {}),
   };
 }
 
@@ -121,16 +138,15 @@ async function allMatches(sources: PhotoSource[], contact: SimpleContact): Promi
   return found;
 }
 
-/** The photo of the source the contact is pinned to; for a profile, only that profile is read. */
+/** The photo of the source the contact is pinned to; for a profile, only that profile is read, by its network's source. */
 async function pinnedPhoto(sources: PhotoSource[], contact: SimpleContact, pin: PhotoPin): Promise<FoundPhoto | null> {
-  const source = sources.find((s) => s.id === pin.source);
-  if (!source) return null;
-  if (pin.source !== "links") return source.find(contact);
-  const urls = (contact.urls ?? []).filter((u) => {
+  if (pin.source !== "links") return sources.find((s) => s.id === pin.source)?.find(contact) ?? null;
+  const links = (contact.urls ?? []).flatMap((u) => {
     const link = parseProfileLink(u);
-    return link && shortLink(link) === pin.matchedBy;
+    return link && shortLink(link) === pin.matchedBy ? [link] : [];
   });
-  return urls.length ? source.find({ ...contact, urls }) : null;
+  const source = links.length && sources.find((s) => s.id === "links" && (!s.network || s.network === links[0].network));
+  return source ? source.find({ ...contact, urls: links.map((l) => l.url) }) : null;
 }
 
 export async function runSync(
@@ -148,21 +164,35 @@ export async function runSync(
     startedAt: new Date().toISOString(),
     mode: "sync",
     options,
-    sources: sources.map((s) => s.id) as SourceId[],
+    sources: [...new Set(sources.map((s) => s.id))] as SourceId[],
     totalContacts: 0,
     counters,
     results,
   };
+  // Sources that stopped answering are left out, the others go on (issue #107).
+  const issues: SyncIssue[] = [];
+  const leave = (source: PhotoSource, message: string) => {
+    issues.push({ source: source.id, ...(source.network ? { network: source.network } : {}), reason: "disconnected", message, checked: results.length });
+    console.warn(`${sourceNames[source.id] ?? source.id}${source.network ? ` (${source.network})` : ""} left out of this sync: ${message}`);
+  };
 
   const contacts = await target.listContacts();
-  for (const source of sources) await source.prepare?.();
+  const ready: PhotoSource[] = [];
+  for (const source of sources) {
+    try {
+      await source.prepare?.();
+      ready.push(source);
+    } catch (e) {
+      leave(source, e instanceof Error ? e.message : String(e));
+    }
+  }
   // 90 seconds leaves room for a profile read with the login, which the desktop app gives 60.
-  sources = sources.map((source) => guarded(source, settings.deadline ?? 90_000, callbacks.cancelled));
+  sources = ready.map((source) => guarded(source, settings.deadline ?? 90_000, callbacks.cancelled, (message) => leave(source, message)));
   const ordered = settings.shuffle === false ? contacts : shuffle(contacts);
   run.totalContacts = ordered.length;
 
   const syncCount = () => counters.added + counters.replaced;
-  callbacks.progress({ progress: 0, phase: "photos", syncCount: 0, totalContacts: ordered.length, checked: 0, counters });
+  callbacks.progress({ progress: 0, phase: "photos", syncCount: 0, totalContacts: ordered.length, checked: 0, counters, issues });
 
   for (const [index, contact] of ordered.entries()) {
     if (callbacks.cancelled()) {
@@ -295,9 +325,11 @@ export async function runSync(
       counters,
       image: kept.photo,
       latest,
+      issues,
     });
   }
 
   run.finishedAt = new Date().toISOString();
+  if (issues.length) run.issues = issues;
   return { run, photos };
 }

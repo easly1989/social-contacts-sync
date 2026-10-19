@@ -3,6 +3,7 @@ import { test, expect, Page } from "@playwright/test";
 import { EventType } from "../../interfaces/api";
 import { FakeBackend, screenshot } from "./backend";
 import { avatars } from "./avatars";
+import { sampleProfiles } from "./fixtures";
 
 let backend: FakeBackend;
 
@@ -57,9 +58,14 @@ test("full flow: WhatsApp QR, Google sign-in, sync options, progress, done", asy
   // Google's callback returns to /options, which is now the app's sync page.
   await page.getByRole("button", { name: "Sign in with Google" }).click();
   await expect(page).toHaveURL(/\/app\/sync$/);
-  await expect(page.getByRole("tab", { name: "Run" })).toHaveAttribute("aria-selected", "true");
-  // Options, not modes (issue #82): three on, "I decide every contact" off.
+  // The first step is Sources; Next leads through Profiles to the sync.
+  await expect(page.getByTestId("wizard-step-sources")).toHaveAttribute("aria-current", "step");
+  await page.getByTestId("wizard-next").click();
+  await page.getByTestId("wizard-next").click();
+  await expect(page.getByTestId("wizard-step-run")).toHaveAttribute("aria-current", "step");
+  // Options, not modes (issue #82): three on, "I decide every contact" off; the last two wait under Advanced (issue #107).
   const options = page.getByTestId("run-options");
+  await options.getByTestId("run-advanced").locator("summary").click();
   await expect(options.getByRole("checkbox", { name: /Fill in missing photos/ })).toBeChecked();
   await expect(options.getByRole("checkbox", { name: /Update pinned photos/ })).toBeChecked();
   await expect(options.getByRole("checkbox", { name: /Look for different photos/ })).toBeChecked();
@@ -77,9 +83,9 @@ test("full flow: WhatsApp QR, Google sign-in, sync options, progress, done", asy
     look_different: "false",
     decide_all: "false",
   });
-  expect(query.get("sources")).toBe("whatsapp,gravatar,links");
-  // Instagram, Facebook and LinkedIn stay off unless turned on in Settings.
-  expect(query.get("link_networks")).toBe("bluesky,mastodon,github,x,youtube");
+  // Each network with linked profiles is a source of its own; Instagram, Facebook and LinkedIn stay off on the web unless turned on.
+  expect(query.get("sources")).toBe("whatsapp,gravatar,bluesky,github");
+  expect(query.get("link_networks")).toBeNull();
 
   await expect(page.getByRole("heading", { name: "Syncing photos…" })).toBeVisible();
   await backend.send(EventType.SyncProgress, { progress: 0, syncCount: 0, totalContacts: 20, checked: 0, phase: "photos", counters: counters({}) });
@@ -100,8 +106,8 @@ test("full flow: WhatsApp QR, Google sign-in, sync options, progress, done", asy
   await expect(page.getByTestId("count-applied")).toContainText("8");
   await expect(page.getByTestId("count-queued")).toContainText("3");
   await expect(page.getByTestId("count-errors")).toContainText("1");
-  // The tab says how far the sync is, from anywhere in the page.
-  await expect(page.getByRole("tab", { name: /Run · 40%/ })).toBeVisible();
+  // The stepper says how far the sync is, from any step.
+  await expect(page.getByTestId("wizard-step-run")).toContainText("40%");
   const justApplied = page.getByRole("list", { name: "Just applied" });
   await expect(justApplied.getByRole("listitem")).toHaveCount(8);
   await expect(justApplied.getByRole("listitem").first()).toContainText("Francesco Greco");
@@ -121,10 +127,10 @@ test("full flow: WhatsApp QR, Google sign-in, sync options, progress, done", asy
   await expect(page.getByRole("link", { name: "Open the report" })).toHaveAttribute("href", "/app/history/run-1");
   await screenshot(page, "06-sync-complete");
 
-  // Start reviewing opens To review; New sync goes back to the options.
+  // Start reviewing opens Photos; New sync goes back to the options.
   await page.getByRole("button", { name: "Review 3 contacts" }).click();
-  await expect(page.getByRole("tab", { name: /To review/ })).toHaveAttribute("aria-selected", "true");
-  await page.getByRole("tab", { name: "Run" }).click();
+  await expect(page).toHaveURL(/step=photos$/);
+  await page.getByTestId("wizard-step-run").click();
   await page.getByRole("button", { name: "New sync" }).click();
   await expect(page.getByRole("button", { name: "Start sync" })).toBeVisible();
 });
@@ -144,15 +150,16 @@ test("desktop: a sync with no news for a minute offers to restart the server", a
 });
 
 const startSync = async (page: Page) => {
-  await page.goto("/app/sync?tab=run");
+  await page.goto("/app/sync?step=run");
   await page.getByRole("button", { name: "Start sync" }).click();
   await expect.poll(() => backend.requested("/api/init_sync")).toBeTruthy();
 };
 
 test("I decide every contact applies nothing: the options that apply photos turn off (issue #82)", async ({ page }) => {
   Object.assign(backend.status, { whatsappConnected: true, googleConnected: true });
-  await page.goto("/app/sync?tab=run");
+  await page.goto("/app/sync?step=run");
   const options = page.getByTestId("run-options");
+  await options.getByTestId("run-advanced").locator("summary").click();
   await options.getByRole("checkbox", { name: /I decide every contact/ }).check();
   await expect(options.getByRole("checkbox", { name: /Fill in missing photos/ })).toBeDisabled();
   await expect(options.getByRole("checkbox", { name: /Update pinned photos/ })).toBeDisabled();
@@ -176,8 +183,9 @@ test("a sync reads pinned profiles first, then the photos, and goes on while you
   const nav = page.getByRole("navigation").first();
   await nav.getByRole("link", { name: "History" }).click();
   await expect(page).toHaveURL(/\/app\/history$/);
+  // While it runs, Sync opens on the sync (issue #107).
   await nav.getByRole("link", { name: /^Sync/ }).click();
-  await page.getByRole("tab", { name: "Run" }).click();
+  await expect(page.getByTestId("wizard-step-run")).toHaveAttribute("aria-current", "step");
   await backend.send(EventType.SyncProgress, { progress: 50, syncCount: 2, totalContacts: 4, checked: 2, phase: "photos", counters: counters({ added: 1, queued: 1 }) });
   await expect(page.getByText("Checked 2 of 4 contacts")).toBeVisible();
   await expect(page.getByTestId("count-queued")).toContainText("1");
@@ -198,7 +206,54 @@ test("sync errors are shown to the user", async ({ page }) => {
   Object.assign(backend.status, { whatsappConnected: true, googleConnected: true });
   await startSync(page);
   await backend.send(EventType.SyncProgress, { progress: 0, syncCount: 0, error: "Failed to load contacts, please try again." });
-  await expect(page.getByRole("alert")).toHaveText("Failed to load contacts, please try again.");
+  const alert = page.getByRole("alert");
+  await expect(alert).toContainText("Failed to load contacts, please try again.");
+  await expect(page.getByRole("heading", { name: "Sync didn't finish" })).toBeVisible();
+  // The sync is over: no Stop, and Back starts again (issue #107).
+  await expect(page.getByRole("button", { name: "Stop" })).toHaveCount(0);
+  await screenshot(page, "05d-sync-failed");
+  await alert.getByRole("button", { name: "Back to the start" }).click();
+  await expect(page.getByRole("button", { name: "Start sync" })).toBeVisible();
+});
+
+test("a source that stops working is left out: the sync goes on, says so, and Summary runs it again on its own (issue #107)", async ({ page }) => {
+  Object.assign(backend.status, { whatsappConnected: true, googleConnected: true });
+  await startSync(page);
+  const issues = [{ source: "whatsapp", reason: "error", message: "Execution context was destroyed", checked: 5 }];
+  await backend.send(EventType.SyncProgress, { progress: 50, syncCount: 2, totalContacts: 10, checked: 5, phase: "photos", counters: counters({ added: 2 }), issues });
+  const issue = page.getByTestId("run-issue");
+  await expect(issue).toContainText("WhatsApp stopped working after 5 contacts: the sync goes on without it.");
+  await expect(issue).toContainText("Execution context was destroyed");
+  await expect(issue.getByRole("button", { name: "Reconnect WhatsApp" })).toBeVisible();
+  await screenshot(page, "05e-sync-issue");
+  await backend.send(EventType.SyncProgress, { progress: 100, syncCount: 4, totalContacts: 10, checked: 10, counters: counters({ added: 4, noMatch: 6 }), runId: "run-3", issues });
+  await expect(page.getByRole("heading", { name: "Sync complete" })).toBeVisible();
+
+  await page.getByTestId("wizard-step-summary").click();
+  const unfinished = page.getByTestId("summary-unfinished");
+  await expect(unfinished).toContainText("1 thing didn't finish");
+  await expect(unfinished).toContainText("WhatsApp stopped: 5 contacts not checked");
+  await expect(page.getByTestId("sync-summary")).toContainText("4");
+  await screenshot(page, "06b-sync-summary");
+  await unfinished.getByRole("button", { name: "Run with only WhatsApp" }).click();
+  await expect(page).toHaveURL(/step=run$/);
+  await expect.poll(() => backend.count("/api/init_sync")).toBe(2);
+  const last = backend.requests.filter((r) => new URL(r.url()).pathname === "/api/init_sync").at(-1)!;
+  expect(new URL(last.url()).searchParams.get("sources")).toBe("whatsapp");
+});
+
+test("desktop: a site that closes the session during a sync offers Sign in again and Skip on its row (issue #107)", async ({ page }) => {
+  Object.assign(backend.status, { whatsappConnected: true, googleConnected: true, desktop: true, setupDone: true, googleConfigured: true });
+  backend.profiles = sampleProfiles();
+  await startSync(page);
+  await backend.send(EventType.SyncProgress, { progress: 0, syncCount: 0, phase: "profiles", reads: { linkedin: { read: 3, total: 10, stopped: "signedOut" } } });
+  const profiles = page.getByTestId("phase-profiles");
+  await expect(profiles).toContainText("LinkedIn closed the app's session during the sync: sign in again to read the rest.");
+  await screenshot(page, "05f-sync-signed-out", { fullPage: false });
+  await profiles.getByTestId("reads-sign-in").click();
+  await expect.poll(() => backend.profileRequests.find((r) => r.route === "/scan/login")?.body).toEqual({ network: "linkedin" });
+  await profiles.getByRole("button", { name: "Skip LinkedIn" }).click();
+  await expect.poll(() => backend.requested("/api/sync/skip")?.postDataJSON()).toEqual({ network: "linkedin" });
 });
 
 test.describe("route guards", () => {
@@ -223,9 +278,9 @@ test.describe("route guards", () => {
     await page.goto("/options");
     await expect(page).toHaveURL(/\/app\/sync$/);
     await page.goto("/sync?manual_sync=true&overwrite_photos=false");
-    await expect(page).toHaveURL(/\/app\/sync\?tab=run$/);
+    await expect(page).toHaveURL(/\/app\/sync\?step=run$/);
     await page.goto("/app/sync/run?mode=review");
-    await expect(page).toHaveURL(/\/app\/sync\?tab=run$/);
+    await expect(page).toHaveURL(/\/app\/sync\?step=run$/);
     await expect(page.getByRole("button", { name: "Start sync" })).toBeVisible();
   });
 

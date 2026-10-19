@@ -21,6 +21,8 @@ export interface FoundPhoto extends PhotoFacts {
 /** Somewhere profile photos can be looked up for a Google contact. */
 export interface PhotoSource {
   id: SourceId;
+  /** A profile links source for one network only (issue #107): its key, "instagram". */
+  network?: string;
   /** One-off setup before the first lookup (e.g. loading a contact list). */
   prepare?(): Promise<void>;
   /** The contact's photo, or null when this source has none. Throws on failures. */

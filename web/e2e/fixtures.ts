@@ -1,4 +1,5 @@
-import { CleanupContact, CleanupScan, Contact, ContactLabel, ProfilesOverview, RunRecord, SocialPerson } from "../../interfaces/api";
+import { CleanupContact, CleanupScan, Contact, ContactLabel, RunRecord, SocialPerson } from "../../interfaces/api";
+import type { FakeProfiles } from "./backend";
 
 const names = [
   "Giulia Bianchi", "Marco Rossi", "Sofia Esposito", "Luca Romano", "Chiara Colombo",
@@ -136,7 +137,7 @@ export function sampleContacts(): Contact[] {
 }
 
 /** Sync's To review and Sources (issues #61, #81), shaped like their mockups. */
-export function sampleProfiles(): ProfilesOverview {
+export function sampleProfiles(): FakeProfiles {
   const photo = (i: number) => `/api/e2e-photos/${i}`;
   const p = (extra: Partial<SocialPerson> & Pick<SocialPerson, "id" | "network" | "url">): SocialPerson => ({ source: "export", ...extra });
   const davide = [

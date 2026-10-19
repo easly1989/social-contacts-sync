@@ -2,7 +2,7 @@ import crypto from "crypto";
 import express, { Request, Response } from "express";
 import { Client, WAState } from "whatsapp-web.js";
 
-import { Contact, ContactResult, Coverage, LinkedNetworks, LoginSearchResult, LoginSearchState, PinnedProfiles, ProfileBulkState, ProfileLinkRequest, ProfileScanState, ProfileSearchState, ProfileSuggestion, ProfilesOverview, SocialNetwork, SocialPerson, SourceId } from "../../interfaces/api";
+import { Contact, ContactResult, Coverage, LinkedNetworks, LoginSearchResult, LoginSearchState, PinnedProfiles, ProfileBulkState, ProfileLinkRequest, ProfileScanState, ProfileSearchState, ProfileSuggestion, ProfilesOverview, ReviewStep, SocialNetwork, SocialPerson, SourceId } from "../../interfaces/api";
 import { getFromCache, setInCache } from "../src/cache";
 import { OAuth2Client } from "../src/gapi";
 import { ContactsApi, peopleContactsApi } from "../src/cleanup/people";
@@ -26,7 +26,8 @@ import { cachedPhoto, cachePhoto } from "../src/profiles/photoCache";
 import { checkedQueue, loadQueue, publicEntry, QueueData, queuedImage, ReadLook, resolveEntry, saveQueue, StoredEntry } from "../src/profiles/queue";
 import { photoFacts, PhotoFacts, worthOffering } from "../src/photoRules";
 import { migrateReviewHistory } from "../src/profiles/history";
-import { recordDecision } from "../src/runs";
+import { listRuns, recordDecision } from "../src/runs";
+import { closedAt } from "../src/profiles/logins";
 import { getLookup } from "../src/linkLookups";
 
 // Find profiles (issue #61): suggestions from exports, a public search and,
@@ -203,6 +204,9 @@ export function profilesRouter(options: Options = {}): express.Router {
       const facts = factsOf(p);
       return Boolean(facts?.width) && worthOffering({ source: "links", network: networkNames[p.network], ...facts }, { hasPhoto: true }).offer;
     };
+    // Profiles linked from To review since the last sync: their photos are "linked now" (issue #107).
+    const lastSync = listRuns(sessionId).find((r) => r.mode === "sync")?.startedAt ?? "";
+    const linkedSince = (c: Contact) => data.linked.filter((l) => !l.undone && l.contactId === c.id && l.at > lastSync).map((l) => l.person.id);
     const fromPin = (c: Contact): ProfileSuggestion["currentFrom"] => {
       const pin = pins[c.id];
       return pin && !pin.suspended && pin.photoKey && pin.photoKey === photoKey(c.photoUrl) ? { source: pin.source, ...(pin.network ? { network: pin.network } : {}) } : undefined;
@@ -220,20 +224,30 @@ export function profilesRouter(options: Options = {}): express.Router {
           (b.candidates[0]?.score ?? 0) - (a.candidates[0]?.score ?? 0) ||
           (a.contact.name ?? "").localeCompare(b.contact.name ?? "")
       )
-      .map(({ contact: c, candidates, entry }) => ({
-        contactId: c.id,
-        name: c.name ?? "",
-        photoUrl: c.photoUrl,
-        hasPhoto: c.hasPhoto,
-        placeholder: c.placeholder,
-        photoKept: c.photoKept,
-        detail: [c.phones[0]?.value, c.emails[0]?.value, c.company].filter(Boolean).join(" · ") || undefined,
-        candidates,
-        linked: onContact(c).filter((p) => !candidates.some((s) => s.person.id === p.id) && worthPerson(c)(p)),
-        ...(entry ? { queue: publicEntry(entry) } : {}),
-        ...(real(c) && fromPin(c) ? { currentFrom: fromPin(c) } : {}),
-      }));
+      .map(({ contact: c, candidates, entry }) => {
+        const linked = onContact(c).filter((p) => !candidates.some((s) => s.person.id === p.id) && worthPerson(c)(p));
+        const now = linkedSince(c).filter((id) => linked.some((p) => p.id === id));
+        return {
+          contactId: c.id,
+          name: c.name ?? "",
+          photoUrl: c.photoUrl,
+          hasPhoto: c.hasPhoto,
+          placeholder: c.placeholder,
+          photoKept: c.photoKept,
+          detail: [c.phones[0]?.value, c.emails[0]?.value, c.company].filter(Boolean).join(" · ") || undefined,
+          candidates,
+          linked,
+          ...(entry ? { queue: publicEntry(entry) } : {}),
+          ...(real(c) && fromPin(c) ? { currentFrom: fromPin(c) } : {}),
+          steps: reviewSteps(candidates.length > 0, Boolean(entry) || (!real(c) && linked.length > 0) || now.length > 0),
+          ...(now.length ? { linkedNow: now } : {}),
+        };
+      });
   }
+
+  /** The Sync steps a card belongs to (issue #107): with nothing to link or pick, it waits in To search. */
+  const reviewSteps = (profiles: boolean, photos: boolean): ReviewStep[] =>
+    profiles || photos ? [...(profiles ? ["profiles" as const] : []), ...(photos ? ["photos" as const] : [])] : ["search"];
 
   const searchState = (req: Request): ProfileSearchState =>
     getFromCache(req.sessionID, "profiles_search") ?? { running: false, networks: [], checked: 0, total: 0, found: {} };
@@ -241,13 +255,15 @@ export function profilesRouter(options: Options = {}): express.Router {
   async function scanStates(req: Request, data: ProfilesData): Promise<ProfileScanState[] | undefined> {
     if (!desktop) return undefined;
     const live: ProfileScanState[] = await desktop.status().catch(() => scanNetworks.map((network) => ({ network, loggedIn: false })));
-    return live.map((s) => ({ ...s, ...(s.running ? {} : data.scans[s.network] ?? {}) }));
+    return live.map((s) => ({ ...s, ...(s.running ? {} : data.scans[s.network] ?? {}), ...(!s.loggedIn && closedAt(s.network) ? { closedAt: closedAt(s.network) } : {}) }));
   }
 
   async function overview(req: Request, api: ContactsApi): Promise<ProfilesOverview> {
     const data = loadProfiles(req.sessionID);
     const list = await contacts(req, api);
     const networks: SocialNetwork[] = ["instagram", "linkedin", "facebook", "bluesky", "mastodon", "github"];
+    const cards = suggestions(req.sessionID, data, list, await reviewQueue(req.sessionID, list));
+    const count = (step: ReviewStep) => cards.filter((c) => c.steps.includes(step)).length;
     return {
       sources: networks.map((network) => ({
         network,
@@ -258,10 +274,11 @@ export function profilesRouter(options: Options = {}): express.Router {
       })),
       search: searchState(req),
       scans: await scanStates(req, data),
-      suggestions: suggestions(req.sessionID, data, list, await reviewQueue(req.sessionID, list)),
+      suggestions: cards,
       linked: data.linked.map(({ previousPhoto: _p, addedLink: _a, ...rest }) => rest).reverse(),
       bulk: getFromCache(req.sessionID, "profiles_bulk"),
       loginSearch: getFromCache(req.sessionID, "profiles_login_search"),
+      steps: { profiles: count("profiles"), photos: count("photos"), search: count("search") },
     };
   }
 
@@ -372,14 +389,15 @@ export function profilesRouter(options: Options = {}): express.Router {
     res.send((await scanStates(req, loadProfiles(req.sessionID))) ?? []);
   });
 
-  // How many contacts wait in To review, for the sidebar (issue #81); contacts without a photo are cards too (issue #104).
+  // How many contacts wait in Profiles and Photos, for the sidebar (issues #81, #107).
   router.get("/profiles/count", async (req: Request, res: Response) => {
     const data = loadProfiles(req.sessionID);
     const api = google(req, res);
     if (!api) return;
     try {
       const list = await contacts(req, api);
-      res.send({ count: suggestions(req.sessionID, data, list, await reviewQueue(req.sessionID, list)).length });
+      // What waits for a decision (issue #107): the contacts with nothing found wait in To search, without a badge.
+      res.send({ count: suggestions(req.sessionID, data, list, await reviewQueue(req.sessionID, list)).filter((c) => !c.steps.includes("search")).length });
     } catch (e) {
       failed(req, res, "Counting profiles to review", e);
     }

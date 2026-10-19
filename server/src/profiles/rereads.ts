@@ -111,6 +111,31 @@ export interface RereadOptions {
   random?: () => number;
   /** A profile read: kept for the next lookups and syncs. */
   record: (url: string, read: StoredRead) => void;
+  /** Networks the app was signed in to when the sync started: a sign-in page there means the site closed the session (issue #107). */
+  signedIn?: ReadonlySet<RereadNetwork>;
+}
+
+export interface Rereads {
+  /** The links source given, reading each profile in the plan with the login before its photo is looked up. */
+  source: PhotoSource;
+  /** Another links source (one per network, issue #107) wrapped the same way. */
+  wrap(inner: PhotoSource): PhotoSource;
+  report(): RunReads;
+  readPlanned(progress: (reads: RunProgressReads) => void, cancelled?: () => boolean): Promise<void>;
+  /** Signed in again during the sync: the network's reads go on (issue #107). */
+  resume(network: RereadNetwork): void;
+  /** The user skipped the network for this sync. */
+  skip(network: RereadNetwork): void;
+}
+
+// Why a network stopped that a new sign-in fixes.
+const signInStops = new Set(["signin", "notSignedIn", "signedOut"]);
+
+/** Resolves with the work, or as soon as the sync is stopped (checked four times a second). */
+function untilCancelled(work: Promise<void>, cancelled: () => boolean): Promise<void> {
+  let poll: NodeJS.Timeout | undefined;
+  const stop = new Promise<void>((resolve) => (poll = setInterval(() => cancelled() && resolve(), 250)));
+  return Promise.race([work, stop]).finally(() => clearInterval(poll));
 }
 
 /**
@@ -122,7 +147,7 @@ export function rereading(
   plan: RereadPlan,
   read: ReadProfile,
   options: RereadOptions
-): { source: PhotoSource; report(): RunReads; readPlanned(progress: (reads: RunProgressReads) => void, cancelled?: () => boolean): Promise<void> } {
+): Rereads {
   const sleep = options.sleep ?? ((ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms)));
   const random = options.random ?? Math.random;
   const done = new Set<string>();
@@ -146,7 +171,9 @@ export function rereading(
     const answer = await read(network, link.handle).catch((e: unknown) => ({ stopped: `error:${e instanceof Error ? e.message : String(e)}` }) as Awaited<ReturnType<ReadProfile>>);
     last = Date.now();
     if (answer.stopped) {
-      entry.stopped = answer.stopped;
+      // Read again if the network comes back during this sync.
+      done.delete(link.url);
+      entry.stopped = answer.stopped === "notSignedIn" && options.signedIn?.has(network) ? "signedOut" : answer.stopped;
       if (answer.answer) entry.answer = answer.answer;
       console.warn(`Reading ${network} profiles stopped (${answer.stopped}): ${answer.answer ?? "no answer from the site"}`);
       return;
@@ -164,11 +191,23 @@ export function rereading(
     }
   }
 
+  const wrap = (source: PhotoSource): PhotoSource => ({
+    ...source,
+    find: async (contact) => (await rereadAll(contact.urls), source.find(contact)),
+    ...(source.findAll ? { findAll: async (contact) => (await rereadAll(contact.urls), source.findAll!(contact)) } : {}),
+  });
+
   return {
-    source: {
-      ...inner,
-      find: async (contact) => (await rereadAll(contact.urls), inner.find(contact)),
-      ...(inner.findAll ? { findAll: async (contact) => (await rereadAll(contact.urls), inner.findAll!(contact)) } : {}),
+    source: wrap(inner),
+    wrap,
+    resume(network) {
+      const entry = stats[network];
+      if (!entry?.stopped || !signInStops.has(entry.stopped)) return;
+      delete entry.stopped;
+      delete entry.answer;
+    },
+    skip(network) {
+      (stats[network] ??= { read: 0, waiting: 0 }).stopped = "skipped";
     },
     /** Phase 1 of a sync (issue #82): the pinned profiles in the plan, read before any photo, with progress per network. */
     async readPlanned(progress: (reads: RunProgressReads) => void, cancelled: () => boolean = () => false): Promise<void> {
@@ -180,11 +219,18 @@ export function rereading(
       const snapshot = () =>
         Object.fromEntries([...totals].map(([network, total]) => [network, { read: stats[network]?.read ?? 0, total, ...stopInfo(stats[network]) }]));
       progress(snapshot());
-      for (const url of plan.selected) {
+      // A network that stopped is passed over; signed in again meanwhile, its profiles come back in turn.
+      const pending = [...plan.selected];
+      for (;;) {
         if (cancelled()) return;
+        const next = pending.findIndex((url) => !stats[parseProfileLink(url)?.network as RereadNetwork]?.stopped);
+        if (next < 0) return;
+        const [url] = pending.splice(next, 1);
         const link = parseProfileLink(url);
-        if (!link || stats[link.network as RereadNetwork]?.stopped) continue;
-        await reread(link);
+        if (!link) continue;
+        await untilCancelled(reread(link), cancelled);
+        // Stopped by a sign-in page: its turn comes again if the user signs in.
+        if (!readOk.has(url) && signInStops.has(stats[link.network as RereadNetwork]?.stopped ?? "")) pending.push(url);
         progress(snapshot());
       }
     },
@@ -193,8 +239,8 @@ export function rereading(
       for (const network of rereadNetworks) {
         const planned = [...plan.selected].filter((url) => parseProfileLink(url)?.network === network);
         const entry = stats[network];
-        // After a stop, the pinned profiles not read wait for the next sync.
-        const notReached = entry?.stopped ? planned.filter((url) => !readOk.has(url)).length : 0;
+        // The pinned profiles not read (a stop, a sign-in page, Stop) wait for the next sync.
+        const notReached = planned.filter((url) => !readOk.has(url)).length;
         const waiting = (plan.waiting[network] ?? 0) + notReached;
         if (entry || waiting) report[network] = { read: entry?.read ?? 0, waiting, ...stopInfo(entry) };
       }

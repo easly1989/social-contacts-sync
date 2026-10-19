@@ -1,5 +1,6 @@
 import { test, expect } from "@playwright/test";
 
+import { EventType } from "../../interfaces/api";
 import { FakeBackend, screenshot } from "./backend";
 import { sampleProfiles, sampleRun } from "./fixtures";
 
@@ -13,7 +14,8 @@ test.beforeEach(async ({ page }) => {
   await backend.install();
 });
 
-const linkNetworksSent = () => new URL(backend.requested("/api/init_sync")!.url()).searchParams.get("link_networks")!.split(",");
+// Each network is a source of its own (issue #107).
+const sourcesSent = () => new URL(backend.requested("/api/init_sync")!.url()).searchParams.get("sources")!.split(",");
 
 test("Sources: linked profiles one row per network, each with its toggle (issue #83)", async ({ page }) => {
   // Settings points to Sync › Sources; the old switch is gone.
@@ -26,61 +28,62 @@ test("Sources: linked profiles one row per network, each with its toggle (issue 
   await links.scrollIntoViewIfNeeded();
   await screenshot(page, "27-settings-links");
   await links.getByRole("link", { name: "Choose networks" }).click();
-  await expect(page).toHaveURL(/\/app\/sync\?tab=sources$/);
+  await expect(page).toHaveURL(/\/app\/sync\?step=sources$/);
 
-  const group = page.getByTestId("source-links");
-  await expect(group).toContainText("257 profiles on 233 contacts");
-  const rows = page.getByTestId("link-networks").getByRole("listitem");
-  // The networks with the most profiles first.
-  await expect(rows.first()).toContainText("Instagram");
-  await expect(page.getByTestId("network-instagram")).toContainText("142 profiles · public preview, unofficial");
-  await expect(page.getByTestId("network-bluesky")).toContainText("12 profiles · public, no login");
-  // Telegram is the source by phone number only; networks without profiles wait behind Show all (issue #104).
-  await expect(page.getByTestId("network-telegram")).toHaveCount(0);
-  await expect(page.getByTestId("network-x")).toHaveCount(0);
+  // One list: every network a row of its own among the sources (issue #107).
+  await expect(page.getByTestId("source-instagram")).toContainText("142 profiles · public preview, unofficial");
+  await expect(page.getByTestId("source-bluesky")).toContainText("12 profiles · public, no login");
+  // Networks without profiles wait behind Show all (issue #104).
+  await expect(page.getByTestId("source-x")).toHaveCount(0);
   await page.getByTestId("networks-show-all").click();
-  await expect(page.getByTestId("network-x")).toContainText("No profiles linked");
-  await expect(page.getByTestId("network-x").getByRole("checkbox")).toBeDisabled();
+  await expect(page.getByTestId("source-x")).toContainText("No profiles linked");
+  await expect(page.getByTestId("source-x").getByRole("checkbox")).toBeDisabled();
   // Before issue #83 the three were off on the web unless turned on in Settings: still off.
-  await expect(page.getByRole("checkbox", { name: "Instagram profiles" })).not.toBeChecked();
-  await expect(page.getByRole("checkbox", { name: "GitHub profiles" })).toBeChecked();
-  await group.scrollIntoViewIfNeeded();
+  await expect(page.getByRole("checkbox", { name: "Use Instagram" })).not.toBeChecked();
+  await expect(page.getByRole("checkbox", { name: "Use GitHub" })).toBeChecked();
   await screenshot(page, "70b-sync-sources-networks");
 
-  await page.getByRole("checkbox", { name: "Instagram profiles" }).check();
-  await page.getByRole("checkbox", { name: "GitHub profiles" }).uncheck();
-  // Collapsible, so the list stays short.
-  await group.getByRole("button", { name: "Hide networks" }).click();
-  await expect(page.getByTestId("link-networks")).toBeHidden();
+  await page.getByRole("checkbox", { name: "Use Instagram" }).check();
+  await page.getByRole("checkbox", { name: "Use GitHub" }).uncheck();
 
   await page.reload();
-  await page.getByRole("tab", { name: "Run" }).click();
+  await page.getByTestId("wizard-step-run").click();
   await page.getByRole("button", { name: "Start sync" }).click();
   await expect.poll(() => backend.requested("/api/init_sync")).toBeTruthy();
   const query = new URL(backend.requested("/api/init_sync")!.url()).searchParams;
-  expect(query.get("sources")).toContain("links");
-  expect(linkNetworksSent()).toContain("instagram");
-  expect(linkNetworksSent()).not.toContain("github");
-  expect(linkNetworksSent()).not.toContain("facebook");
+  expect(sourcesSent()).toContain("instagram");
+  expect(sourcesSent()).not.toContain("github");
+  expect(sourcesSent()).not.toContain("facebook");
   expect(query.get("links_best_effort")).toBeNull();
 });
 
 test("Sources: the old Settings switch, turned on, carries over to the three networks (issue #83)", async ({ page }) => {
   await page.addInitScript(() => localStorage.setItem("scs.links.bestEffort", "true"));
-  await page.goto("/app/sync?tab=sources");
-  for (const name of ["Instagram", "Facebook", "LinkedIn"]) await expect(page.getByRole("checkbox", { name: `${name} profiles` })).toBeChecked();
-  await page.getByRole("tab", { name: "Run" }).click();
+  await page.goto("/app/sync?step=sources");
+  for (const name of ["Instagram", "Facebook", "LinkedIn"]) await expect(page.getByRole("checkbox", { name: `Use ${name}` })).toBeChecked();
+  await page.getByTestId("wizard-step-run").click();
   await page.getByRole("button", { name: "Start sync" }).click();
   await expect.poll(() => backend.requested("/api/init_sync")).toBeTruthy();
-  expect(linkNetworksSent()).toEqual(expect.arrayContaining(["instagram", "facebook", "linkedin", "github", "bluesky"]));
+  expect(sourcesSent()).toEqual(expect.arrayContaining(["instagram", "facebook", "linkedin", "github", "bluesky"]));
 });
 
 test("Sources, desktop: the three are read with the login and on; WhatsApp and Telegram connect in place (issue #83)", async ({ page }) => {
   Object.assign(backend.status, { desktop: true, setupDone: true, googleConfigured: true, whatsappConnected: false, telegramConnected: false, telegramAvailable: true });
-  await page.goto("/app/sync?tab=sources");
-  await expect(page.getByTestId("network-instagram")).toContainText("142 profiles · read one by one with your login · oldest read");
-  await expect(page.getByTestId("network-linkedin")).toContainText("may show as a profile visit");
-  await expect(page.getByRole("checkbox", { name: "Instagram profiles" })).toBeChecked();
+  await page.goto("/app/sync?step=sources");
+  await expect(page.getByTestId("source-instagram")).toContainText("142 profiles · read one by one with your login · oldest read");
+  await expect(page.getByTestId("source-linkedin")).toContainText("may show as a profile visit");
+  await expect(page.getByRole("checkbox", { name: "Use Instagram" })).toBeChecked();
+  // Signed in: the state says so; a network without a session offers the sign-in on its row (issue #107).
+  await expect(page.getByTestId("state-instagram")).toHaveText("Signed in");
+  await expect(page.getByTestId("state-facebook")).toHaveText("Not signed in");
+  await expect(page.getByTestId("source-facebook").getByRole("button", { name: "Sign in" })).toBeVisible();
+  // A site that closes the session shows at once, said above the list, with Sign in again on its row.
+  await expect(page.getByTestId("session-closed")).toHaveCount(0);
+  await backend.send(EventType.LoginChanged, { network: "linkedin", loggedIn: false, closedAt: "2026-10-18T09:12:00.000Z" });
+  await expect(page.getByTestId("session-closed")).toHaveText("LinkedIn closed the app's session: its profiles aren't read until you sign in again.");
+  await expect(page.getByTestId("state-linkedin")).toHaveText("Session closed");
+  await expect(page.getByTestId("source-linkedin").getByRole("button", { name: "Sign in again" })).toBeVisible();
+  await screenshot(page, "70d-sync-sources-session-closed", { fullPage: false });
 
   await page.getByRole("button", { name: "Connect WhatsApp" }).click();
   await expect(page.getByTestId("sources-whatsapp-link")).toBeVisible();
@@ -187,9 +190,11 @@ test("report on a phone: the table fits, and so does adding a link", async ({ pa
   expect(await fits()).toEqual([]);
 });
 
-test("To review: a photo looked up from a profile link on the card becomes a choice (issue #82)", async ({ page }) => {
+test("Photos: a photo looked up from a profile link on the card becomes a choice (issue #82)", async ({ page }) => {
   backend.profiles = sampleProfiles();
-  await page.goto("/app/sync?tab=review");
+  const readAt = "2026-10-15T09:00:00.000Z";
+  Object.assign(backend.profiles.suggestions[1], { candidates: [], queue: { kind: "photo", photos: [{ id: "photo:gr", source: "gravatar", matchedBy: "elena@example.com", readAt }], addedAt: readAt } });
+  await page.goto("/app/sync?step=photos");
   const card = page.getByTestId("profile-card").filter({ hasText: "Elena Conti" });
   await card.getByTestId("card-link").locator("summary").click();
   // Typing the link isn't taken for shortcuts.
@@ -199,7 +204,7 @@ test("To review: a photo looked up from a profile link on the card becomes a cho
   await card.scrollIntoViewIfNeeded();
   await screenshot(page, "07b-review-link", { fullPage: false });
 
-  await card.getByRole("button", { name: /^Confirm/ }).click();
-  await expect.poll(() => backend.profileRequests.find((r) => r.route === "/link")?.body).toMatchObject({ contactId: "people/ec", link: "token-1", personIds: ["instagram:elena_conti"] });
+  await card.getByRole("button", { name: "Use Instagram" }).click();
+  await expect.poll(() => backend.profileRequests.find((r) => r.route === "/link")?.body).toMatchObject({ contactId: "people/ec", link: "token-1", personIds: [] });
   expect(backend.profileRequests.find((r) => r.route === "/link")?.body.photoFrom).toBeUndefined();
 });

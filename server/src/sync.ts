@@ -12,7 +12,7 @@ import { PhotoSource } from "./sources/types";
 import { whatsappSource } from "./sources/whatsapp";
 import { gravatarSource } from "./sources/gravatar";
 import { telegramSource } from "./sources/telegram";
-import { linksSource, LinksSourceOptions, Network, networkNames, publicNetworks } from "./sources/links";
+import { linksSource, LinksSourceOptions, Network, networkNames, Pacer, publicNetworks } from "./sources/links";
 import { loadProfiles, saveProfiles, storedProfilePhotos } from "./profiles/store";
 import { TelegramConnection } from "./telegram";
 import { telegramConnection } from "./telegramSession";
@@ -22,7 +22,8 @@ import { SimpleContact } from "./interfaces";
 import { getPlaceholders, isPlaceholder } from "./contacts/placeholders";
 import { getKeptPhotos } from "./contacts/keptPhotos";
 import { getPins, setPin } from "./contacts/photoPins";
-import { defaultRereadCap, getReads, planRereads, rereading, rereadNetworks, saveReads } from "./profiles/rereads";
+import { defaultRereadCap, getReads, planRereads, RereadNetwork, rereading, rereadNetworks, saveReads } from "./profiles/rereads";
+import { trackRereads } from "./profiles/logins";
 import { askDesktop } from "./desktop";
 import { loadQueue, queuePhotos } from "./profiles/queue";
 
@@ -64,28 +65,36 @@ export function readsCap(options: SyncOptions): number {
   return Number(process.env.SCS_PROFILE_READS) || defaultRereadCap;
 }
 
-/** The profile link networks turned on in Sync › Sources (issue #83), else the public ones. */
+const isNetwork = (key: string): key is Network => key in networkNames;
+const keys = (list: string) => list.split(",").map((k) => k.trim());
+
+/** The profile link networks turned on: those in the sources order (issue #107), else in Sync › Sources (issue #83), else the public ones. */
 export function linkNetworks(options: SyncOptions): Set<Network> {
+  const listed = keys(options.sources ?? "").filter(isNetwork);
+  if (listed.length) return new Set(listed);
   if (options.link_networks === undefined) return new Set(publicNetworks);
-  return new Set(options.link_networks.split(",").map((n) => n.trim() as Network).filter((n) => n in networkNames));
+  return new Set(keys(options.link_networks).filter(isNetwork));
 }
 
-/** Sources asked for, in priority order, that are usable in this session. */
+/**
+ * Sources asked for, in priority order, that are usable in this session. A
+ * profile network is a source of its own (issue #107); "links" stands for
+ * every network turned on, as before.
+ */
 export function requestedSources(
   options: SyncOptions,
   whatsapp: Client | undefined,
   telegram?: TelegramConnection,
   storedPhoto?: LinksSourceOptions["storedPhoto"]
 ): PhotoSource[] {
-  const ids = (options.sources ?? "whatsapp")
-    .split(",")
-    .map((s) => s.trim())
-    .filter((s, i, all): s is SourceId => knownSources.includes(s as SourceId) && all.indexOf(s) === i);
+  const ids = keys(options.sources ?? "whatsapp").filter((s, i, all) => (knownSources.includes(s as SourceId) || isNetwork(s)) && all.indexOf(s) === i);
+  // The desktop app reads Instagram, Facebook and LinkedIn with the login only: never as an anonymous visitor.
+  const links = { bestEffort: process.env.SCS_DESKTOP !== "1", storedPhoto, pacer: new Pacer() };
   return ids.flatMap((id) => {
     if (id === "whatsapp") return whatsapp ? [whatsappSource(whatsapp)] : [];
     if (id === "telegram") return telegram ? [telegramSource(telegram)] : [];
-    // The desktop app reads Instagram, Facebook and LinkedIn with the login only: never as an anonymous visitor.
-    if (id === "links") return [linksSource({ networks: linkNetworks(options), bestEffort: process.env.SCS_DESKTOP !== "1", storedPhoto })];
+    if (id === "links") return [linksSource({ ...links, networks: linkNetworks(options) })];
+    if (isNetwork(id)) return [linksSource({ ...links, networks: new Set([id]) })];
     return [gravatarSource()];
   });
 }
@@ -117,6 +126,8 @@ export async function initSync(id: string, syncOptions: SyncOptions) {
   const desktop = process.env.SCS_DESKTOP === "1";
   const networks = linkNetworks(syncOptions);
   let sources = requestedSources(syncOptions, whatsappClient, telegramConnection(id), (link) => reads[link.url]?.photoUrl ?? scanned(link));
+  // Only the networks the app is signed in to are read with the login (issue #107); the others keep the photos already read.
+  const signedIn = desktop ? await signedInNetworks() : new Set<RereadNetwork>();
   const rereads =
     desktop && sources.some((s) => s.id === "links")
       ? rereading(
@@ -126,7 +137,7 @@ export async function initSync(id: string, syncOptions: SyncOptions) {
             reads,
             readsCap(syncOptions),
             // A LinkedIn read may show as a profile visit: only while the setting is on (issue #80).
-            rereadNetworks.filter((n) => networks.has(n) && (n !== "linkedin" || syncOptions.linkedin_rereads !== "false"))
+            rereadNetworks.filter((n) => networks.has(n) && signedIn.has(n) && (n !== "linkedin" || syncOptions.linkedin_rereads !== "false"))
           ),
           (network, handle) => askDesktop("social-profile", { network, handle }, 60_000),
           {
@@ -134,10 +145,12 @@ export async function initSync(id: string, syncOptions: SyncOptions) {
               reads[url] = read;
               saveReads(id, reads);
             },
+            signedIn,
           }
         )
       : undefined;
-  if (rereads) sources = sources.map((s) => (s.id === "links" ? rereads.source : s));
+  if (rereads) sources = sources.map((s) => (s.id === "links" ? rereads.wrap(s) : s));
+  trackRereads(id, rereads);
 
   // Stop when asked to, or when the page went away.
   const cancelled = () => getFromCache(id, "sync_stop") === true || ws.readyState !== WebSocket.OPEN;
@@ -189,11 +202,19 @@ export async function initSync(id: string, syncOptions: SyncOptions) {
       sendEvent(ws, EventType.SyncProgress, {
         progress: 0,
         syncCount: 0,
-        error: "Failed to load contacts, please try again.",
+        error: `Couldn't read your Google contacts: ${e instanceof Error ? e.message : String(e)}`,
       });
     }
     return;
+  } finally {
+    trackRereads(id, undefined);
   }
 
   ws.close();
+}
+
+/** Desktop: the login networks with a session right now; none when the app can't tell. */
+async function signedInNetworks(): Promise<Set<RereadNetwork>> {
+  const status = await askDesktop<{ network: RereadNetwork; loggedIn: boolean }[]>("social-status").catch(() => []);
+  return new Set(status.filter((s) => s.loggedIn).map((s) => s.network));
 }

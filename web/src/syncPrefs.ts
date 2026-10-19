@@ -1,42 +1,63 @@
-import { computed, ref, watch } from "vue";
+import { ref, watch } from "vue";
 
-import { RunOptions, SourceId } from "../../interfaces/api";
+import { LinkNetwork, RunOptions, SourceKey } from "../../interfaces/api";
 import { linkNetworks, loginNetworks } from "./profileLinks";
 import { isDesktop } from "./settings";
 
 /*
   What the next sync uses, kept in this browser (issue #8): the sources in
-  priority order and which are on (Sources tab), and what the run does (Run
-  tab, issue #82).
+  priority order and which are on, and what the run does (issue #82). Each
+  profile network is a source of its own, in the same order (issue #107).
 */
 
 export interface SyncPrefs {
-  order: SourceId[];
-  enabled: SourceId[];
+  order: SourceKey[];
+  enabled: SourceKey[];
   options: RunOptions;
   /** Desktop: profiles read with the login per network and sync. */
   readsCap: number;
-  /** Profile link networks turned off in Sources (issue #83); unset until one is switched. */
-  networksOff?: string[];
 }
 
 const prefsKey = "scs.syncSetup";
 export const defaultOptions: RunOptions = { fillMissing: true, updatePinned: true, lookDifferent: true, decideAll: false };
 
+const networks = Object.keys(linkNetworks) as LinkNetwork[];
+export const isNetwork = (key: string): key is LinkNetwork => networks.includes(key as LinkNetwork);
+
+/**
+ * The networks on for someone who never switched them. Before issue #83 one
+ * Settings switch covered Instagram, Facebook and LinkedIn on the web, off
+ * unless turned on; the desktop app always read them with the login.
+ */
+function networksOnBefore(off?: unknown): LinkNetwork[] {
+  if (Array.isArray(off)) return networks.filter((n) => !off.includes(n));
+  let tried = false;
+  try {
+    tried = localStorage.getItem("scs.links.bestEffort") === "true";
+  } catch {
+    // Only a convenience.
+  }
+  return isDesktop.value || tried ? networks : networks.filter((n) => !loginNetworks.includes(n));
+}
+
 function readPrefs(): SyncPrefs {
-  const defaults: SyncPrefs = { order: ["whatsapp", "gravatar", "telegram", "links"], enabled: ["whatsapp", "gravatar", "links"], options: defaultOptions, readsCap: 100 };
+  const order: SourceKey[] = ["whatsapp", "gravatar", ...networks, "telegram"];
+  const defaults: SyncPrefs = { order, enabled: ["whatsapp", "gravatar", ...networksOnBefore()], options: defaultOptions, readsCap: 100 };
   try {
     const stored = JSON.parse(localStorage.getItem(prefsKey) ?? "{}");
-    const order = Array.isArray(stored.order) ? stored.order.filter((s: SourceId) => defaults.order.includes(s)) : [];
+    // "links" stood for every network, where it was in the order (before issue #107).
+    const expand = (keys: unknown, links: SourceKey[]) =>
+      (Array.isArray(keys) ? keys : []).flatMap((k: string) => (k === "links" ? links : order.includes(k as SourceKey) ? [k as SourceKey] : []));
+    const storedOrder = [...new Set(expand(stored.order, networks))];
     // Sources added since the choice was saved start as they do for everyone.
-    const added = defaults.order.filter((s) => !order.includes(s));
+    const added = order.filter((s) => !storedOrder.includes(s));
+    const enabled = Array.isArray(stored.enabled) ? expand(stored.enabled, networksOnBefore(stored.networksOff)) : defaults.enabled;
     const options = Object.fromEntries(Object.entries(defaultOptions).map(([key, on]) => [key, typeof stored.options?.[key] === "boolean" ? stored.options[key] : on])) as unknown as RunOptions;
     return {
-      order: [...order, ...added],
-      enabled: Array.isArray(stored.enabled) ? [...stored.enabled, ...added.filter((s) => defaults.enabled.includes(s))] : defaults.enabled,
+      order: [...storedOrder, ...added],
+      enabled: [...new Set([...enabled, ...added.filter((s) => defaults.enabled.includes(s) && !(isNetwork(s) && Array.isArray(stored.enabled)))])],
       options,
       readsCap: Number.isInteger(stored.readsCap) && stored.readsCap > 0 ? Math.min(stored.readsCap, 1000) : defaults.readsCap,
-      ...(Array.isArray(stored.networksOff) ? { networksOff: stored.networksOff } : {}),
     };
   } catch {
     return defaults;
@@ -45,27 +66,8 @@ function readPrefs(): SyncPrefs {
 
 export const syncPrefs = ref<SyncPrefs>(readPrefs());
 
-/**
- * The networks turned off. Before issue #83 one Settings switch covered
- * Instagram, Facebook and LinkedIn on the web, off unless turned on; the
- * desktop app always read them with the login.
- */
-export const networksOff = computed(() => {
-  if (syncPrefs.value.networksOff) return syncPrefs.value.networksOff;
-  let tried = false;
-  try {
-    tried = localStorage.getItem("scs.links.bestEffort") === "true";
-  } catch {
-    // Only a convenience.
-  }
-  return isDesktop.value || tried ? [] : loginNetworks;
-});
-
-/** The networks a sync reads, for `link_networks`. */
-export const networksOn = computed(() => Object.keys(linkNetworks).filter((n) => !networksOff.value.includes(n)));
-
-export function setNetwork(network: string, on: boolean): void {
-  syncPrefs.value.networksOff = on ? networksOff.value.filter((n) => n !== network) : [...new Set([...networksOff.value, network])];
+export function setEnabled(key: SourceKey, on: boolean): void {
+  syncPrefs.value.enabled = on ? [...new Set([...syncPrefs.value.enabled, key])] : syncPrefs.value.enabled.filter((k) => k !== key);
 }
 
 watch(

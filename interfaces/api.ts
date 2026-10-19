@@ -4,6 +4,8 @@ export enum EventType {
   Redirect = "redirect",
   SyncProgress = "sync_progress",
   WhatsAppError = "whatsapp_error",
+  /** Desktop: a site signed the app in or out (issue #107); data: ProfileScanState. */
+  LoginChanged = "login_changed",
 }
 
 export interface Event {
@@ -12,6 +14,23 @@ export interface Event {
 }
 
 export type SourceId = "whatsapp" | "telegram" | "gravatar" | "links";
+
+/** One entry of Sync › Sources' order (issue #107): a source, or a profile network, which is a source of its own. */
+export type SourceKey = Exclude<SourceId, "links"> | LinkNetwork;
+
+/** The networks whose profile links give a contact a photo. */
+export type LinkNetwork = "instagram" | "facebook" | "linkedin" | "bluesky" | "mastodon" | "github" | "x" | "youtube";
+
+/** A source that stopped answering during a sync, left out for the rest of it (issue #107). */
+export interface SyncIssue {
+  source: SourceId;
+  /** For a profile network: its key ("instagram"). */
+  network?: string;
+  reason: "disconnected" | "error";
+  message?: string;
+  /** Contacts checked before it stopped, out of the run's total. */
+  checked: number;
+}
 
 /** What happened to one contact during a sync. "kept": runs from before issue #82 (a photo kept in review). "linked": a review session linked profiles without a photo (issue #84). */
 export type SyncOutcome = "added" | "replaced" | "linked" | "kept" | "queued" | "alreadyHadPhoto" | "noMatch" | "error";
@@ -49,6 +68,8 @@ export interface SyncProgress {
   runId?: string;
   /** Final event: the run was stopped before the last contact. */
   cancelled?: boolean;
+  /** Sources left out so far (issue #107). */
+  issues?: SyncIssue[];
 }
 
 /** What a sync does (issue #82), in place of the old modes. */
@@ -128,13 +149,15 @@ export interface RunRecord extends RunSummary {
   results: ContactResult[];
   /** Desktop: pinned profiles read again with the user's login, per network (issue #79). */
   profileReads?: Partial<Record<"instagram" | "facebook" | "linkedin", ProfileReadsReport>>;
+  /** Sources left out during the run (issue #107). */
+  issues?: SyncIssue[];
 }
 
 export interface ProfileReadsReport {
   read: number;
   /** Left for the next sync: over the cap, or after the network stopped. */
   waiting: number;
-  /** Why the network stopped: "limited", "signin", "notSignedIn" (no login in the app), "busy" (a login scan was running) or "error:…". */
+  /** Why the network stopped: "limited", "signin", "notSignedIn" (no login in the app), "signedOut" (the site closed the session during the sync), "skipped" (by the user), "busy" (a login scan was running) or "error:…". */
   stopped?: string;
   /** The site's own answer when it stopped, e.g. "HTTP 429: Please wait a few minutes before you try again." */
   answer?: string;
@@ -184,7 +207,7 @@ export interface SyncOptions {
   look_different?: string;
   decide_all?: string;
   reads_cap?: string; // desktop: profiles read with the login per network and sync
-  sources?: string; // comma-separated SourceId list in priority order; default "whatsapp"
+  sources?: string; // comma-separated SourceKey list (or "links" for every network on) in priority order; default "whatsapp"
   link_networks?: string; // profile link networks turned on in Sync › Sources, comma-separated (issue #83)
   linkedin_rereads?: string; // "false": the desktop app doesn't read pinned LinkedIn profiles with the login (issue #80)
 }
@@ -500,7 +523,13 @@ export interface ProfileSuggestion {
   queue?: QueueEntry;
   /** The source the contact's photo comes from, while it is the one the app applied (issue #104). */
   currentFrom?: { source: SourceId; network?: string };
+  /** The Sync steps this card belongs to (issue #107): profiles to link, photos to pick, or nothing found yet. */
+  steps: ReviewStep[];
+  /** Profiles linked from To review after the contact's last sync: their photos are marked "linked now". */
+  linkedNow?: string[];
 }
+
+export type ReviewStep = "profiles" | "photos" | "search";
 
 /** Searching contacts' names with the login, for the selected cards in To review (issue #104). */
 export interface LoginSearchState {
@@ -555,6 +584,8 @@ export interface ProfileSearchState {
 export interface ProfileScanState {
   network: SocialNetwork;
   loggedIn: boolean;
+  /** The site closed the app's session while it was signed in (issue #107). */
+  closedAt?: string;
   account?: string;
   running?: boolean;
   read?: number;
@@ -598,4 +629,6 @@ export interface ProfilesOverview {
   bulk?: ProfileBulkState;
   /** Desktop only: searching the selected cards' names with the login (issue #104). */
   loginSearch?: LoginSearchState;
+  /** Cards per Sync step (issue #107). */
+  steps: Record<ReviewStep, number>;
 }

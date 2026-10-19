@@ -169,6 +169,58 @@ test("a missing profile keeps the photo a scan read", async () => {
   assert.deepEqual(report, { instagram: { read: 1, waiting: 0 } });
 });
 
+test("a site that closes the session mid-sync stops its network; signed in again, its profiles are read in the same sync (issue #107)", async () => {
+  const pins = { a: pin("linkedin.com/in/anna"), b: pin("linkedin.com/in/bruno"), c: pin("linkedin.com/in/carla"), d: pin("instagram.com/dora") };
+  const asked: string[] = [];
+  let signedIn = true;
+  const rereads = rereading(
+    linksSource({ fetchImpl, pacer: new Pacer(() => 0) }),
+    planRereads(pins, {}, 10),
+    async (network, handle) => {
+      asked.push(handle);
+      // LinkedIn closes the session once, at Bruno's first read.
+      if (handle === "bruno" && asked.filter((h) => h === "bruno").length === 1) signedIn = false;
+      return network === "linkedin" && !signedIn ? { stopped: "notSignedIn" } : { profile: {} };
+    },
+    { sleep: async () => {}, record: () => {}, signedIn: new Set(["linkedin", "instagram"]) }
+  );
+  const phases: any[] = [];
+  await rereads.readPlanned((reads) => {
+    phases.push(structuredClone(reads));
+    // The user signs in again right after.
+    if (!signedIn && asked[asked.length - 1] === "bruno") {
+      signedIn = true;
+      rereads.resume("linkedin");
+    }
+  });
+  assert.equal(phases.find((p) => p.linkedin?.stopped)?.linkedin.stopped, "signedOut");
+  assert.deepEqual(asked, ["dora", "anna", "bruno", "carla", "bruno"]);
+  assert.deepEqual(rereads.report(), { instagram: { read: 1, waiting: 0 }, linkedin: { read: 3, waiting: 0 } });
+});
+
+test("a network skipped by the user isn't read, and Stop ends a read at once (issue #107)", async () => {
+  const pins = { a: pin("linkedin.com/in/anna"), b: pin("instagram.com/dora"), c: pin("instagram.com/eva") };
+  const asked: string[] = [];
+  let stop = false;
+  const rereads = rereading(
+    linksSource({ fetchImpl, pacer: new Pacer(() => 0) }),
+    planRereads(pins, {}, 10),
+    async (_network, handle) => {
+      asked.push(handle);
+      // A read that never answers: only Stop gets the sync out of it.
+      stop = true;
+      return new Promise(() => {});
+    },
+    { sleep: async () => {}, record: () => {} }
+  );
+  rereads.skip("linkedin");
+  const started = Date.now();
+  await rereads.readPlanned(() => {}, () => stop);
+  assert.deepEqual(asked, ["dora"]);
+  assert.ok(Date.now() - started < 2000);
+  assert.deepEqual(rereads.report(), { instagram: { read: 0, waiting: 2 }, linkedin: { read: 0, waiting: 1, stopped: "skipped" } });
+});
+
 test("Facebook reads from before the parser fix are read again (issue #104)", () => {
   assert.ok(staleFacebook("https://facebook.com/anna"));
   assert.ok(!staleFacebook("https://facebook.com/anna", readVersion));

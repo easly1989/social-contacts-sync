@@ -32,6 +32,22 @@ test("sources follow the requested order, ignoring unknown and repeated ones", (
   assert.deepEqual(requestedSources({ sources: "gravatar, whatsapp,bogus,gravatar" }, client).map((s) => s.id), ["gravatar", "whatsapp"]);
 });
 
+test("profile networks in the order are sources of their own, in place (issue #107)", () => {
+  const options = { sources: "instagram,whatsapp,gravatar,linkedin,bogus" };
+  assert.deepEqual(
+    requestedSources(options, client).map((s) => [s.id, s.network]),
+    [
+      ["links", "instagram"],
+      ["whatsapp", undefined],
+      ["gravatar", undefined],
+      ["links", "linkedin"],
+    ]
+  );
+  assert.deepEqual([...linkNetworks(options)], ["instagram", "linkedin"]);
+  // "links", as older pages send it: every network turned on, in one source.
+  assert.deepEqual(requestedSources({ sources: "links", link_networks: "github,x" }, client).map((s) => [s.id, s.network]), [["links", undefined]]);
+});
+
 test("WhatsApp is skipped when it isn't connected", () => {
   assert.deepEqual(requestedSources({ sources: "whatsapp,gravatar" }, undefined).map((s) => s.id), ["gravatar"]);
 });

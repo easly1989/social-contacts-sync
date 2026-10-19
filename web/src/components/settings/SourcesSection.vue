@@ -111,12 +111,12 @@ onUnmounted(() => window.clearInterval(poll));
               <Check v-if="n.loggedIn" class="size-3 text-success" /><CircleDashed v-else class="size-3" />{{ networkNames[n.network] }} · {{ n.loggedIn ? $t("links.signedIn") : $t("links.notSignedIn") }}
             </li>
           </ul>
-          <router-link v-if="logins.some((n) => !n.loggedIn)" to="/app/sync?tab=sources" class="btn btn-sm mt-3">{{ $t("links.signInFromProfiles") }}</router-link>
+          <router-link v-if="logins.some((n) => !n.loggedIn)" to="/app/sync?step=sources" class="btn btn-sm mt-3">{{ $t("links.signInFromProfiles") }}</router-link>
         </div>
         <!-- Which networks a sync reads is chosen in Sync › Sources (issue #83). -->
         <p class="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-xl border border-base-300 p-3 text-sm" data-testid="settings-link-networks">
           <span class="min-w-[12rem] flex-1">{{ $t("links.networksHint") }}</span>
-          <router-link to="/app/sync?tab=sources" class="btn btn-sm">{{ $t("links.networksLink") }}</router-link>
+          <router-link to="/app/sync?step=sources" class="btn btn-sm">{{ $t("links.networksLink") }}</router-link>
         </p>
         <label v-if="isDesktop" class="flex cursor-pointer items-start gap-3 rounded-xl border border-base-300 p-3" data-testid="settings-linkedin-rereads">
           <input v-model="linkedinRereads" type="checkbox" class="toggle toggle-primary toggle-sm mt-0.5" />

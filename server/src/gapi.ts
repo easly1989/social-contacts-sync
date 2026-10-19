@@ -8,6 +8,7 @@ import { SimpleContact } from "./interfaces";
 import { GoogleAccount } from "../../interfaces/api";
 import { Base64 } from "./types";
 import { withGoogleRetry } from "./googleRetry";
+import { sized } from "./cleanup/people";
 
 const pageSize: number = 250;
 
@@ -22,7 +23,8 @@ export function generateGoogleAuthUrl(
   );
   return oauth2Client.generateAuthUrl({
     access_type: "offline",
-    scope: "https://www.googleapis.com/auth/contacts",
+    // The profile and email permissions read the signed-in account (issue #107); both are non-sensitive.
+    scope: ["https://www.googleapis.com/auth/contacts", "profile", "email"],
     state,
     prompt: "consent",
   });
@@ -119,20 +121,26 @@ export async function deleteContactPhoto(auth: OAuth2Client, resourceName: strin
   await withGoogleRetry(() => people.people.deleteContactPhoto({ resourceName }));
 }
 
-/** The contact's current photo, or null when it has none (or only Google's default). */
+/** The contact's current photo at full size (issue #107: undo puts it back as it was), or null when it has none. */
 export async function downloadContactPhoto(contact: SimpleContact): Promise<Base64 | null> {
   if (!contact.hasPhoto || !contact.photoUrl) return null;
-  const response = await fetch(contact.photoUrl);
+  const response = await fetch(sized(contact.photoUrl, 0)!);
   if (!response.ok) return null;
   const bytes = Buffer.from(await response.arrayBuffer());
   return bytes.length ? bytes.toString("base64") : null;
 }
 
-/** The signed-in account and the size of its address book. */
+/**
+ * The signed-in account and the size of its address book. A sign-in from
+ * before issue #107 lacks the profile permission: then only the size.
+ */
 export async function getAccountSummary(auth: OAuth2Client): Promise<GoogleAccount> {
   const people = peopleApi({ version: "v1", auth });
   const [me, connections] = await Promise.all([
-    people.people.get({ resourceName: "people/me", personFields: "names,emailAddresses,photos" }),
+    people.people.get({ resourceName: "people/me", personFields: "names,emailAddresses,photos" }).catch((e) => {
+      if ((e as { status?: number })?.status === 403) return { data: {} as people_v1.Schema$Person };
+      throw e;
+    }),
     people.people.connections.list({ resourceName: "people/me", pageSize: 1, personFields: "names" }),
   ]);
   return {

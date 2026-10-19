@@ -53,6 +53,8 @@ export const api = {
   run: (id: string) => get<RunRecord>(`/api/runs/${encodeURIComponent(id)}`),
   undo: (id: string, indexes?: number[]) => post(`/api/runs/${encodeURIComponent(id)}/undo`, indexes ? { indexes } : {}),
   stopSync: () => post("/api/sync/stop"),
+  /** Leaves a network's profile reads out of the running sync (issue #107). */
+  skipNetwork: (network: string) => post("/api/sync/skip", { network }),
   // Desktop app only (Settings).
   desktopInfo: () => get<DesktopInfo>("/api/desktop/info"),
   openFolder: (target: "data" | "config") => post("/api/desktop/open", { target }),

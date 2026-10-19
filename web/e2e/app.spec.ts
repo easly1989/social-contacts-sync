@@ -32,13 +32,13 @@ test("dashboard: coverage in three parts, next steps, sources and activity (issu
   const steps = page.getByTestId("next-steps").getByRole("listitem");
   await expect(steps).toHaveText([
     /190 contacts without a photo already have one ready\s*From Gravatar, a linked profile, or WhatsApp/,
-    /21 contacts wait in To review\s*12 of them have no photo yet/,
+    /21 contacts wait in Profiles or Photos\s*12 of them have no photo yet/,
     /4 photos changed outside the app/,
     /Find profiles for 284 contacts without a source\s*Last search Oct 10, 2026/,
   ]);
-  await expect(steps.nth(0).getByRole("link", { name: "Sync", exact: true })).toHaveAttribute("href", "/app/sync?tab=run");
-  await expect(steps.nth(1).getByRole("link", { name: "Review" })).toHaveAttribute("href", "/app/sync?tab=review");
-  await expect(steps.nth(3).getByRole("link", { name: "Sources" })).toHaveAttribute("href", "/app/sync?tab=sources");
+  await expect(steps.nth(0).getByRole("link", { name: "Sync", exact: true })).toHaveAttribute("href", "/app/sync?step=run");
+  await expect(steps.nth(1).getByRole("link", { name: "Review" })).toHaveAttribute("href", "/app/sync?step=profiles");
+  await expect(steps.nth(3).getByRole("link", { name: "Search" })).toHaveAttribute("href", "/app/sync?step=search");
 
   const sources = page.getByTestId("dashboard-sources");
   await expect(sources.getByRole("listitem").filter({ hasText: "WhatsApp" })).toContainText("812 contacts");
@@ -87,42 +87,44 @@ test("dashboard on a phone uses bottom tabs", async ({ page }) => {
 
 const syncSources = () => new URL(backend.requested("/api/init_sync")!.url()).searchParams.get("sources");
 
-test("sync: sources are ordered and switched off in Sources, and Run uses them (issue #82)", async ({ page }) => {
-  await page.goto("/app/sync?tab=run");
+test("sync: sources and profile networks in one order, switched off in Sources, and Sync uses them (issues #82, #107)", async ({ page }) => {
+  await page.goto("/app/sync?step=run");
   const summary = page.getByTestId("run-summary");
   await expect(summary.getByText("1,248", { exact: true })).toBeVisible();
   await expect(summary.getByText("474", { exact: true })).toBeVisible();
   await expect(summary.getByText("up to 12 min")).toBeVisible();
   await summary.getByRole("button", { name: "Change sources" }).click();
-  await expect(page.getByRole("tab", { name: "Sources" })).toHaveAttribute("aria-selected", "true");
+  await expect(page).toHaveURL(/step=sources$/);
   await page.getByRole("button", { name: "Move Gravatar up" }).click();
   await expect(page.getByRole("list", { name: "Sources" }).getByRole("listitem").first()).toContainText("Gravatar");
+  // Every network is a source of its own, with its state.
+  await expect(page.getByTestId("state-whatsapp")).toHaveText("Connected");
+  await expect(page.getByTestId("source-bluesky")).toBeVisible();
   await screenshot(page, "23-sync-sources");
 
-  await page.getByRole("tab", { name: "Run" }).click();
+  await page.getByTestId("wizard-step-run").click();
   await screenshot(page, "23b-sync-run");
   await page.getByRole("button", { name: "Start sync" }).click();
   await expect.poll(() => backend.requested("/api/init_sync")).toBeTruthy();
-  expect(syncSources()).toBe("gravatar,whatsapp,links");
+  // The web version reads Instagram, Facebook and LinkedIn only once they're turned on.
+  expect(syncSources()).toBe("gravatar,whatsapp,bluesky,github");
 
-  await page.goto("/app/sync?tab=sources");
-  await page.getByRole("checkbox", { name: "Gravatar" }).uncheck();
-  await page.getByRole("checkbox", { name: "WhatsApp" }).uncheck();
-  await page.getByRole("checkbox", { name: "Profile links" }).uncheck();
-  await page.getByRole("tab", { name: "Run" }).click();
+  await page.goto("/app/sync?step=sources");
+  for (const name of ["Gravatar", "WhatsApp", "Bluesky", "GitHub"]) await page.getByRole("checkbox", { name: `Use ${name}` }).uncheck();
+  await page.getByTestId("wizard-step-run").click();
   await expect(page.getByText("Choose at least one source.")).toBeVisible();
   await expect(page.getByRole("button", { name: "Start sync" })).toBeDisabled();
 });
 
 test("sync without WhatsApp offers to connect it", async ({ page }) => {
   backend.status.whatsappConnected = false;
-  await page.goto("/app/sync?tab=sources");
-  await expect(page.getByTestId("source-whatsapp")).toContainText("Not connected");
+  await page.goto("/app/sync?step=sources");
+  await expect(page.getByTestId("state-whatsapp")).toHaveText("Not connected");
   await expect(page.getByTestId("source-whatsapp").getByRole("link", { name: "Connect" })).toBeVisible();
-  await page.getByRole("tab", { name: "Run" }).click();
+  await page.getByTestId("wizard-step-run").click();
   await page.getByRole("button", { name: "Start sync" }).click();
   await expect.poll(() => backend.requested("/api/init_sync")).toBeTruthy();
-  expect(syncSources()).toBe("gravatar,links");
+  expect(syncSources()).toBe("gravatar,bluesky,github");
 });
 
 test("history lists every run with its result", async ({ page }) => {

@@ -296,8 +296,10 @@ export function linksSource(options: LinksSourceOptions = {}): PhotoSource {
     }
   }
 
+  const only = options.networks?.size === 1 ? [...options.networks][0] : undefined;
   return {
     id: "links",
+    ...(only ? { network: only } : {}),
     async find(contact) {
       for (const link of contactLinks(contact)) {
         const photo = await photoOf(link);

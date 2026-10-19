@@ -16,8 +16,9 @@ import router from "./routes/api";
 import desktopRouter from "./routes/desktop";
 import runsRouter from "./routes/runs";
 import cleanupRouter from "./routes/cleanup";
-import { crossSiteGuard, desktopMode } from "./src/desktop";
+import { crossSiteGuard, desktopMode, onDesktopEvent } from "./src/desktop";
 import { desktopSessionId, rememberSignIns, restoreDesktopSession } from "./src/desktopSession";
+import { loginChanged } from "./src/profiles/logins";
 import { forgetSavedTelegram, restoreTelegram } from "./src/telegramSession";
 import telegramRouter from "./routes/telegram";
 import linksRouter from "./routes/links";
@@ -103,6 +104,7 @@ const routePrefix = process.env.ROUTE_PREFIX || "/api";
 if (desktopMode) {
   app.use(routePrefix, crossSiteGuard);
   restoreDesktopSession(initWhatsApp);
+  onDesktopEvent("login-changed", (change) => loginChanged(desktopSessionId, change));
   if (rememberSignIns()) void restoreTelegram(desktopSessionId);
   else forgetSavedTelegram();
 }

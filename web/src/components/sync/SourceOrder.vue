@@ -1,38 +1,69 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from "vue";
 import { useI18n } from "vue-i18n";
-import { ChevronDown, ChevronUp, GripVertical } from "lucide-vue-next";
+import { ChevronDown, ChevronUp, CircleAlert, GripVertical } from "lucide-vue-next";
 
-import SourceBadge from "../SourceBadge.vue";
 import SourceMark from "../SourceMark.vue";
 import TelegramLink from "../TelegramLink.vue";
 import WhatsAppLink from "../WhatsAppLink.vue";
 import { api } from "../../api";
 import { number, relativeTime } from "../../format";
 import { isDesktop } from "../../settings";
+import { loginOf, refreshLogins, signInTo } from "../../loginSearch";
 import { linkedinRereads, linkNetworks, loginNetworks } from "../../profileLinks";
 import { sourceInfo } from "../../sources";
-import { networksOff, setNetwork, syncPrefs } from "../../syncPrefs";
-import { LinkedNetworks, SessionStatus, SourceId, TelegramState } from "../../../../interfaces/api";
+import { isNetwork, setEnabled, syncPrefs } from "../../syncPrefs";
+import { LinkedNetworks, SessionStatus, SocialNetwork, SourceId, SourceKey, TelegramState } from "../../../../interfaces/api";
 
-// Sync › Sources: where a sync looks for photos and in which order (moved from Run in issue #82),
-// with Linked profiles one row per network, and WhatsApp and Telegram connected right here (issue #83).
+// Sync › Sources (issue #107): every source in one order, profile networks included, each with its
+// real state, checked when the step opens and as soon as a site signs the app out, and its fix on its row.
 const { t, locale } = useI18n();
 const status = ref<SessionStatus>();
 const linked = ref<LinkedNetworks>();
 onMounted(async () => {
+  void refreshLogins();
   status.value = await api.status();
   linked.value = await api.linkedNetworks().catch(() => undefined);
 });
 
-function available(source: SourceId): boolean {
-  if (source === "whatsapp") return Boolean(status.value?.whatsappConnected);
-  if (source === "telegram") return Boolean(status.value?.telegramConnected);
-  return source === "gravatar" || source === "links";
-}
+const nameOf = (key: SourceKey) => (isNetwork(key) ? linkNetworks[key].name : sourceInfo[key as SourceId].name);
+const profilesOn = (network: string) => linked.value?.networks[network]?.profiles ?? 0;
+const noProfiles = (key: SourceKey) => isNetwork(key) && Boolean(linked.value) && !profilesOn(key);
+const withLogin = (key: SourceKey) => isDesktop.value && loginNetworks.includes(key);
 
-function toggle(source: SourceId, on: boolean): void {
-  syncPrefs.value.enabled = on ? [...syncPrefs.value.enabled, source] : syncPrefs.value.enabled.filter((s) => s !== source);
+type State = "connected" | "signedIn" | "ready" | "closed" | "signedOut" | "notConnected" | "unavailable";
+function state(key: SourceKey): State {
+  if (key === "whatsapp") return status.value?.whatsappConnected ? "connected" : "notConnected";
+  if (key === "telegram") return status.value?.telegramConnected ? "connected" : status.value && !status.value.telegramAvailable ? "unavailable" : "notConnected";
+  if (withLogin(key)) {
+    const login = loginOf(key);
+    return login?.loggedIn ? "signedIn" : login?.closedAt ? "closed" : "signedOut";
+  }
+  return "ready";
+}
+const usable = (key: SourceKey) => !["notConnected", "unavailable"].includes(state(key));
+const tone: Record<State, string> = {
+  connected: "bg-success/10 text-success",
+  signedIn: "bg-success/10 text-success",
+  ready: "bg-success/10 text-success",
+  closed: "bg-warning/15 text-warning",
+  signedOut: "bg-base-200 text-base-content/60",
+  notConnected: "bg-base-200 text-base-content/60",
+  unavailable: "bg-base-200 text-base-content/60",
+};
+
+function detail(key: SourceKey): string {
+  if (!isNetwork(key)) return t({ phone: "setup.sources.byPhone", email: "setup.sources.byEmail", link: "links.byLink" }[sourceInfo[key as SourceId].matchedBy]);
+  if (noProfiles(key)) return t("sources.noProfiles");
+  const info = linked.value?.networks[key];
+  const how = !loginNetworks.includes(key) ? t("sources.public") : !isDesktop.value ? t("sources.unofficial") : key === "linkedin" && !linkedinRereads.value ? t("sources.linkedinOff") : key === "linkedin" ? t("sources.withLoginVisit") : t("sources.withLogin");
+  return [
+    info ? t("sources.profiles", { count: number(info.profiles, locale.value) }, info.profiles) : "",
+    how,
+    info?.oldestRead ? t("sources.oldestRead", { when: relativeTime(info.oldestRead, locale.value) }) : "",
+  ]
+    .filter(Boolean)
+    .join(" · ");
 }
 
 function move(index: number, delta: number): void {
@@ -42,35 +73,22 @@ function move(index: number, delta: number): void {
   syncPrefs.value.order = order;
 }
 
-// Linked profiles: the networks with profiles first, the most first.
-const showNetworks = ref(true);
-const profilesOn = (network: string) => linked.value?.networks[network]?.profiles ?? 0;
-const networks = computed(() => Object.keys(linkNetworks).sort((a, b) => profilesOn(b) - profilesOn(a)));
-const noProfiles = (network: string) => Boolean(linked.value) && !profilesOn(network);
 // Networks with no linked profile wait behind "Show all" (issue #104).
 const showEmpty = ref(false);
-const emptyCount = computed(() => networks.value.filter(noProfiles).length);
-const shownNetworks = computed(() => (showEmpty.value ? networks.value : networks.value.filter((n) => !noProfiles(n))));
-function readHow(network: string): string {
-  if (!loginNetworks.includes(network)) return t("sources.public");
-  if (!isDesktop.value) return t("sources.unofficial");
-  if (network === "linkedin") return linkedinRereads.value ? t("sources.withLoginVisit") : t("sources.linkedinOff");
-  return t("sources.withLogin");
-}
-function networkText(network: string): string {
-  if (noProfiles(network)) return t("sources.noProfiles");
-  const info = linked.value?.networks[network];
-  return [
-    info ? t("sources.profiles", { count: number(info.profiles, locale.value) }, info.profiles) : "",
-    readHow(network),
-    info?.oldestRead ? t("sources.oldestRead", { when: relativeTime(info.oldestRead, locale.value) }) : "",
-  ]
-    .filter(Boolean)
-    .join(" · ");
+const emptyCount = computed(() => syncPrefs.value.order.filter(noProfiles).length);
+const shown = computed(() => syncPrefs.value.order.map((key, index) => ({ key, index })).filter(({ key }) => showEmpty.value || !noProfiles(key)));
+// A site that closed the app's session: said once, above the list.
+const closed = computed(() => syncPrefs.value.order.filter((k) => state(k) === "closed"));
+
+const signingIn = ref<string>();
+async function signIn(key: SourceKey): Promise<void> {
+  signingIn.value = key;
+  await signInTo(key as SocialNetwork);
+  signingIn.value = undefined;
 }
 
 // Connecting WhatsApp or Telegram in place: the status is read again once it reports in.
-const connecting = ref<SourceId>();
+const connecting = ref<SourceKey>();
 let poll: number | undefined;
 function watchWhatsApp(): void {
   window.clearInterval(poll);
@@ -91,55 +109,59 @@ onUnmounted(() => window.clearInterval(poll));
 </script>
 
 <template>
-  <section class="rounded-box border border-base-300 bg-base-100 p-6" data-testid="source-order">
-    <h2 class="font-semibold">{{ $t("syncSetup.sourcesTitle") }}</h2>
-    <p class="mt-0.5 text-sm text-base-content/60">{{ $t("syncSetup.sourcesHint") }}</p>
-    <ol class="mt-4 space-y-2" :aria-label="$t('syncSetup.sources')">
-      <li v-for="(source, index) in syncPrefs.order" :key="source" class="rounded-xl border border-base-300" :data-testid="`source-${source}`">
-        <div class="flex flex-wrap items-center gap-3 p-3" :class="{ 'opacity-60': !available(source) && connecting !== source }">
-          <GripVertical class="size-4 text-base-content/30" />
-          <span class="w-4 text-xs font-semibold text-base-content/50">{{ index + 1 }}</span>
-          <SourceMark :source="source" size="size-8" icon-size="size-4" />
-          <div class="min-w-[8rem] flex-1">
-            <div class="text-sm font-semibold">{{ sourceInfo[source].name }}</div>
-            <div class="text-xs text-base-content/60">
-              <template v-if="source === 'telegram' && status && !status.telegramAvailable">{{ $t("dashboard.unavailable") }}</template>
-              <template v-else-if="!available(source)">{{ $t("dashboard.notConnected") }}</template>
-              <template v-else-if="source === 'links' && linked">{{ $t("sources.linkedSummary", { profiles: number(linked.profiles, locale), contacts: number(linked.contacts, locale) }) }}</template>
-              <template v-else>{{ $t({ phone: "setup.sources.byPhone", email: "setup.sources.byEmail", link: "links.byLink" }[sourceInfo[source].matchedBy]) }}</template>
-            </div>
+  <section class="space-y-3" data-testid="source-order">
+    <div v-for="key in closed" :key="key" role="alert" class="alert alert-warning alert-soft text-sm" data-testid="session-closed">
+      <CircleAlert class="size-5" /><span>{{ $t("sources.closedBanner", { network: nameOf(key) }) }}</span>
+    </div>
+    <ol class="space-y-2" :aria-label="$t('syncSetup.sources')">
+      <li v-for="({ key, index }, position) in shown" :key="key" class="rounded-xl border border-base-300 bg-base-100" :data-testid="`source-${key}`">
+        <div class="flex flex-wrap items-center gap-3 px-4 py-3" :class="{ 'opacity-60': noProfiles(key) || (!usable(key) && connecting !== key) }">
+          <GripVertical class="size-4 text-base-content/30" aria-hidden="true" />
+          <span class="w-4 text-xs font-semibold text-base-content/50">{{ position + 1 }}</span>
+          <SourceMark :source="key" size="size-9" icon-size="size-5" />
+          <div class="min-w-[9rem] flex-1">
+            <div class="text-sm font-semibold">{{ nameOf(key) }}</div>
+            <div class="text-xs text-base-content/60">{{ detail(key) }}</div>
           </div>
-          <div class="join">
-            <button type="button" class="btn btn-ghost btn-xs join-item" :disabled="index === 0" :aria-label="$t('syncSetup.moveUp', { name: sourceInfo[source].name })" @click="move(index, -1)"><ChevronUp class="size-4" /></button>
-            <button type="button" class="btn btn-ghost btn-xs join-item" :disabled="index === syncPrefs.order.length - 1" :aria-label="$t('syncSetup.moveDown', { name: sourceInfo[source].name })" @click="move(index, 1)"><ChevronDown class="size-4" /></button>
-          </div>
-          <button v-if="source === 'links'" type="button" class="btn btn-ghost btn-xs" :aria-expanded="showNetworks" aria-controls="link-networks" @click="showNetworks = !showNetworks">
-            {{ showNetworks ? $t("sources.hideNetworks") : $t("sources.showNetworks") }}<ChevronUp v-if="showNetworks" class="size-3.5" /><ChevronDown v-else class="size-3.5" />
+          <span v-if="!noProfiles(key)" class="badge badge-sm border-0" :class="tone[state(key)]" :data-testid="`state-${key}`">{{ $t(`sources.state.${state(key)}`) }}</span>
+          <!-- The fix, right on the row. The web version links WhatsApp on its own page, as the first run does. -->
+          <router-link v-if="key === 'whatsapp' && state(key) === 'notConnected' && !isDesktop" to="/whatsapp" class="btn btn-sm">{{ $t("dashboard.connect") }}</router-link>
+          <button
+            v-else-if="(key === 'whatsapp' || key === 'telegram') && state(key) === 'notConnected' && connecting !== key"
+            type="button"
+            class="btn btn-sm"
+            :aria-label="$t('sources.connect', { name: nameOf(key) })"
+            @click="connecting = key"
+          >
+            {{ $t("dashboard.connect") }}
           </button>
-          <template v-if="!available(source)">
-            <!-- The web version links WhatsApp on its own page, as the first run does. -->
-            <router-link v-if="source === 'whatsapp' && !isDesktop" to="/whatsapp" class="btn btn-xs">{{ $t("dashboard.connect") }}</router-link>
-            <button
-              v-else-if="(source === 'whatsapp' || status?.telegramAvailable) && connecting !== source"
-              type="button"
-              class="btn btn-xs"
-              :aria-label="$t('sources.connect', { name: sourceInfo[source].name })"
-              @click="connecting = source"
-            >
-              {{ $t("dashboard.connect") }}
+          <button
+            v-else-if="withLogin(key) && !noProfiles(key) && (state(key) === 'closed' || state(key) === 'signedOut')"
+            type="button"
+            class="btn btn-sm"
+            :class="state(key) === 'closed' ? 'btn-warning' : ''"
+            :disabled="signingIn === key"
+            @click="signIn(key)"
+          >
+            <span v-if="signingIn === key" class="loading loading-spinner loading-xs"></span>{{ state(key) === "closed" ? $t("sources.signInAgain") : $t("sources.signIn") }}
+          </button>
+          <div class="join">
+            <button type="button" class="btn btn-ghost btn-xs join-item" :disabled="index === 0" :aria-label="$t('syncSetup.moveUp', { name: nameOf(key) })" @click="move(index, -1)"><ChevronUp class="size-4" /></button>
+            <button type="button" class="btn btn-ghost btn-xs join-item" :disabled="index === syncPrefs.order.length - 1" :aria-label="$t('syncSetup.moveDown', { name: nameOf(key) })" @click="move(index, 1)">
+              <ChevronDown class="size-4" />
             </button>
-          </template>
+          </div>
           <input
-            v-else
             type="checkbox"
             class="toggle toggle-primary toggle-sm"
-            :aria-label="sourceInfo[source].name"
-            :checked="syncPrefs.enabled.includes(source)"
-            @change="toggle(source, ($event.target as HTMLInputElement).checked)"
+            :aria-label="$t('sources.use', { name: nameOf(key) })"
+            :disabled="!usable(key) || noProfiles(key)"
+            :checked="usable(key) && !noProfiles(key) && syncPrefs.enabled.includes(key)"
+            @change="setEnabled(key, ($event.target as HTMLInputElement).checked)"
           />
         </div>
 
-        <div v-if="connecting === source && source === 'whatsapp'" class="flex flex-wrap items-start gap-5 border-t border-base-300 p-4" data-testid="sources-whatsapp-link">
+        <div v-if="connecting === key && key === 'whatsapp'" class="flex flex-wrap items-start gap-5 border-t border-base-300 p-4" data-testid="sources-whatsapp-link">
           <WhatsAppLink :size="180" @connecting="watchWhatsApp" />
           <ol class="min-w-[12rem] flex-1 list-inside list-decimal space-y-1 text-sm text-base-content/70">
             <li>{{ $t("whatsapp.step1") }}</li>
@@ -148,31 +170,14 @@ onUnmounted(() => window.clearInterval(poll));
           </ol>
           <button type="button" class="btn btn-ghost btn-sm" @click="connecting = undefined">{{ $t("common.cancel") }}</button>
         </div>
-        <div v-if="connecting === source && source === 'telegram'" class="flex flex-wrap items-start gap-3 border-t border-base-300 p-4" data-testid="sources-telegram-link">
+        <div v-if="connecting === key && key === 'telegram'" class="flex flex-wrap items-start gap-3 border-t border-base-300 p-4" data-testid="sources-telegram-link">
           <div class="min-w-[14rem] flex-1 sm:max-w-sm"><TelegramLink @change="onTelegram" /></div>
           <button type="button" class="btn btn-ghost btn-sm" @click="connecting = undefined">{{ $t("common.cancel") }}</button>
         </div>
-
-        <ul v-if="source === 'links'" v-show="showNetworks" id="link-networks" class="border-t border-base-300 py-1 sm:pl-14" :aria-label="$t('sources.networks')" data-testid="link-networks">
-          <li v-for="network in shownNetworks" :key="network" class="flex items-center gap-3 border-b border-base-300/60 px-3 py-2 last:border-0" :data-testid="`network-${network}`">
-            <SourceBadge source="links" :network="linkNetworks[network].name" class="w-28 shrink-0" :class="{ 'opacity-60': noProfiles(network) }" />
-            <span class="min-w-0 flex-1 text-xs" :class="noProfiles(network) ? 'text-base-content/50' : 'text-base-content/70'">{{ networkText(network) }}</span>
-            <input
-              type="checkbox"
-              class="toggle toggle-primary toggle-sm"
-              :aria-label="$t('sources.networkToggle', { name: linkNetworks[network].name })"
-              :disabled="noProfiles(network)"
-              :checked="!noProfiles(network) && !networksOff.includes(network)"
-              @change="setNetwork(network, ($event.target as HTMLInputElement).checked)"
-            />
-          </li>
-          <li v-if="emptyCount" class="px-3 py-2">
-            <button type="button" class="btn btn-ghost btn-xs" :aria-expanded="showEmpty" data-testid="networks-show-all" @click="showEmpty = !showEmpty">
-              {{ showEmpty ? $t("sources.hideEmpty") : $t("sources.showEmpty", { count: emptyCount }) }}<ChevronUp v-if="showEmpty" class="size-3.5" /><ChevronDown v-else class="size-3.5" />
-            </button>
-          </li>
-        </ul>
       </li>
     </ol>
+    <button v-if="emptyCount" type="button" class="btn btn-ghost btn-xs" :aria-expanded="showEmpty" data-testid="networks-show-all" @click="showEmpty = !showEmpty">
+      {{ showEmpty ? $t("sources.hideEmpty") : $t("sources.showEmpty", { count: emptyCount }) }}<ChevronUp v-if="showEmpty" class="size-3.5" /><ChevronDown v-else class="size-3.5" />
+    </button>
   </section>
 </template>
