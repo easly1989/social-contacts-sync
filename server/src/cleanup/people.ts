@@ -55,10 +55,10 @@ export function ownPhotoUrl(person: Person): string | undefined {
   return sized(person.photos?.find((p) => !p.default && p.url)?.url ?? undefined);
 }
 
-/** Google's address without a size serves about 100 px, blurred next to a source's photo and in the zoom (issue #104): ask for 400. */
-export function sized(url: string | undefined): string | undefined {
+/** Google's address without a size serves about 100 px, blurred next to a source's photo and in the zoom (issue #104): ask for 400, or 0 for the original. */
+export function sized(url: string | undefined, size = 400): string | undefined {
   if (!url || !/googleusercontent\.com\//.test(url)) return url;
-  return /=s\d+(-c)?$/.test(url) ? url.replace(/=s\d+(-c)?$/, "=s400") : /=[^/]*$/.test(url) ? url : `${url}=s400`;
+  return /=s\d+(-c)?$/.test(url) ? url.replace(/=s\d+(-c)?$/, `=s${size}`) : /=[^/]*$/.test(url) ? url : `${url}=s${size}`;
 }
 
 function birthdayText(person: Person): string | undefined {
@@ -123,7 +123,7 @@ export function peopleContactsApi(auth: OAuth2Client): ContactsApi {
       const url = ownPhotoUrl(person);
       if (!url) return null;
       // Full size rather than the list's thumbnail.
-      const response = await fetch(url.replace(/=s\d+$/, "=s0"));
+      const response = await fetch(sized(url, 0)!);
       if (!response.ok) return null;
       const bytes = Buffer.from(await response.arrayBuffer());
       return bytes.length ? bytes.toString("base64") : null;

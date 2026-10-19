@@ -9,6 +9,7 @@ import { migrateReviewHistory, reviewUndone } from "../src/profiles/history";
 import { GoogleStats } from "../../interfaces/api";
 import { getRun, getRunPhoto, listRuns, updateRun } from "../src/runs";
 import { googleRateLimiter } from "../src/sync";
+import { skipReads } from "../src/profiles/logins";
 import { undoRun } from "../src/undo";
 import { answeredRevoked } from "../src/googleSignIn";
 
@@ -46,6 +47,12 @@ export function runsRouter(options: { contactsApi?: (auth: OAuth2Client) => Cont
     if (!req.is("application/json")) return res.status(415).send({ error: "json_required" });
     setInCache(req.sessionID, "sync_stop", true);
     res.send({ ok: true });
+  });
+
+  // Leaves a network's profile reads out of the running sync (issue #107).
+  router.post("/sync/skip", (req: Request, res: Response) => {
+    if (!req.is("application/json")) return res.status(415).send({ error: "json_required" });
+    res.send({ ok: skipReads(req.sessionID, String(req.body?.network ?? "")) });
   });
 
   router.get("/runs", (req: Request, res: Response) => {

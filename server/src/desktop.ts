@@ -26,7 +26,15 @@ const parentPort: ParentPort | undefined =
 let nextRequestId = 1;
 const pendingRequests = new Map<number, { resolve: (value: any) => void; reject: (error: Error) => void }>();
 
+const eventListeners = new Map<string, (value: any) => void>();
+
+/** Listens to news the desktop app sends on its own, e.g. a site signing the app out (issue #107). */
+export function onDesktopEvent(event: string, listener: (value: any) => void): void {
+  eventListeners.set(event, listener);
+}
+
 parentPort?.on("message", ({ data }) => {
+  if (data?.type === "event") return eventListeners.get(data.event)?.(data.value);
   if (data?.type !== "reply") return;
   const request = pendingRequests.get(data.id);
   if (!request) return;
