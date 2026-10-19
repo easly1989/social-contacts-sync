@@ -139,7 +139,19 @@ export const readLook: ReadLook = async (photoUrl) => {
  * cache, and the look of each contact's photo, read once per photo the
  * contact has. Saved, so the next read is quick.
  */
-export async function checkedQueue(sessionId: string, contacts: { id: string; photoUrl?: string; hasPhoto: boolean; placeholder?: boolean }[], look: ReadLook = readLook): Promise<QueueData> {
+export function checkedQueue(sessionId: string, contacts: CheckedContact[], look: ReadLook = readLook): Promise<QueueData> {
+  // The Dashboard, the sidebar and To review ask at once: one check at a time per session.
+  const running = checking.get(sessionId);
+  if (running) return running;
+  const check = fillQueue(sessionId, contacts, look).finally(() => checking.delete(sessionId));
+  checking.set(sessionId, check);
+  return check;
+}
+
+type CheckedContact = { id: string; photoUrl?: string; hasPhoto: boolean; placeholder?: boolean };
+const checking = new Map<string, Promise<QueueData>>();
+
+async function fillQueue(sessionId: string, contacts: CheckedContact[], look: ReadLook): Promise<QueueData> {
   const data = loadQueue(sessionId);
   const byId = new Map(contacts.map((c) => [c.id, c]));
   // null: the image is gone from the cache, so the photo can't be shown any more.

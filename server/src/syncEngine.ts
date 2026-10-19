@@ -183,9 +183,13 @@ export async function runSync(
       latest = { name: contact.name, source: found.source, ...(found.network ? { network: found.network } : {}), ...(pinned ? { pinned } : {}) };
       return googleUrl;
     };
-    // The look of the contact's photo, read once and only when a found photo needs it.
+    // The look of the contact's photo, read once and only when a found photo needs it; unread, nothing counts as the same.
     let current: Promise<string | undefined> | undefined;
-    const currentLook = () => (current ??= target.currentPhoto(contact).then((photo) => (photo ? photoFacts(photo).visual : undefined)));
+    const currentLook = () =>
+      (current ??= target.currentPhoto(contact).then(
+        (photo) => (photo ? photoFacts(photo).visual : undefined),
+        () => undefined
+      ));
     const queue = async (kind: "photo" | "changed", found: FoundPhoto[]) => {
       await target.queue?.(contact, kind, found, realPhoto && current ? await current : undefined);
       result.outcome = "queued";

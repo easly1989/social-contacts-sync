@@ -156,24 +156,20 @@ export function profilesRouter(options: Options = {}): express.Router {
     return (contact) => [...new Set(contact.urls.flatMap((u) => byUrl.get(parseProfileLink(u.value)?.url ?? "") ?? []))];
   }
 
-  // Size and look of the profiles' cached photos, by profile and photo address.
-  const profileFacts = new Map<string, PhotoFacts | null>();
-  function factsOf(person: SocialPerson): PhotoFacts | null {
+  // Size and look of the profiles' cached photos, by profile and photo address; one not cached yet is looked for again.
+  const profileFacts = new Map<string, PhotoFacts>();
+  function factsOf(person: SocialPerson): PhotoFacts | undefined {
     const key = `${person.id} ${person.photoUrl ?? ""}`;
     if (!profileFacts.has(key)) {
       const bytes = cachedPhoto(person);
-      profileFacts.set(key, bytes ? photoFacts(bytes) : null);
+      if (bytes) profileFacts.set(key, photoFacts(bytes));
     }
-    return profileFacts.get(key)!;
+    return profileFacts.get(key);
   }
 
   /** The queue, with what To review's rules need filled in for cards an older sync sent. */
   const reviewQueue = (sessionId: string, list: Contact[]) => checkedQueue(sessionId, list, options.readLook);
 
-  /**
-   * To review: one card per contact with suggested profiles or photos a sync sent there (issue #82),
-   * offering only photos worth it, and one per contact without a photo (issue #104).
-   */
   /** Profiles never suggested for a contact: turned down for it, linked from the app, or already on any contact. */
   function exclusions(data: ProfilesData, list: Contact[]) {
     const linked = new Set(data.linked.filter((l) => !l.undone).map((l) => l.person.id));
@@ -182,6 +178,10 @@ export function profilesRouter(options: Options = {}): express.Router {
     return { rejected: data.rejected, linked, taken };
   }
 
+  /**
+   * To review: one card per contact with suggested profiles or photos a sync sent there (issue #82),
+   * offering only photos worth it, and one per contact without a photo (issue #104).
+   */
   function suggestions(sessionId: string, data: ProfilesData, list: Contact[], queue: QueueData): ProfileSuggestion[] {
     const excluded = exclusions(data, list);
     const skipped = new Set(data.skipped);
@@ -372,7 +372,7 @@ export function profilesRouter(options: Options = {}): express.Router {
     res.send((await scanStates(req, loadProfiles(req.sessionID))) ?? []);
   });
 
-  // How many contacts wait in To review, for the sidebar (issue #81). Nothing read or queued yet: none, without asking Google.
+  // How many contacts wait in To review, for the sidebar (issue #81); contacts without a photo are cards too (issue #104).
   router.get("/profiles/count", async (req: Request, res: Response) => {
     const data = loadProfiles(req.sessionID);
     const api = google(req, res);

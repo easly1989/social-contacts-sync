@@ -308,8 +308,20 @@ function closeReader(network: ScanNetwork): void {
   if (known && !known.win.isDestroyed()) known.win.destroy();
 }
 
+// One page at a time in a network's reader window: a sync's reads and To review's searches (issue #104) take turns.
+const turns = new Map<ScanNetwork, Promise<unknown>>();
+function inTurn<T>(network: ScanNetwork, work: () => Promise<T>): Promise<T> {
+  const next = (turns.get(network) ?? Promise.resolve()).then(work, work);
+  turns.set(network, next.catch(() => undefined));
+  return next;
+}
+
 /** A profile's photo address and name, read with the user's login; `stopped` when the site said no. Nothing is posted or changed. */
-export async function socialProfile(network: ScanNetwork, handle: string): Promise<ProfileAnswer> {
+export function socialProfile(network: ScanNetwork, handle: string): Promise<ProfileAnswer> {
+  return inTurn(network, () => readProfile(network, handle));
+}
+
+async function readProfile(network: ScanNetwork, handle: string): Promise<ProfileAnswer> {
   const url = profilePageUrl(network, handle);
   if (!url) return { missing: true };
   if (!(await cookie(network, sites[network].cookie))) return { stopped: "notSignedIn" };
@@ -353,7 +365,11 @@ export async function socialProfile(network: ScanNetwork, handle: string): Promi
  * #104), as the site's own search box does: a few per site, one search at a
  * time (the server paces them). Nothing is posted or changed.
  */
-export async function socialSearch(network: ScanNetwork, query: string): Promise<{ people: ScannedPerson[]; stopped?: string; answer?: string }> {
+export function socialSearch(network: ScanNetwork, query: string): Promise<{ people: ScannedPerson[]; stopped?: string; answer?: string }> {
+  return inTurn(network, () => search(network, query));
+}
+
+async function search(network: ScanNetwork, query: string): Promise<{ people: ScannedPerson[]; stopped?: string; answer?: string }> {
   if (!query.trim()) return { people: [] };
   if (!(await cookie(network, sites[network].cookie))) return { people: [], stopped: "notSignedIn" };
   if (running.has(network)) return { people: [], stopped: "busy" };
