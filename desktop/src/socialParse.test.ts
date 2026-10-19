@@ -205,28 +205,42 @@ test("Instagram profile page: the picture and name from its og tags", () => {
 });
 
 test("searching a name with the login: at most five people per site (issue #104)", () => {
-  const users = Array.from({ length: 7 }, (_, i) => ({ position: i, user: { username: `anna.r${i}`, full_name: "Anna Rossi", profile_pic_url: `https://scontent.cdninstagram.com/${i}.jpg` } }));
-  const ig = instagramSearch({ users: [{ user: { username: "bad name!" } }, ...users], places: [], hashtags: [] });
+  // /api/v1/fbsearch/account_serp/: the users themselves, not wrapped (the old topsearch answers 404 since 2026-10).
+  const users = Array.from({ length: 7 }, (_, i) => ({ pk: String(i), username: `anna.r${i}`, full_name: "Anna Rossi", profile_pic_url: `https://scontent.cdninstagram.com/${i}.jpg` }));
+  const ig = instagramSearch({ num_results: 8, users: [{ username: "bad name!" }, ...users], has_more: false, status: "ok" });
   assert.equal(ig.length, 5);
   assert.deepEqual(ig[0], { id: "instagram:anna.r0", network: "instagram", url: "https://instagram.com/anna.r0", handle: "anna.r0", name: "Anna Rossi", photoUrl: "https://scontent.cdninstagram.com/0.jpg", source: "loginSearch" });
   assert.deepEqual(instagramSearch({ status: "fail" }), []);
 
+  // /voyager/api/search/dash/clusters (the old typeahead answers 404): one EntityResultViewModel per person.
+  const result = (handle: string, name: string, rootUrl?: string) => ({
+    $type: "com.linkedin.voyager.dash.search.EntityResultViewModel",
+    navigationUrl: `https://www.linkedin.com/in/${handle}?miniProfileUrn=urn%3Ali%3Afs_miniProfile%3AACoAA`,
+    title: { text: name },
+    primarySubtitle: { text: "Architect" },
+    image: { attributes: [{ detailDataUnion: { nonEntityProfilePicture: { "*profile": "urn:li:fsd_profile:ACoAA", vectorImage: { rootUrl, artifacts: [{ width: 100, fileIdentifyingUrlPathSegment: "100.jpg" }, { width: 400, fileIdentifyingUrlPathSegment: "400.jpg" }] } } } }] },
+  });
   const li = linkedinSearch({
-    data: { elements: [] },
+    data: { elements: [{ items: [{ itemUnion: { "*entityResult": "urn:li:fsd_entityResultViewModel:1" } }] }] },
     included: [
-      { $type: "com.linkedin.voyager.typeahead.TypeaheadHitV2", text: { text: "Anna Rossi" } },
+      { $type: "com.linkedin.voyager.dash.identity.profile.Profile", entityUrn: "urn:li:fsd_profile:ACoAA" },
+      result("anna-rossi-1a2b", "Anna Rossi", "https://media.licdn.com/dms/image/x/"),
+      result("anna-rossi-1a2b", "Anna Rossi"),
+      result("mario-bianchi", "Mario Bianchi"),
+      // The search answers with an empty rootUrl and the whole address in the segment.
       {
-        $type: "com.linkedin.voyager.identity.shared.MiniProfile",
-        firstName: "Anna",
-        lastName: "Rossi",
-        occupation: "Architect",
-        publicIdentifier: "anna-rossi-1a2b",
-        picture: { "com.linkedin.common.VectorImage": { rootUrl: "https://media.licdn.com/dms/image/x/", artifacts: [{ width: 100, fileIdentifyingUrlPathSegment: "100.jpg" }, { width: 400, fileIdentifyingUrlPathSegment: "400.jpg" }] } },
+        ...result("sara-verdi", "Sara Verdi", ""),
+        image: { attributes: [{ detailDataUnion: { nonEntityProfilePicture: { vectorImage: { rootUrl: "", artifacts: [{ width: 100, fileIdentifyingUrlPathSegment: "https://media.licdn.com/dms/image/y/100.jpg" }] } } } }] },
       },
-      { publicIdentifier: "anna-rossi-1a2b", firstName: "Anna" },
+      { $type: "com.linkedin.voyager.dash.search.EntityResultViewModel", navigationUrl: "https://www.linkedin.com/company/acme/", title: { text: "Acme" } },
     ],
   });
-  assert.deepEqual(li, [{ id: "linkedin:anna-rossi-1a2b", network: "linkedin", url: "https://linkedin.com/in/anna-rossi-1a2b", handle: "anna-rossi-1a2b", name: "Anna Rossi", photoUrl: "https://media.licdn.com/dms/image/x/400.jpg", source: "loginSearch", detail: "Architect" }]);
+  assert.deepEqual(li, [
+    { id: "linkedin:anna-rossi-1a2b", network: "linkedin", url: "https://linkedin.com/in/anna-rossi-1a2b", handle: "anna-rossi-1a2b", name: "Anna Rossi", photoUrl: "https://media.licdn.com/dms/image/x/400.jpg", source: "loginSearch", detail: "Architect" },
+    // No picture: LinkedIn's placeholder has no address.
+    { id: "linkedin:mario-bianchi", network: "linkedin", url: "https://linkedin.com/in/mario-bianchi", handle: "mario-bianchi", name: "Mario Bianchi", photoUrl: undefined, source: "loginSearch", detail: "Architect" },
+    { id: "linkedin:sara-verdi", network: "linkedin", url: "https://linkedin.com/in/sara-verdi", handle: "sara-verdi", name: "Sara Verdi", photoUrl: "https://media.licdn.com/dms/image/y/100.jpg", source: "loginSearch", detail: "Architect" },
+  ]);
 
   const fb = facebookSearch([
     { href: "https://www.facebook.com/profile.php?id=1000", name: "Me Myself", img: "https://scontent.fbcdn.net/me.jpg" },
@@ -236,7 +250,11 @@ test("searching a name with the login: at most five people per site (issue #104)
   ], "1000");
   assert.deepEqual(fb, [{ id: "facebook:anna.rossi.77", network: "facebook", url: "https://facebook.com/anna.rossi.77", handle: "anna.rossi.77", name: "Anna Rossi", photoUrl: "https://scontent.fbcdn.net/a.jpg", source: "loginSearch" }]);
 
-  assert.equal(searchPath("instagram", " Anna Rossi "), "/api/v1/web/search/topsearch/?context=user&query=Anna%20Rossi&include_reel=false");
+  assert.equal(searchPath("instagram", " Anna Rossi "), "/api/v1/fbsearch/account_serp/?query=Anna%20Rossi");
+  assert.equal(
+    searchPath("linkedin", "Anna (Rossi), Jr"),
+    "/voyager/api/search/dash/clusters?decorationId=com.linkedin.voyager.dash.deco.search.SearchClusterCollection-174&origin=GLOBAL_SEARCH_HEADER&q=all&query=(keywords:Anna%20Rossi%20Jr,flagshipSearchIntent:SEARCH_SRP,queryParameters:(resultType:List(PEOPLE)))&start=0&count=10"
+  );
   assert.equal(searchPath("facebook", "Anna & co"), "https://www.facebook.com/search/people/?q=Anna%20%26%20co");
 });
 
