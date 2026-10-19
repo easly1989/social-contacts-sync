@@ -308,7 +308,8 @@ export class FakeBackend {
 
   private profilesRoute(route: Route, pathname: string, request: Request) {
     if (pathname === "/api/profiles/pinned") return route.fulfill({ json: this.pinnedProfiles });
-    if (pathname === "/api/profiles/logins") return route.fulfill({ json: this.socialLogins });
+    // Once To review has read the scans, signing in there shows here too.
+    if (pathname === "/api/profiles/logins") return route.fulfill({ json: this.profiles?.scans ?? this.socialLogins });
     if (pathname === "/api/profiles/networks") return route.fulfill({ json: this.linkedNetworks });
     if (pathname === "/api/profiles/count") return route.fulfill({ json: { count: this.profiles?.suggestions.length ?? 0 } });
     const data = this.profiles!;
@@ -354,7 +355,26 @@ export class FakeBackend {
       Object.assign(data.bulk!, { running: false, stopped: true });
       return route.fulfill({ json: data.bulk });
     }
-    if (sub === "/reject" || sub === "/skip" || sub === "/keep") {
+    // A search with the login (issue #104): finds one profile that looks like the contact.
+    if (sub === "/login-search") {
+      const suggestion = data.suggestions.find((s) => s.contactId === body.contactId)!;
+      const handle = suggestion.name.toLowerCase().replace(/\s+/g, ".");
+      suggestion.candidates.push({
+        person: { id: `${body.network}:${handle}`, network: body.network, url: `https://${body.network}.com/${handle}`, handle, name: suggestion.name, photoUrl: "/api/e2e-photos/3", source: "loginSearch" },
+        score: 1,
+        reason: "sameName",
+      });
+      return route.fulfill({ json: { found: 2, suggested: 1 } });
+    }
+    if (sub === "/login-search/bulk") {
+      data.loginSearch = { running: true, networks: body.networks, done: 1, total: body.contactIds.length * body.networks.length, found: 0, suggested: 0 };
+      return route.fulfill({ json: data.loginSearch });
+    }
+    if (sub === "/login-search/stop") {
+      data.loginSearch = { ...data.loginSearch!, running: false };
+      return route.fulfill({ json: data.loginSearch });
+    }
+    if (sub === "/reject" || sub === "/skip" || sub === "/keep" || sub === "/no-photo") {
       drop(body.contactId);
       return route.fulfill({ json: { ok: true } });
     }

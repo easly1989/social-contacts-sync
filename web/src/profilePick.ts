@@ -50,9 +50,10 @@ export function photoCandidates(suggestion: ProfileSuggestion, pick?: ProfilePic
 /** A profile address as the sync's links write it: no protocol, www or trailing slash. */
 const sameLink = (url: string) => url.replace(/^https?:\/\/(www\.)?/i, "").replace(/\/+$/, "").toLowerCase();
 
-/** The photo a sync offers, else when the contact wants one: a ticked profile's, else a linked one's. */
+/** The photo a sync offers (unless the current one comes from a source), else when the contact wants one: a ticked profile's, else a linked one's. */
 function firstPhoto(suggestion: ProfileSuggestion, ticked: string[]): string | undefined {
-  if (!wantsPhotoFor(suggestion)) return photoCandidates(suggestion).find((c) => c.queued)?.id;
+  // The current photo comes from a source already: keeping it is the safe choice (issue #104).
+  if (!wantsPhotoFor(suggestion)) return suggestion.currentFrom ? undefined : photoCandidates(suggestion).find((c) => c.queued)?.id;
   return photoCandidates(suggestion).find((c) => !c.suggested || ticked.includes(c.id))?.id;
 }
 

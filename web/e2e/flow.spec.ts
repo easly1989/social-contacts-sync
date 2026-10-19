@@ -79,7 +79,7 @@ test("full flow: WhatsApp QR, Google sign-in, sync options, progress, done", asy
   });
   expect(query.get("sources")).toBe("whatsapp,gravatar,links");
   // Instagram, Facebook and LinkedIn stay off unless turned on in Settings.
-  expect(query.get("link_networks")).toBe("bluesky,mastodon,github,x,telegram,youtube");
+  expect(query.get("link_networks")).toBe("bluesky,mastodon,github,x,youtube");
 
   await expect(page.getByRole("heading", { name: "Syncing photos…" })).toBeVisible();
   await backend.send(EventType.SyncProgress, { progress: 0, syncCount: 0, totalContacts: 20, checked: 0, phase: "photos", counters: counters({}) });

@@ -6,7 +6,7 @@ import { photoHash } from "../contacts/photoPins";
 import { SimpleContact } from "../interfaces";
 import { LinkBlockedError, linksSource, Pacer, parseProfileLink, ProfileLink } from "../sources/links";
 import { defaultRunOptions, runSync, SyncTarget } from "../syncEngine";
-import { getReads, LoginNeededError, lookupWithLogin, planRereads, ReadProfile, rereading, StoredRead } from "./rereads";
+import { getReads, LoginNeededError, lookupWithLogin, planRereads, ReadProfile, readVersion, rereading, staleFacebook, StoredRead } from "./rereads";
 
 // Pinned Instagram and Facebook profiles read again with the login (issue #79), against a fake desktop app.
 const at = (minute: number) => `2026-10-01T00:${String(minute).padStart(2, "0")}:00.000Z`;
@@ -167,4 +167,10 @@ test("a missing profile keeps the photo a scan read", async () => {
   assert.deepEqual(writes, []);
   assert.equal(reads["https://instagram.com/anna"].photoUrl, undefined);
   assert.deepEqual(report, { instagram: { read: 1, waiting: 0 } });
+});
+
+test("Facebook reads from before the parser fix are read again (issue #104)", () => {
+  assert.ok(staleFacebook("https://facebook.com/anna"));
+  assert.ok(!staleFacebook("https://facebook.com/anna", readVersion));
+  assert.ok(!staleFacebook("https://instagram.com/anna"));
 });

@@ -1,4 +1,4 @@
-import { test, expect } from "@playwright/test";
+import { test, expect, Page } from "@playwright/test";
 
 import { FakeBackend, screenshot } from "./backend";
 import { sampleProfiles } from "./fixtures";
@@ -270,6 +270,9 @@ test("web version: no login scan", async ({ page }) => {
   await expect(page.getByTestId("profile-scan")).toContainText("Available in the desktop app.");
 });
 
+/** To review opens on the contacts without a photo (issue #104): these tests look at the others too. */
+const showAll = (page: Page) => page.getByTestId("review-filters").getByRole("button", { name: /^All/ }).click();
+
 test("To review: a linked profile the sync just read is offered once, and every photo grows on hover", async ({ page }) => {
   const readAt = "2026-10-15T09:00:00.000Z";
   const linked = (network: "facebook" | "instagram" | "linkedin", url: string, i: number) =>
@@ -292,6 +295,7 @@ test("To review: a linked profile the sync just read is offered once, and every 
     },
   });
   await page.goto("/app/sync?tab=review");
+  await showAll(page);
   const card = page.getByTestId("profile-card").filter({ hasText: "Alessandro Ciaschini" });
   // The current photo, the sync's three, and LinkedIn, which the sync didn't read: no second Facebook or Instagram.
   await expect(card.getByRole("radio")).toHaveCount(5);
@@ -343,6 +347,7 @@ test("To review: a sync's different photo, and a pinned photo changed outside th
     }
   );
   await page.goto("/app/sync?tab=review");
+  await showAll(page);
   const card = (name: string) => page.getByTestId("profile-card").filter({ hasText: name });
 
   // A different photo: offered, with where it came from; Use sends it.
@@ -387,4 +392,113 @@ test("To review, one at a time: Enter keeps a photo changed outside the app (iss
   await review.getByRole("heading", { name: "Sofia Ferrari" }).click();
   await page.keyboard.press("Enter");
   await expect.poll(() => backend.profileRequests.find((r) => r.route === "/keep")?.body).toEqual({ contactId: "people/sf" });
+});
+
+test("To review: filters with counts, search by name, contacts without a photo, and where the current photo comes from (issue #104)", async ({ page }) => {
+  const readAt = "2026-10-15T09:00:00.000Z";
+  backend.profiles!.suggestions.push(
+    { contactId: "people/gc", name: "Giulia Colombo", hasPhoto: false, detail: "+39 347 000 1122 · giulia@example.com", candidates: [] },
+    {
+      contactId: "people/fr",
+      name: "Francesca Ricci",
+      hasPhoto: true,
+      photoUrl: "/api/e2e-photos/6",
+      candidates: [],
+      currentFrom: { source: "whatsapp" },
+      queue: { kind: "photo", photos: [{ id: "photo:ig", source: "links", network: "Instagram", matchedBy: "instagram.com/francesca.ricci", readAt, width: 640, height: 640 }], addedAt: readAt },
+    },
+    {
+      contactId: "people/pm",
+      name: "Paolo Moretti",
+      hasPhoto: false,
+      candidates: [],
+      queue: { kind: "photo", photos: [{ id: "photo:li", source: "links", network: "LinkedIn", matchedBy: "linkedin.com/in/paolomoretti", readAt, width: 150, height: 150, small: true }], addedAt: readAt },
+    }
+  );
+  await page.goto("/app/sync?tab=review");
+  const filters = page.getByTestId("review-filters");
+  const chip = (name: RegExp) => filters.getByRole("button", { name });
+  // Contacts without a photo first; each kind with how many.
+  await expect(chip(/^No photo/)).toHaveAttribute("aria-pressed", "true");
+  await expect(chip(/^No photo/)).toContainText("4");
+  await expect(chip(/^Different photo/)).toContainText("1");
+  await expect(chip(/^Profiles to link/)).toContainText("2");
+  await expect(chip(/^All/)).toContainText("5");
+  await expect(chip(/^Changed outside/)).toHaveCount(0);
+  const cards = page.getByTestId("profile-card");
+  await expect(cards).toHaveCount(4);
+  // A small photo is better than none, and says so.
+  await expect(cards.filter({ hasText: "Paolo Moretti" })).toContainText("small");
+  await screenshot(page, "73-review-filters", { fullPage: false });
+
+  // Search by name, accents or not.
+  await filters.getByRole("searchbox", { name: "Search by name" }).fill("giulià");
+  await expect(cards).toHaveCount(1);
+  const giulia = cards.filter({ hasText: "Giulia Colombo" });
+  await expect(giulia).toContainText("+39 347 000 1122 · giulia@example.com");
+  await expect(giulia.getByTestId("find-profile")).toContainText("Find a profile");
+  await expect(giulia.getByRole("button", { name: /^Confirm/ })).toHaveCount(0);
+  await screenshot(page, "73b-review-no-photo", { fullPage: false });
+  await giulia.getByRole("button", { name: "No photo" }).click();
+  await expect.poll(() => backend.profileRequests.find((r) => r.route === "/no-photo")?.body).toEqual({ contactId: "people/gc" });
+  await filters.getByRole("searchbox", { name: "Search by name" }).fill("nobody");
+  await expect(page.getByText("No contact here matches “nobody”.")).toBeVisible();
+  await filters.getByRole("searchbox", { name: "Search by name" }).fill("");
+
+  // The current photo comes from WhatsApp: keeping it is the default, and Select all takes only what is shown.
+  await chip(/^Different photo/).click();
+  const francesca = cards.filter({ hasText: "Francesca Ricci" });
+  await expect(cards).toHaveCount(1);
+  await expect(francesca).toContainText("Current · from WhatsApp");
+  await expect(francesca).toContainText("The current photo comes from WhatsApp: keeping it changes nothing.");
+  await expect(francesca.getByRole("radio").first()).toBeChecked();
+  await page.getByTestId("profile-list").getByRole("checkbox", { name: "Select all" }).check();
+  await expect(page.getByTestId("profile-list")).toContainText("1 of 1");
+  await francesca.evaluate((e) => e.scrollIntoView({ block: "center" }));
+  await screenshot(page, "73c-review-current-from", { fullPage: false });
+
+  await page.setViewportSize({ width: 390, height: 844 });
+  await chip(/^No photo/).click();
+  await screenshot(page, "73d-review-filters-phone", { fullPage: false });
+});
+
+test("To review: search a contact's name with the login, one card or the selected ones (issue #104)", async ({ page }) => {
+  backend.profiles!.suggestions.push({ contactId: "people/gc", name: "Giulia Colombo", hasPhoto: false, detail: "+39 347 000 1122", candidates: [] });
+  await page.goto("/app/sync?tab=review");
+  const giulia = page.getByTestId("profile-card").filter({ hasText: "Giulia Colombo" });
+  const search = giulia.getByTestId("login-search");
+  // Signed in to Instagram only: the others offer the sign-in.
+  await expect(search.getByRole("button", { name: "Search Instagram" })).toBeVisible();
+  await expect(search.getByRole("button", { name: "Sign in to Facebook" })).toBeVisible();
+  await expect(search.getByRole("button", { name: "Sign in to LinkedIn" })).toBeVisible();
+  await giulia.evaluate((e) => e.scrollIntoView({ block: "center" }));
+  await screenshot(page, "74-review-search-buttons", { fullPage: false });
+
+  // The first time, the same notice as the login scans.
+  await search.getByRole("button", { name: "Search Instagram" }).click();
+  const notice = page.getByTestId("login-search-notice");
+  await expect(notice).toContainText("doesn't allow automated access");
+  await expect(notice.getByRole("button", { name: "Search" })).toBeDisabled();
+  await screenshot(page, "74b-review-search-notice", { fullPage: false });
+  await notice.getByRole("checkbox").check();
+  await notice.getByRole("button", { name: "Search" }).click();
+  await expect.poll(() => backend.profileRequests.find((r) => r.route === "/login-search")?.body).toEqual({ contactId: "people/gc", network: "instagram" });
+  await expect(page.getByText("1 profile to link on Instagram.")).toBeVisible();
+  await expect(giulia).toContainText("Found by search");
+  await expect(giulia.getByRole("checkbox", { name: /giulia\.colombo/ })).toBeChecked();
+
+  // On a card with suggestions, the search waits with the link box.
+  const davide = page.getByTestId("profile-card").filter({ hasText: "Davide Gallo" });
+  await davide.getByTestId("card-link").locator("summary").click();
+  await davide.getByTestId("login-search").getByRole("button", { name: "Sign in to Facebook" }).click();
+  await expect.poll(() => backend.profileRequests.find((r) => r.route === "/scan/login")?.body).toEqual({ network: "facebook" });
+
+  // The selected cards, on both sites now: no notice the second time, progress and Stop.
+  await page.getByTestId("profile-list").getByRole("checkbox", { name: "Select all" }).check();
+  await page.getByRole("button", { name: "Search the selected" }).click();
+  await expect.poll(() => backend.profileRequests.find((r) => r.route === "/login-search/bulk")?.body).toEqual({ contactIds: ["people/dg", "people/ec", "people/gc"], networks: ["instagram", "facebook"] });
+  await expect(page.getByTestId("login-search-progress")).toContainText("Searching: 1 of 6");
+  await screenshot(page, "74c-review-search-progress", { fullPage: false });
+  await page.getByTestId("profile-list").getByRole("button", { name: "Stop" }).click();
+  await expect.poll(() => backend.profileRequests.some((r) => r.route === "/login-search/stop")).toBe(true);
 });

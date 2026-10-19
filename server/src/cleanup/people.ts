@@ -52,7 +52,13 @@ export interface ContactsApi {
 }
 
 export function ownPhotoUrl(person: Person): string | undefined {
-  return person.photos?.find((p) => !p.default && p.url)?.url ?? undefined;
+  return sized(person.photos?.find((p) => !p.default && p.url)?.url ?? undefined);
+}
+
+/** Google's address without a size serves about 100 px, blurred next to a source's photo and in the zoom (issue #104): ask for 400. */
+export function sized(url: string | undefined): string | undefined {
+  if (!url || !/googleusercontent\.com\//.test(url)) return url;
+  return /=s\d+(-c)?$/.test(url) ? url.replace(/=s\d+(-c)?$/, "=s400") : /=[^/]*$/.test(url) ? url : `${url}=s400`;
 }
 
 function birthdayText(person: Person): string | undefined {

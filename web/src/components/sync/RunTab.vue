@@ -231,7 +231,7 @@ const stoppedReason = (network: keyof typeof networkInfo, stopped: string) => t(
           <div class="min-w-0">
             <div class="truncate text-sm font-medium">{{ item.name ?? $t("sync.review.unknown") }}</div>
             <div class="flex flex-wrap items-center gap-1">
-              <SourceBadge :source="item.source" :label="item.network" />
+              <SourceBadge :source="item.source" :network="item.network" />
               <span v-if="item.pinned" class="flex items-center gap-0.5 text-[11px] text-primary"><Pin class="size-3" />{{ $t("runTab.updatedPinned") }}</span>
             </div>
           </div>

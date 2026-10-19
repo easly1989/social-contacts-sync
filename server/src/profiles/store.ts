@@ -24,7 +24,10 @@ export interface ProfilesData {
   people: SocialPerson[];
   /** contactId → person ids that aren't them. */
   rejected: Record<string, string[]>;
+  /** Skipped in To review: hidden until the next sync. */
   skipped: string[];
+  /** "No photo" in To review (issue #104): contactId → its phones, emails and links then; a change brings the card back. */
+  noPhoto: Record<string, string>;
   linked: StoredLinked[];
   /** network → contact ids already searched. */
   searched: Record<string, string[]>;
@@ -34,7 +37,7 @@ export interface ProfilesData {
   scans: Partial<Record<SocialNetwork, { finishedAt: string; read: number; stopped?: string }>>;
 }
 
-const empty = (): ProfilesData => ({ people: [], rejected: {}, skipped: [], linked: [], searched: {}, imports: {}, searches: {}, scans: {} });
+const empty = (): ProfilesData => ({ people: [], rejected: {}, skipped: [], noPhoto: {}, linked: [], searched: {}, imports: {}, searches: {}, scans: {} });
 
 function file(): string | undefined {
   return process.env.SCS_DESKTOP === "1" && process.env.SCS_DATA_DIR ? path.join(process.env.SCS_DATA_DIR, "profiles.json") : undefined;

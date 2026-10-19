@@ -7,19 +7,23 @@ import {
   facebookPeople,
   facebookProfile,
   facebookProfileScript,
+  facebookSearch,
   instagramPage,
   instagramPageProfile,
   instagramProfile,
   InstagramProfilePage,
   instagramProfilePageScript,
+  instagramSearch,
   isAbortedLoad,
   linkedinPage,
   linkedinProfile,
+  linkedinSearch,
   pause,
   ProfileRead,
   profilePageUrl,
   ScannedPerson,
   ScanNetwork,
+  searchPath,
   siteAnswer,
 } from "./socialParse";
 
@@ -304,8 +308,20 @@ function closeReader(network: ScanNetwork): void {
   if (known && !known.win.isDestroyed()) known.win.destroy();
 }
 
+// One page at a time in a network's reader window: a sync's reads and To review's searches (issue #104) take turns.
+const turns = new Map<ScanNetwork, Promise<unknown>>();
+function inTurn<T>(network: ScanNetwork, work: () => Promise<T>): Promise<T> {
+  const next = (turns.get(network) ?? Promise.resolve()).then(work, work);
+  turns.set(network, next.catch(() => undefined));
+  return next;
+}
+
 /** A profile's photo address and name, read with the user's login; `stopped` when the site said no. Nothing is posted or changed. */
-export async function socialProfile(network: ScanNetwork, handle: string): Promise<ProfileAnswer> {
+export function socialProfile(network: ScanNetwork, handle: string): Promise<ProfileAnswer> {
+  return inTurn(network, () => readProfile(network, handle));
+}
+
+async function readProfile(network: ScanNetwork, handle: string): Promise<ProfileAnswer> {
   const url = profilePageUrl(network, handle);
   if (!url) return { missing: true };
   if (!(await cookie(network, sites[network].cookie))) return { stopped: "notSignedIn" };
@@ -339,6 +355,52 @@ export async function socialProfile(network: ScanNetwork, handle: string): Promi
   } catch (e) {
     closeReader(network);
     return { stopped: `error:${e instanceof Error ? e.message : String(e)}` };
+  } finally {
+    release(network);
+  }
+}
+
+/**
+ * People found by searching a contact's name with the user's login (issue
+ * #104), as the site's own search box does: a few per site, one search at a
+ * time (the server paces them). Nothing is posted or changed.
+ */
+export function socialSearch(network: ScanNetwork, query: string): Promise<{ people: ScannedPerson[]; stopped?: string; answer?: string }> {
+  return inTurn(network, () => search(network, query));
+}
+
+async function search(network: ScanNetwork, query: string): Promise<{ people: ScannedPerson[]; stopped?: string; answer?: string }> {
+  if (!query.trim()) return { people: [] };
+  if (!(await cookie(network, sites[network].cookie))) return { people: [], stopped: "notSignedIn" };
+  if (running.has(network)) return { people: [], stopped: "busy" };
+  try {
+    const win = await reader(network);
+    const atHome = blockedReason(200, win.webContents.getURL());
+    if (atHome) {
+      closeReader(network);
+      return { people: [], stopped: atHome };
+    }
+    if (network === "facebook") {
+      await load(win, searchPath(network, query));
+      // The results come in after the page has loaded.
+      await sleep(pause(2500, 4000));
+      const blocked = blockedReason(200, win.webContents.getURL());
+      if (blocked) return { people: [], stopped: blocked };
+      return { people: facebookSearch(await win.webContents.executeJavaScript(facebookExtractScript), await cookie("facebook", "c_user")) };
+    }
+    const csrf = network === "linkedin" ? (await cookie("linkedin", "JSESSIONID"))?.replace(/"/g, "") : undefined;
+    if (network === "linkedin" && !csrf) return { people: [], stopped: "signin" };
+    const headers =
+      network === "instagram" ? await instagramHeaders(win) : { "csrf-token": csrf!, "x-restli-protocol-version": "2.0.0", accept: "application/vnd.linkedin.normalized+json+2.1" };
+    const answer = await pageFetch(win, searchPath(network, query), headers);
+    const blocked = blockedReason(answer.status, answer.url, answer.body);
+    if (blocked) return { people: [], stopped: blocked, answer: siteAnswer(answer.status, answer.body) };
+    if (answer.status !== 200) return { people: [], stopped: `error:${answer.status}`, answer: siteAnswer(answer.status, answer.body) };
+    const json = JSON.parse(answer.body);
+    return { people: network === "instagram" ? instagramSearch(json) : linkedinSearch(json) };
+  } catch (e) {
+    closeReader(network);
+    return { people: [], stopped: `error:${e instanceof Error ? e.message : String(e)}` };
   } finally {
     release(network);
   }

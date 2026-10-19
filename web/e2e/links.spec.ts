@@ -21,7 +21,7 @@ test("Sources: linked profiles one row per network, each with its toggle (issue 
   const links = page.getByTestId("settings-source-links");
   await expect(links).toContainText("Profile links");
   await expect(links).toContainText("Ready");
-  await expect(links.getByRole("list", { name: "Networks read" }).getByRole("listitem")).toHaveText(["X", "Telegram", "YouTube", "Bluesky", "Mastodon", "GitHub"]);
+  await expect(links.getByRole("list", { name: "Networks read" }).getByRole("listitem")).toHaveText(["X", "YouTube", "Bluesky", "Mastodon", "GitHub"]);
   await expect(links.getByRole("checkbox")).toHaveCount(0);
   await links.scrollIntoViewIfNeeded();
   await screenshot(page, "27-settings-links");
@@ -35,6 +35,10 @@ test("Sources: linked profiles one row per network, each with its toggle (issue 
   await expect(rows.first()).toContainText("Instagram");
   await expect(page.getByTestId("network-instagram")).toContainText("142 profiles · public preview, unofficial");
   await expect(page.getByTestId("network-bluesky")).toContainText("12 profiles · public, no login");
+  // Telegram is the source by phone number only; networks without profiles wait behind Show all (issue #104).
+  await expect(page.getByTestId("network-telegram")).toHaveCount(0);
+  await expect(page.getByTestId("network-x")).toHaveCount(0);
+  await page.getByTestId("networks-show-all").click();
   await expect(page.getByTestId("network-x")).toContainText("No profiles linked");
   await expect(page.getByTestId("network-x").getByRole("checkbox")).toBeDisabled();
   // Before issue #83 the three were off on the web unless turned on in Settings: still off.

@@ -36,7 +36,7 @@ test("dashboard: coverage in three parts, next steps, sources and activity (issu
     /4 photos changed outside the app/,
     /Find profiles for 284 contacts without a source\s*Last search Oct 10, 2026/,
   ]);
-  await expect(steps.nth(0).getByRole("link", { name: "Sync photos" })).toHaveAttribute("href", "/app/sync?tab=run");
+  await expect(steps.nth(0).getByRole("link", { name: "Sync", exact: true })).toHaveAttribute("href", "/app/sync?tab=run");
   await expect(steps.nth(1).getByRole("link", { name: "Review" })).toHaveAttribute("href", "/app/sync?tab=review");
   await expect(steps.nth(3).getByRole("link", { name: "Sources" })).toHaveAttribute("href", "/app/sync?tab=sources");
 

@@ -1,8 +1,9 @@
 import { SourceId } from "../../../interfaces/api";
 import { SimpleContact } from "../interfaces";
+import { PhotoFacts } from "../photoRules";
 import { Base64 } from "../types";
 
-export interface FoundPhoto {
+export interface FoundPhoto extends PhotoFacts {
   photo: Base64;
   source: SourceId;
   /** The phone number or email that matched, for the report. */
@@ -11,6 +12,10 @@ export interface FoundPhoto {
   newLink?: string;
   /** The profile's network, for photos from a profile link: "Instagram", "X"… */
   network?: string;
+  /** Read from the site's public page, without the login (issue #104). */
+  anonymous?: boolean;
+  /** Smaller than To review wants, offered because the contact has no photo. */
+  small?: boolean;
 }
 
 /** Somewhere profile photos can be looked up for a Google contact. */

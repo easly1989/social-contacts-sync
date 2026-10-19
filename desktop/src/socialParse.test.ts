@@ -7,14 +7,18 @@ import {
   facebookPeople,
   facebookProfile,
   FacebookProfilePage,
+  facebookSearch,
   instagramPage,
   instagramPageProfile,
   instagramProfile,
+  instagramSearch,
   isAbortedLoad,
   linkedinPage,
   linkedinProfile,
+  linkedinSearch,
   pause,
   profilePageUrl,
+  searchPath,
   siteAnswer,
 } from "./socialParse";
 
@@ -49,18 +53,22 @@ test("one Instagram profile (issue #79): the largest photo and the name, nothing
   assert.equal(instagramProfile("nope"), undefined);
 });
 
-test("one Facebook profile (issue #79): the profile picture is the largest picture in the header, the name its heading", () => {
+test("one Facebook profile (issue #79): the profile picture is the header's SVG picture, the name its heading", () => {
   const page: FacebookProfilePage = {
     heading: "Davide Gallo",
     images: [
-      { src: "https://scontent.xx.fbcdn.net/small.jpg", width: 40 },
-      { src: "https://scontent.xx.fbcdn.net/profile.jpg", width: 168 },
-      { src: "http://insecure.example/big.jpg", width: 400 },
-      { src: "https://static.example.com/other.png", width: 300 },
+      { src: "https://scontent.xx.fbcdn.net/small.jpg", width: 40, svg: true },
+      { src: "https://scontent.xx.fbcdn.net/profile.jpg", width: 168, svg: true },
+      // The cover, or without one a blurred copy of the profile picture (issue #104): larger, but not the picture.
+      { src: "https://scontent.xx.fbcdn.net/cover-blurred.jpg", width: 940, svg: false },
+      { src: "http://insecure.example/big.jpg", width: 400, svg: true },
+      { src: "https://static.example.com/other.png", width: 300, svg: true },
     ],
   };
   assert.deepEqual(facebookProfile(page), { name: "Davide Gallo", photoUrl: "https://scontent.xx.fbcdn.net/profile.jpg" });
-  assert.equal(facebookProfile({ heading: "", images: [{ src: "https://scontent.xx.fbcdn.net/small.jpg", width: 40 }] }), undefined);
+  assert.equal(facebookProfile({ heading: "", images: [{ src: "https://scontent.xx.fbcdn.net/small.jpg", width: 40, svg: true }] }), undefined);
+  // Only a cover: no profile picture rather than a blurred one.
+  assert.equal(facebookProfile({ heading: "Davide Gallo", images: [{ src: "https://scontent.xx.fbcdn.net/cover.jpg", width: 940, svg: false }] }), undefined);
 });
 
 test("profile addresses the desktop app reads (issue #79): only a plain handle", () => {
@@ -193,4 +201,40 @@ test("Instagram profile page: the picture and name from its og tags", () => {
   // Instagram's own logo, or nothing: no picture there.
   assert.equal(instagramPageProfile(page("https://static.cdninstagram.com/rsrc.php/v4/yG/r/logo.png")), undefined);
   assert.equal(instagramPageProfile(page("")), undefined);
+});
+
+test("searching a name with the login: at most five people per site (issue #104)", () => {
+  const users = Array.from({ length: 7 }, (_, i) => ({ position: i, user: { username: `anna.r${i}`, full_name: "Anna Rossi", profile_pic_url: `https://scontent.cdninstagram.com/${i}.jpg` } }));
+  const ig = instagramSearch({ users: [{ user: { username: "bad name!" } }, ...users], places: [], hashtags: [] });
+  assert.equal(ig.length, 5);
+  assert.deepEqual(ig[0], { id: "instagram:anna.r0", network: "instagram", url: "https://instagram.com/anna.r0", handle: "anna.r0", name: "Anna Rossi", photoUrl: "https://scontent.cdninstagram.com/0.jpg", source: "loginSearch" });
+  assert.deepEqual(instagramSearch({ status: "fail" }), []);
+
+  const li = linkedinSearch({
+    data: { elements: [] },
+    included: [
+      { $type: "com.linkedin.voyager.typeahead.TypeaheadHitV2", text: { text: "Anna Rossi" } },
+      {
+        $type: "com.linkedin.voyager.identity.shared.MiniProfile",
+        firstName: "Anna",
+        lastName: "Rossi",
+        occupation: "Architect",
+        publicIdentifier: "anna-rossi-1a2b",
+        picture: { "com.linkedin.common.VectorImage": { rootUrl: "https://media.licdn.com/dms/image/x/", artifacts: [{ width: 100, fileIdentifyingUrlPathSegment: "100.jpg" }, { width: 400, fileIdentifyingUrlPathSegment: "400.jpg" }] } },
+      },
+      { publicIdentifier: "anna-rossi-1a2b", firstName: "Anna" },
+    ],
+  });
+  assert.deepEqual(li, [{ id: "linkedin:anna-rossi-1a2b", network: "linkedin", url: "https://linkedin.com/in/anna-rossi-1a2b", handle: "anna-rossi-1a2b", name: "Anna Rossi", photoUrl: "https://media.licdn.com/dms/image/x/400.jpg", source: "loginSearch", detail: "Architect" }]);
+
+  const fb = facebookSearch([
+    { href: "https://www.facebook.com/profile.php?id=1000", name: "Me Myself", img: "https://scontent.fbcdn.net/me.jpg" },
+    { href: "https://www.facebook.com/anna.rossi.77", name: "", img: "https://scontent.fbcdn.net/a.jpg" },
+    { href: "https://www.facebook.com/anna.rossi.77", name: "Anna Rossi" },
+    { href: "https://www.facebook.com/groups/annarossi", name: "Anna Rossi fan club" },
+  ], "1000");
+  assert.deepEqual(fb, [{ id: "facebook:anna.rossi.77", network: "facebook", url: "https://facebook.com/anna.rossi.77", handle: "anna.rossi.77", name: "Anna Rossi", photoUrl: "https://scontent.fbcdn.net/a.jpg", source: "loginSearch" }]);
+
+  assert.equal(searchPath("instagram", " Anna Rossi "), "/api/v1/web/search/topsearch/?context=user&query=Anna%20Rossi&include_reel=false");
+  assert.equal(searchPath("facebook", "Anna & co"), "https://www.facebook.com/search/people/?q=Anna%20%26%20co");
 });

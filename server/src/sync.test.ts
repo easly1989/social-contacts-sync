@@ -10,7 +10,7 @@ test("run options: each as asked, else its default (issue #82)", () => {
 });
 
 test("profile link networks: those turned on in Sources, else the public ones (issue #83)", () => {
-  assert.deepEqual([...linkNetworks({})].sort(), ["bluesky", "github", "mastodon", "telegram", "x", "youtube"]);
+  assert.deepEqual([...linkNetworks({})].sort(), ["bluesky", "github", "mastodon", "x", "youtube"]);
   assert.deepEqual([...linkNetworks({ link_networks: "instagram, github,bogus" })].sort(), ["github", "instagram"]);
   assert.deepEqual([...linkNetworks({ link_networks: "" })], []);
 });
