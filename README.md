@@ -32,7 +32,7 @@
 - **Photos from your sources.** WhatsApp and Telegram (matched by phone number)
   and Gravatar (matched by email), in the priority order you choose. Only your
   existing Telegram contacts are read; nothing is added to your account.
-- **Profile links.** The X, Telegram, YouTube, Bluesky, Mastodon and GitHub
+- **Profile links.** The X, YouTube, Bluesky, Mastodon and GitHub
   profiles saved on a contact give it their public picture, with no sign-in.
   Instagram, Facebook and LinkedIn can be turned on too, unofficially. Add a
   link right from a sync report's "No photo found" list, or while reviewing.
@@ -43,15 +43,19 @@
 - **Photos follow their source.** A photo picked from WhatsApp, Gravatar or a
   profile keeps following it, so later syncs bring its new picture. A photo you
   change by hand in Google is never overwritten.
-- **To review.** One card per contact, kept between sessions. Tick the social
-  profiles that are really them, and pick one photo among every source and
-  every profile. Confirm one contact, or select many and confirm them in one
-  go. The suggestions come from:
+- **To review.** One card per contact, kept between sessions, including every
+  contact still without a photo. Filter by what a card needs, or search by
+  name. Tick the social profiles that are really them, and pick one photo among
+  every source and every profile; only photos sharp enough and different from
+  the current one are offered. Confirm one contact, or select many and confirm
+  them in one go. The suggestions come from:
   - your own Instagram and LinkedIn data exports;
   - a public search by name on Bluesky, Mastodon and GitHub;
-  - experimental and off by default, a slow scan of your own followers, friends
-    and connections with your Instagram, Facebook or LinkedIn login. This goes
-    against those sites' terms: your account may be limited or suspended.
+  - experimental and only when you start it, on the desktop app, with your
+    Instagram, Facebook or LinkedIn login: a search by name for one contact or
+    the selected ones, and a slow scan of your own followers, friends and
+    connections. This goes against those sites' terms: your account may be
+    limited or suspended.
 - **Nothing changes without a way back.** Every sync and every review session
   is in History, with a report. Undo one contact or the whole entry: the photo,
   the profile links and the source the photo followed go back together.

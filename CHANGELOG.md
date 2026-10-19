@@ -3,6 +3,56 @@
 What changed in each release of Social Contacts Sync. The packages are on the
 [releases page](https://github.com/easly1989/social-contacts-sync/releases).
 
+## Unreleased
+
+### Added
+
+- **To review lists the contacts without a photo.** Each one gets a card, even
+  when nothing was found yet, with a place to find their profile. *No photo*
+  hides a card for good, unless the contact's phones, emails or links change;
+  *Skip* hides it until the next sync.
+  ([#104](https://github.com/easly1989/social-contacts-sync/issues/104))
+- **Filters and search in To review.** No photo, Different photo, Profiles to
+  link, Changed outside the app, or All, each with its count, and a search by
+  name. *Select all* selects what the filter shows.
+- **Desktop: search a contact's name with your login.** From a card, or for up
+  to 25 selected cards, on Instagram, Facebook and LinkedIn, five results per
+  site. Nothing is searched until you start it, and the first time the app
+  explains the risk, as for the login scans.
+- **Where the current photo comes from.** The contact's photo shows its source,
+  such as *Current · from WhatsApp*, and keeping it is the default choice.
+
+### Changed
+
+- **Only photos worth it.** For a contact that already has a photo, To review
+  offers nothing smaller than 200×200 and nothing that looks the same as the
+  current photo. A contact without a photo is offered smaller photos too,
+  marked *small*. Facebook and Instagram photos are offered only when read with
+  your login.
+- **Real logos.** Every source and network shows its own logo and colour.
+- Telegram is no longer listed among the profile networks; the networks without
+  profiles are behind *Show all*.
+- Contact photos are shown sharper.
+
+### Fixed
+
+- Facebook photos read with the login were blurred: the reader picked the cover
+  or a blurred copy of the picture. The old Facebook reads are dropped and read
+  again by the next sync.
+
+## 1.4.1 — 2026-10-18
+
+### Fixed
+
+- Pinned Instagram profiles are read even when Instagram's API says no.
+  ([#100](https://github.com/easly1989/social-contacts-sync/pull/100))
+- A stuck sync can always be stopped, and the desktop app can restart its
+  server. ([#101](https://github.com/easly1989/social-contacts-sync/pull/101))
+- To review: photos grow on hover again, and each profile is offered once.
+  ([#102](https://github.com/easly1989/social-contacts-sync/pull/102))
+- To review no longer suggests a profile that is already on another contact.
+  ([#103](https://github.com/easly1989/social-contacts-sync/pull/103))
+
 ## 1.4.0 — 2026-10-18
 
 ### Added
