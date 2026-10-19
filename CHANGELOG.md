@@ -3,6 +3,37 @@
 What changed in each release of Social Contacts Sync. The packages are on the
 [releases page](https://github.com/easly1989/social-contacts-sync/releases).
 
+## 1.4.5 — 2026-10-19
+
+### Changed
+
+- **To search links what it finds, right there.**
+  ([#111](https://github.com/easly1989/social-contacts-sync/pull/111))
+  - A contact whose search finds profiles stays in *To search* until you
+    answer it, instead of moving to *Profiles*.
+  - The card says what each site found, such as *1 profile to link on
+    Instagram* or *Nothing on Facebook looks like …*. It no longer shows this
+    in a toast that disappeared within a second. A toast now appears only when
+    a search stops.
+  - The photo is picked on the profile itself: *Use this photo* or *Don't use
+    it*. One *Confirm* links the profile and sets the photo.
+  - The other ways to find someone (search elsewhere, paste a link, upload a
+    photo) fold away under the results.
+- **Every suggested profile shows its photo**, in *To search* and in
+  *Profiles*. Hover over it to see it larger, so you can tell people apart
+  without opening each profile.
+
+## 1.4.4 — 2026-10-19
+
+### Fixed
+
+- **Searching a name with your login works again on Instagram and LinkedIn.**
+  ([#110](https://github.com/easly1989/social-contacts-sync/pull/110))
+  - Both sites had moved their search, so every search ended with *Searching
+    Instagram didn't work*. Only Facebook still worked.
+  - LinkedIn results now come with their photo.
+  - When a search fails, *Copy error* includes the site's reason.
+
 ## 1.4.3 — 2026-10-19
 
 ### Added

@@ -57,7 +57,8 @@
     linked. Only photos sharp enough and different from the current one are
     offered.
   - *To search* holds the contacts where nothing was found: search a profile,
-    look up a link, or upload a photo.
+    look up a link, or upload a photo. What a search finds stays on the card,
+    each profile with its photo, and one *Confirm* links it and sets the photo.
   - Filter by what a card needs, or search by name. Confirm one contact, or
     select many and confirm them in one go.
 
@@ -95,8 +96,8 @@
 | ![Sync sources](docs/images/sync-sources.png) | ![A sync in progress](docs/images/sync-run.png) |
 | **Choose photos** | **Summary, with the fixes** |
 | ![Photos](docs/images/sync-review.png) | ![Summary](docs/images/sync-summary.png) |
-| **Report and undo** | |
-| ![Sync report](docs/images/sync-report.png) | |
+| **To search, with what was found** | **Report and undo** |
+| ![To search](docs/images/sync-search.png) | ![Sync report](docs/images/sync-report.png) |
 | **History: syncs and reviews** | **Contacts** |
 | ![History](docs/images/history.png) | ![Contacts](docs/images/contacts.png) |
 | **Edit every field, or keep a photo** | **Updates with progress** |
