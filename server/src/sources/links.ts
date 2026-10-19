@@ -12,17 +12,17 @@ import { FoundPhoto, PhotoSource } from "./types";
   off in Sync › Sources (`networks`, issue #83).
 */
 
-export type Network = "x" | "telegram" | "youtube" | "bluesky" | "mastodon" | "github" | "instagram" | "facebook" | "linkedin";
+// No Telegram: it is the source by phone number (issue #104), so t.me links aren't read.
+export type Network = "x" | "youtube" | "bluesky" | "mastodon" | "github" | "instagram" | "facebook" | "linkedin";
 
 /** Networks tried only when the user turns them on. */
 export const bestEffortNetworks: ReadonlySet<Network> = new Set(["instagram", "facebook", "linkedin"]);
 
 /** Networks read without signing in, turned on until the user says otherwise. */
-export const publicNetworks: readonly Network[] = ["x", "telegram", "youtube", "bluesky", "mastodon", "github"];
+export const publicNetworks: readonly Network[] = ["x", "youtube", "bluesky", "mastodon", "github"];
 
 export const networkNames: Record<Network, string> = {
   x: "X",
-  telegram: "Telegram",
   youtube: "YouTube",
   bluesky: "Bluesky",
   mastodon: "Mastodon",
@@ -45,7 +45,6 @@ const userAgent = `SocialContactsSync/${process.env.SCS_APP_VERSION || "1"} (+ht
 // First path segments that are pages of the site, not profiles.
 const reserved: Partial<Record<Network, string[]>> = {
   x: ["home", "i", "intent", "share", "search", "hashtag", "explore", "settings", "messages", "notifications", "login", "signup", "tos", "privacy"],
-  telegram: ["joinchat", "s", "addstickers", "share", "proxy", "iv"],
   github: ["about", "features", "topics", "trending", "orgs", "settings", "marketplace", "sponsors", "login", "join", "explore", "pricing"],
   instagram: ["p", "reel", "reels", "explore", "stories", "accounts", "direct", "tv", "about", "legal"],
   facebook: ["groups", "pages", "events", "watch", "marketplace", "login", "login.php", "share", "sharer.php", "help", "policies", "photo.php"],
@@ -55,8 +54,6 @@ const hostNetwork: Record<string, Network> = {
   "x.com": "x",
   "twitter.com": "x",
   "mobile.twitter.com": "x",
-  "t.me": "telegram",
-  "telegram.me": "telegram",
   "youtube.com": "youtube",
   "m.youtube.com": "youtube",
   "bsky.app": "bluesky",
@@ -86,8 +83,6 @@ export function parseProfileLink(raw: string): ProfileLink | undefined {
   switch (network) {
     case "x":
       return parts.length >= 1 && /^\w{1,15}$/.test(parts[0]) ? make("x", parts[0], `/${parts[0]}`, "x.com") : undefined;
-    case "telegram":
-      return parts.length === 1 && /^\w{4,32}$/.test(parts[0]) ? make("telegram", parts[0], `/${parts[0]}`, "t.me") : undefined;
     case "youtube": {
       if (parts[0]?.startsWith("@")) return make("youtube", parts[0], `/${parts[0]}`, "youtube.com");
       if (["channel", "c", "user"].includes(parts[0]) && parts[1]) return make("youtube", parts[1], `/${parts[0]}/${parts[1]}`, "youtube.com");
@@ -170,7 +165,6 @@ export function previewImage(html: string): string | undefined {
 // signed-out visitors instead of one.
 const placeholders = [
   /default_profile/i, // X
-  /telegram\.org\/img\//i, // t.me without a photo
   /static\.cdninstagram\.com/i,
   /44884218_345707102882519_2446069589734326272_n/, // Instagram's grey avatar
   /static\.xx\.fbcdn\.net\/rsrc\.php/i,

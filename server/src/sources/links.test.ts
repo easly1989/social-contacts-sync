@@ -32,7 +32,6 @@ test("profile URLs are recognized however they were typed", () => {
     ["https://m.facebook.com/ruggiero.carlo/", "https://facebook.com/ruggiero.carlo"],
     ["https://www.facebook.com/profile.php?id=1000123", "https://facebook.com/profile.php?id=1000123"],
     ["https://www.linkedin.com/in/cruggiero89", "https://linkedin.com/in/cruggiero89"],
-    ["t.me/durov", "https://t.me/durov"],
     ["https://www.youtube.com/@YouTube", "https://youtube.com/@YouTube"],
     ["https://bsky.app/profile/bsky.app", "https://bsky.app/profile/bsky.app"],
     ["https://github.com/easly1989", "https://github.com/easly1989"],
@@ -40,6 +39,7 @@ test("profile URLs are recognized however they were typed", () => {
     // Not profiles.
     ["https://www.instagram.com/p/C1abc/", undefined],
     ["https://x.com/home", undefined],
+    ["t.me/durov", undefined], // Telegram is the source by phone number
     ["https://example.com/about", undefined],
     ["mailto:someone@example.com", undefined],
     ["", undefined],
@@ -58,7 +58,6 @@ test("the preview image is read whatever the attribute order", () => {
 
 test("placeholders aren't photos", () => {
   assert.ok(isPlaceholder("https://abs.twimg.com/sticky/default_profile_images/default_profile_400x400.png"));
-  assert.ok(isPlaceholder("https://telegram.org/img/t_logo.png"));
   assert.ok(isPlaceholder("https://files.mastodon.social/accounts/avatars/original/missing.png"));
   assert.ok(!isPlaceholder("https://pbs.twimg.com/profile_images/1/abc_400x400.jpg"));
 });
@@ -66,7 +65,6 @@ test("placeholders aren't photos", () => {
 test("each network's avatar", async () => {
   const web = fakeWeb({
     "https://x.com/github": { body: page("https://pbs.twimg.com/profile_images/1/abc_200x200.jpg") },
-    "https://t.me/durov": { body: page("https://cdn4.telesco.pe/file/durov.jpg") },
     "https://public.api.bsky.app/xrpc/app.bsky.actor.getProfile?actor=bsky.app": { body: JSON.stringify({ avatar: "https://cdn.bsky.app/img/avatar/plain/a@jpeg" }), type: "application/json" },
     "https://api.github.com/users/easly1989": { body: JSON.stringify({ avatar_url: "https://avatars.githubusercontent.com/u/3910202?v=4" }), type: "application/json" },
     "https://mastodon.social/api/v1/accounts/lookup?acct=Gargron": { body: JSON.stringify({ avatar: "https://files.mastodon.social/accounts/avatars/1.png" }), type: "application/json" },
@@ -75,7 +73,6 @@ test("each network's avatar", async () => {
   const avatar = (url: string) => avatarUrl(parseProfileLink(url)!, web.fetchImpl);
   // X: the same picture at 400 px.
   assert.equal(await avatar("https://x.com/github"), "https://pbs.twimg.com/profile_images/1/abc_400x400.jpg");
-  assert.equal(await avatar("https://t.me/durov"), "https://cdn4.telesco.pe/file/durov.jpg");
   assert.equal(await avatar("https://bsky.app/profile/bsky.app"), "https://cdn.bsky.app/img/avatar/plain/a@jpeg");
   assert.equal(await avatar("https://github.com/easly1989"), "https://avatars.githubusercontent.com/u/3910202?v=4&s=460");
   assert.equal(await avatar("https://mastodon.social/@Gargron"), "https://files.mastodon.social/accounts/avatars/1.png");
@@ -96,15 +93,15 @@ test("a sign-in page or 429 means the site is blocked", async () => {
 
 test("a lookup downloads the picture, and refuses what isn't an image", async () => {
   const web = fakeWeb({
-    "https://t.me/durov": { body: page("https://cdn4.telesco.pe/file/durov.jpg") },
-    "https://cdn4.telesco.pe/file/durov.jpg": { body: jpeg, type: "image/jpeg" },
-    "https://t.me/broken": { body: page("https://cdn4.telesco.pe/file/broken.jpg") },
-    "https://cdn4.telesco.pe/file/broken.jpg": { body: "<html>not an image</html>", type: "text/html" },
+    "https://x.com/durov": { body: page("https://pbs.twimg.com/profile_images/1/durov_400x400.jpg") },
+    "https://pbs.twimg.com/profile_images/1/durov_400x400.jpg": { body: jpeg, type: "image/jpeg" },
+    "https://x.com/broken": { body: page("https://pbs.twimg.com/profile_images/1/broken_400x400.jpg") },
+    "https://pbs.twimg.com/profile_images/1/broken_400x400.jpg": { body: "<html>not an image</html>", type: "text/html" },
   });
-  const found = await lookupProfileLink("t.me/durov", { fetchImpl: web.fetchImpl, pacer: noWait });
+  const found = await lookupProfileLink("x.com/durov", { fetchImpl: web.fetchImpl, pacer: noWait });
   assert.equal(found?.photo, jpeg.toString("base64"));
-  assert.equal(found?.link.network, "telegram");
-  assert.equal(await lookupProfileLink("t.me/broken", { fetchImpl: web.fetchImpl, pacer: noWait }), null);
+  assert.equal(found?.link.network, "x");
+  assert.equal(await lookupProfileLink("x.com/broken", { fetchImpl: web.fetchImpl, pacer: noWait }), null);
   assert.equal(await lookupProfileLink("https://example.com/me", { fetchImpl: web.fetchImpl, pacer: noWait }), null);
 });
 
@@ -122,7 +119,7 @@ test("requests to the same site are spaced out", async () => {
   await pacer.wait("x");
   now += 1000;
   await pacer.wait("x"); // 2 s left
-  await pacer.wait("telegram"); // another site: no wait
+  await pacer.wait("github"); // another site: no wait
   await pacer.wait("instagram");
   await pacer.wait("instagram");
   assert.deepEqual(waits, [2000, 6000]);

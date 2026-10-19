@@ -46,6 +46,10 @@ const showNetworks = ref(true);
 const profilesOn = (network: string) => linked.value?.networks[network]?.profiles ?? 0;
 const networks = computed(() => Object.keys(linkNetworks).sort((a, b) => profilesOn(b) - profilesOn(a)));
 const noProfiles = (network: string) => Boolean(linked.value) && !profilesOn(network);
+// Networks with no linked profile wait behind "Show all" (issue #104).
+const showEmpty = ref(false);
+const emptyCount = computed(() => networks.value.filter(noProfiles).length);
+const shownNetworks = computed(() => (showEmpty.value ? networks.value : networks.value.filter((n) => !noProfiles(n))));
 function readHow(network: string): string {
   if (!loginNetworks.includes(network)) return t("sources.public");
   if (!isDesktop.value) return t("sources.unofficial");
@@ -149,7 +153,7 @@ onUnmounted(() => window.clearInterval(poll));
         </div>
 
         <ul v-if="source === 'links'" v-show="showNetworks" id="link-networks" class="border-t border-base-300 py-1 sm:pl-14" :aria-label="$t('sources.networks')" data-testid="link-networks">
-          <li v-for="network in networks" :key="network" class="flex items-center gap-3 border-b border-base-300/60 px-3 py-2 last:border-0" :data-testid="`network-${network}`">
+          <li v-for="network in shownNetworks" :key="network" class="flex items-center gap-3 border-b border-base-300/60 px-3 py-2 last:border-0" :data-testid="`network-${network}`">
             <span
               class="w-24 shrink-0 rounded-full px-2 py-0.5 text-center text-[11px] font-medium"
               :class="{ 'opacity-60': noProfiles(network) }"
@@ -165,6 +169,11 @@ onUnmounted(() => window.clearInterval(poll));
               :checked="!noProfiles(network) && !networksOff.includes(network)"
               @change="setNetwork(network, ($event.target as HTMLInputElement).checked)"
             />
+          </li>
+          <li v-if="emptyCount" class="px-3 py-2">
+            <button type="button" class="btn btn-ghost btn-xs" :aria-expanded="showEmpty" data-testid="networks-show-all" @click="showEmpty = !showEmpty">
+              {{ showEmpty ? $t("sources.hideEmpty") : $t("sources.showEmpty", { count: emptyCount }) }}<ChevronUp v-if="showEmpty" class="size-3.5" /><ChevronDown v-else class="size-3.5" />
+            </button>
           </li>
         </ul>
       </li>

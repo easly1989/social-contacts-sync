@@ -5,6 +5,7 @@ import { QueueEntry, QueuePhoto, SourceId } from "../../../interfaces/api";
 import { getFromCache, setInCache } from "../cache";
 import { photoHash } from "../contacts/photoPins";
 import { FoundPhoto } from "../sources/types";
+import { readVersion, staleFacebook } from "./rereads";
 import { Base64 } from "../types";
 import { cachedPhoto, cachePhoto } from "./photoCache";
 
@@ -19,6 +20,7 @@ const retentionDays = 90;
 
 interface StoredPhoto extends QueuePhoto {
   hash: string;
+  version?: number;
 }
 
 export interface StoredEntry extends QueueEntry {
@@ -52,7 +54,11 @@ export function loadQueue(sessionId: string, now = Date.now()): QueueData {
     }
   }
   // Older entries have lost their photos: they leave the queue.
-  for (const [id, entry] of Object.entries(data.entries)) if (now - Date.parse(entry.addedAt) > retentionDays * 86_400_000) delete data.entries[id];
+  for (const [id, entry] of Object.entries(data.entries)) {
+    if (now - Date.parse(entry.addedAt) > retentionDays * 86_400_000) delete data.entries[id];
+    // Facebook photos queued before the fix are blurred: the next sync reads them again.
+    else entry.photos = entry.photos.filter((p) => !(p.source === "links" && p.matchedBy && staleFacebook(`https://${p.matchedBy}`, p.version)));
+  }
   return data;
 }
 
@@ -72,7 +78,7 @@ export function queuePhotos(sessionId: string, contact: { id: string; name?: str
   const photos = found.map((f): StoredPhoto => {
     const hash = photoHash(f.photo);
     cachePhoto({ id: photoId(hash) }, Buffer.from(f.photo, "base64"));
-    return { id: photoId(hash), hash, source: f.source, matchedBy: f.matchedBy, ...(f.network ? { network: f.network } : {}), readAt: at };
+    return { id: photoId(hash), hash, source: f.source, matchedBy: f.matchedBy, ...(f.network ? { network: f.network } : {}), readAt: at, version: readVersion };
   });
   const data = loadQueue(sessionId);
   data.entries[contact.id] = { kind, name: contact.name, photos, ...(pinned ? { pinned } : {}), addedAt: at };
@@ -86,7 +92,7 @@ export function queuedImage(photo: QueuePhoto): Base64 | undefined {
 
 /** What a card shows: the entry without the hashes. */
 export function publicEntry({ name: _name, photos, ...entry }: StoredEntry): QueueEntry {
-  return { ...entry, photos: photos.map(({ hash: _hash, ...photo }) => photo) };
+  return { ...entry, photos: photos.map(({ hash: _hash, version: _version, ...photo }) => photo) };
 }
 
 /**

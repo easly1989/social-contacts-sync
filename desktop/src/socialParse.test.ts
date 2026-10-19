@@ -49,18 +49,22 @@ test("one Instagram profile (issue #79): the largest photo and the name, nothing
   assert.equal(instagramProfile("nope"), undefined);
 });
 
-test("one Facebook profile (issue #79): the profile picture is the largest picture in the header, the name its heading", () => {
+test("one Facebook profile (issue #79): the profile picture is the header's SVG picture, the name its heading", () => {
   const page: FacebookProfilePage = {
     heading: "Davide Gallo",
     images: [
-      { src: "https://scontent.xx.fbcdn.net/small.jpg", width: 40 },
-      { src: "https://scontent.xx.fbcdn.net/profile.jpg", width: 168 },
-      { src: "http://insecure.example/big.jpg", width: 400 },
-      { src: "https://static.example.com/other.png", width: 300 },
+      { src: "https://scontent.xx.fbcdn.net/small.jpg", width: 40, svg: true },
+      { src: "https://scontent.xx.fbcdn.net/profile.jpg", width: 168, svg: true },
+      // The cover, or without one a blurred copy of the profile picture (issue #104): larger, but not the picture.
+      { src: "https://scontent.xx.fbcdn.net/cover-blurred.jpg", width: 940, svg: false },
+      { src: "http://insecure.example/big.jpg", width: 400, svg: true },
+      { src: "https://static.example.com/other.png", width: 300, svg: true },
     ],
   };
   assert.deepEqual(facebookProfile(page), { name: "Davide Gallo", photoUrl: "https://scontent.xx.fbcdn.net/profile.jpg" });
-  assert.equal(facebookProfile({ heading: "", images: [{ src: "https://scontent.xx.fbcdn.net/small.jpg", width: 40 }] }), undefined);
+  assert.equal(facebookProfile({ heading: "", images: [{ src: "https://scontent.xx.fbcdn.net/small.jpg", width: 40, svg: true }] }), undefined);
+  // Only a cover: no profile picture rather than a blurred one.
+  assert.equal(facebookProfile({ heading: "Davide Gallo", images: [{ src: "https://scontent.xx.fbcdn.net/cover.jpg", width: 940, svg: false }] }), undefined);
 });
 
 test("profile addresses the desktop app reads (issue #79): only a plain handle", () => {

@@ -28,7 +28,15 @@ export interface StoredRead {
   name?: string;
   photoUrl?: string;
   readAt: string;
+  /** readVersion when it was read; older Facebook reads are dropped. */
+  version?: number;
 }
+
+/** Facebook reads before 2 took the cover or a blurred copy of the profile picture (issue #104). */
+export const readVersion = 2;
+
+/** Whether a read (or a photo queued from one) predates the Facebook fix, so it is read again. */
+export const staleFacebook = (url: string, version?: number) => url.startsWith("https://facebook.com/") && (version ?? 0) < readVersion;
 
 export type ReadProfile = (network: RereadNetwork, handle: string) => Promise<{ profile?: { name?: string; photoUrl?: string }; missing?: boolean; stopped?: string; answer?: string }>;
 
@@ -41,7 +49,9 @@ export function getReads(sessionId: string): Record<string, StoredRead> {
   const f = file();
   if (!f) return getFromCache(sessionId, "profile_reads") ?? {};
   try {
-    return JSON.parse(fs.readFileSync(f, "utf8"));
+    const reads: Record<string, StoredRead> = JSON.parse(fs.readFileSync(f, "utf8"));
+    for (const [url, read] of Object.entries(reads)) if (staleFacebook(url, read.version)) delete reads[url];
+    return reads;
   } catch {
     return {};
   }
@@ -144,7 +154,7 @@ export function rereading(
     entry.read++;
     readOk.add(link.url);
     // A missing profile is recorded too, so it waits its turn like the others.
-    options.record(link.url, { ...answer.profile, readAt: new Date().toISOString() });
+    options.record(link.url, { ...answer.profile, readAt: new Date().toISOString(), version: readVersion });
   }
 
   async function rereadAll(urls: string[] = []): Promise<void> {
@@ -245,7 +255,7 @@ export async function lookupWithLogin(
   }
   if (answer.stopped) throw new Error(`Reading ${link.url} stopped: ${answer.stopped}`);
   const reads = getReads(sessionId);
-  reads[link.url] = { ...answer.profile, readAt: new Date(now()).toISOString() };
+  reads[link.url] = { ...answer.profile, readAt: new Date(now()).toISOString(), version: readVersion };
   saveReads(sessionId, reads);
   const photo = answer.profile?.photoUrl ? await downloadImage(answer.profile.photoUrl, link.network, options.fetchImpl) : null;
   return photo ? { photo, link } : null;

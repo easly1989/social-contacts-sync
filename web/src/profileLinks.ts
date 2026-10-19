@@ -4,13 +4,12 @@ import { ApiError } from "./api";
 import { networkInfo } from "./profileNetworks";
 
 // Profile links (issue #51): which networks are read, and the user's choices, kept in this browser like the sync setup.
-export const stableNetworks = ["X", "Telegram", "YouTube", "Bluesky", "Mastodon", "GitHub"];
+export const stableNetworks = ["X", "YouTube", "Bluesky", "Mastodon", "GitHub"];
 
 /** Every network a profile link can be on (issue #83), as Sync › Sources lists them. */
 export const linkNetworks: Record<string, { name: string; color: string }> = {
   ...networkInfo,
   x: { name: "X", color: "#536471" },
-  telegram: { name: "Telegram", color: "#229ED9" },
   youtube: { name: "YouTube", color: "#E62117" },
 };
 /** Read with the login in the desktop app; on the web, as an anonymous visitor they often turn away. */

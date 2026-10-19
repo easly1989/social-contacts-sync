@@ -165,13 +165,17 @@ export function instagramProfile(json: unknown): ProfileRead | undefined {
 
 export interface FacebookProfilePage {
   heading: string;
-  /** Pictures in the page's header, with their width on screen. */
-  images: { src: string; width: number }[];
+  /** Pictures in the page's header, with their width on screen; `svg` when drawn in an SVG, as the profile picture is. */
+  images: { src: string; width: number; svg: boolean }[];
 }
 
-/** The profile picture is the largest of Facebook's own pictures in the header; undefined when there's none. */
+/**
+ * The profile picture is the largest of Facebook's own SVG pictures in the
+ * header; undefined when there's none. The plain pictures are the cover, or
+ * without one a blurred copy of the profile picture (issue #104).
+ */
 export function facebookProfile(page: FacebookProfilePage): ProfileRead | undefined {
-  const own = page.images.filter((i) => /^https:\/\/[^/]+\.fbcdn\.net\//.test(i.src) && i.width >= 100).sort((a, b) => b.width - a.width)[0];
+  const own = page.images.filter((i) => i.svg && /^https:\/\/[^/]+\.fbcdn\.net\//.test(i.src) && i.width >= 100).sort((a, b) => b.width - a.width)[0];
   if (!own) return undefined;
   return { name: text(page.heading), photoUrl: own.src };
 }
@@ -183,7 +187,7 @@ export const facebookProfileScript = `(() => {
   for (const el of header.querySelectorAll("svg image, img")) {
     const src = el.getAttribute("xlink:href") || el.getAttribute("href") || el.getAttribute("src") || "";
     const width = Math.round(el.getBoundingClientRect().width);
-    if (src && width) images.push({ src, width });
+    if (src && width) images.push({ src, width, svg: el.tagName.toLowerCase() === "image" });
     if (images.length >= 40) break;
   }
   return { heading: (header.querySelector("h1")?.innerText || "").split("\\n")[0].trim(), images };

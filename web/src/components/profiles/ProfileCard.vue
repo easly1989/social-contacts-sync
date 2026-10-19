@@ -149,7 +149,7 @@ defineExpose({ act, pickAt: (i: number) => photos.value[i] && choose(photos.valu
         <div role="radiogroup" :aria-label="$t('sync.card.photoFor', { name: suggestion.name })" class="mt-3 flex flex-wrap items-start gap-x-4 gap-y-3">
           <label class="flex w-20 cursor-pointer flex-col items-center gap-1.5 rounded-xl p-1 text-center has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-primary">
             <input type="radio" class="sr-only" :name="`photo-${suggestion.contactId}`" :checked="!pick.photoFrom" :disabled="disabled" @change="choose(undefined)" />
-            <span class="rounded-full p-0.5 ring-2" :class="pick.photoFrom ? 'ring-transparent' : 'ring-primary'">
+            <span class="inline-flex rounded-full p-0.5 ring-2" :class="pick.photoFrom ? 'ring-transparent' : 'ring-primary'">
               <ContactAvatar v-if="suggestion.hasPhoto" :name="suggestion.name" :photo-url="suggestion.photoUrl" size="size-14" />
               <span v-else class="grid size-14 place-items-center rounded-full border-2 border-dashed border-base-300 text-[11px] text-base-content/50">{{ $t("sync.card.none") }}</span>
             </span>
@@ -162,7 +162,7 @@ defineExpose({ act, pickAt: (i: number) => photos.value[i] && choose(photos.valu
             class="flex w-24 cursor-pointer flex-col items-center gap-1.5 rounded-xl p-1 text-center has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-primary"
           >
             <input type="radio" class="sr-only" :name="`photo-${suggestion.contactId}`" :checked="pick.photoFrom === c.id" :disabled="disabled" :aria-label="`${optionName(c)} · ${c.person ? handle(c.person) : caption(c)}`" @change="choose(c.id)" />
-            <span class="relative rounded-full p-0.5 ring-2" :class="pick.photoFrom === c.id ? 'ring-primary' : 'ring-transparent'">
+            <span class="relative inline-flex rounded-full p-0.5 ring-2" :class="pick.photoFrom === c.id ? 'ring-primary' : 'ring-transparent'">
               <ProfilePhoto v-if="c.person" :person="c.person" size="size-14" />
               <PhotoZoom v-else :src="optionSrc(c)" :name="optionName(c)"><img :src="optionSrc(c)" alt="" class="size-14 rounded-full object-cover" /></PhotoZoom>
               <Check v-if="pick.photoFrom === c.id" class="absolute -right-1 -top-1 size-5 rounded-full bg-primary p-0.5 text-primary-content" aria-hidden="true" />
