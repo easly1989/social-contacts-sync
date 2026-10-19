@@ -1,19 +1,16 @@
 <script setup lang="ts">
+import BrandIcon from "../BrandIcon.vue";
+import SourceBadge from "../SourceBadge.vue";
 import { networkInfo } from "../../profileNetworks";
 import { SocialNetwork } from "../../../../interfaces/api";
 
-// A network's initial on its colour (no third-party logos in the app).
+// A network's logo on its colour (issue #104); as a badge, the same one a profile link's photo wears.
 defineProps<{ network: SocialNetwork; size?: string; badge?: boolean }>();
 </script>
 
 <template>
-  <span
-    v-if="badge"
-    class="inline-flex items-center rounded-full px-1.5 py-px text-[11px] font-medium"
-    :style="{ background: `${networkInfo[network].color}1f`, color: networkInfo[network].color }"
-    >{{ networkInfo[network].name }}</span
-  >
-  <span v-else class="grid shrink-0 place-items-center rounded-lg text-xs font-bold text-white" :class="size ?? 'size-8'" :style="{ background: networkInfo[network].color }" aria-hidden="true">{{
-    networkInfo[network].name[0]
-  }}</span>
+  <SourceBadge v-if="badge" source="links" :network="networkInfo[network].name" />
+  <span v-else class="grid shrink-0 place-items-center rounded-lg text-white" :class="size ?? 'size-8'" :style="{ background: networkInfo[network].color }" aria-hidden="true"
+    ><BrandIcon :brand="network" class="size-1/2"
+  /></span>
 </template>

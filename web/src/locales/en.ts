@@ -85,7 +85,7 @@ export default {
     profiles: "no profiles | 1 profile | {count} profiles",
     noProfiles: "No profiles linked",
     showEmpty: "Show all ({count} without profiles)",
-    hideEmpty: "Hide networks without profiles",
+    hideEmpty: "Only networks with profiles",
     public: "public, no login",
     unofficial: "public preview, unofficial: these sites often ask to sign in",
     withLogin: "read one by one with your login",

@@ -87,7 +87,7 @@ const it: typeof en = {
     profiles: "nessun profilo | 1 profilo | {count} profili",
     noProfiles: "Nessun profilo collegato",
     showEmpty: "Mostra tutte ({count} senza profili)",
-    hideEmpty: "Nascondi le reti senza profili",
+    hideEmpty: "Solo le reti con profili",
     public: "pubblici, senza login",
     unofficial: "anteprima pubblica, non ufficiale: questi siti chiedono spesso l'accesso",
     withLogin: "riletti uno per uno con il tuo login",

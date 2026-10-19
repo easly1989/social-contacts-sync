@@ -138,7 +138,7 @@ defineExpose({ act, pickAt: (i: number) => photos.value[i] && choose(photos.valu
           <img :src="api.queuePhotoUrl(queued!.photos[0].id)" :alt="$t('sync.card.fromSource', { source: pinnedName })" class="size-14 rounded-full object-cover" />
         </PhotoZoom>
         <span v-else class="grid size-14 place-items-center rounded-full border-2 border-dashed border-base-300 text-[11px] text-base-content/50">?</span>
-        <figcaption><SourceBadge :source="queued!.pinned?.source ?? 'links'" :label="queued!.pinned?.network" /></figcaption>
+        <figcaption><SourceBadge :source="queued!.pinned?.source ?? 'links'" :network="queued!.pinned?.network" /></figcaption>
       </figure>
       <p class="min-w-[12rem] flex-1 text-sm text-base-content/70">{{ $t("sync.card.changedText", { source: pinnedName }) }}</p>
     </div>
@@ -171,7 +171,7 @@ defineExpose({ act, pickAt: (i: number) => photos.value[i] && choose(photos.valu
               ><kbd v-if="large && i < 9" class="kbd kbd-xs">{{ i + 1 }}</kbd><NetworkMark v-if="c.person" :network="c.person.network" badge /><SourceBadge
                 v-else
                 :source="c.queued?.source ?? 'links'"
-                :label="c.queued ? c.queued.network : c.lookup!.network"
+                :network="c.queued ? c.queued.network : c.lookup!.network"
             /></span>
             <span class="w-full truncate text-[11px] text-base-content/60">{{ caption(c) }}</span>
           </label>
