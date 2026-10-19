@@ -40,7 +40,8 @@ function linkedinPhoto(picture: unknown): string | undefined {
   const image = (picture as { displayImageReference?: { vectorImage?: VectorImage }; displayImageReferenceResolutionResult?: { vectorImage?: VectorImage } })
   const vector = image?.displayImageReference?.vectorImage ?? image?.displayImageReferenceResolutionResult?.vectorImage;
   const largest = [...(vector?.artifacts ?? [])].sort((a, b) => (b.width ?? 0) - (a.width ?? 0))[0];
-  return vector?.rootUrl && largest?.fileIdentifyingUrlPathSegment ? httpsUrl(vector.rootUrl + largest.fileIdentifyingUrlPathSegment) : undefined;
+  // Search answers leave rootUrl empty and put the whole address in the segment.
+  return largest?.fileIdentifyingUrlPathSegment ? httpsUrl((vector?.rootUrl ?? "") + largest.fileIdentifyingUrlPathSegment) : undefined;
 }
 
 /** A page of /voyager/api/relationships/dash/connections (normalized JSON): the profiles are in `included`. */
@@ -133,28 +134,29 @@ export const facebookExtractScript = `(() => {
 /** People a search with the login offers per network (issue #104). */
 export const searchResults = 5;
 
-/** /api/v1/web/search/topsearch/?query=…: the people Instagram's search box offers. */
+/** /api/v1/fbsearch/account_serp/?query=…: the accounts Instagram's search offers (the old topsearch answers 404). */
 export function instagramSearch(json: unknown): ScannedPerson[] {
-  const users = ((json as { users?: { user?: { username?: string; full_name?: string; profile_pic_url?: string } }[] })?.users ?? []).map((u) => u?.user ?? {});
-  return instagramPage({ users }, "follower")
+  return instagramPage(json, "follower")
     .people.map(({ relation: _relation, ...p }): ScannedPerson => ({ ...p, source: "loginSearch" }))
     .slice(0, searchResults);
 }
 
+type LinkedinResult = { navigationUrl?: unknown; title?: { text?: unknown }; primarySubtitle?: { text?: unknown }; image?: { attributes?: { detailDataUnion?: { nonEntityProfilePicture?: { vectorImage?: VectorImage } } }[] } };
+
 /**
- * LinkedIn's search box (/voyager/api/typeahead/hitsV2, normalized JSON):
- * the profiles are in `included`, with a picture as `picture` or `profilePicture`.
+ * LinkedIn's people search (/voyager/api/search/dash/clusters, normalized
+ * JSON; the old typeahead answers 404): one EntityResultViewModel per person
+ * in `included`, with the profile's address, name, headline and picture.
  */
 export function linkedinSearch(json: unknown): ScannedPerson[] {
-  const included = ((json as { included?: Record<string, unknown>[] })?.included ?? []).filter((p) => p && typeof p === "object");
+  const included = ((json as { included?: LinkedinResult[] })?.included ?? []).filter((p) => p && typeof p === "object");
   const people = new Map<string, ScannedPerson>();
   for (const p of included) {
-    const id = text(p.publicIdentifier);
-    if (!id || !/^[\w%-]{2,100}$/.test(id) || people.has(id.toLowerCase())) continue;
-    const name = [text(p.firstName), text(p.lastName)].filter(Boolean).join(" ") || undefined;
-    const mini = (p.picture as Record<string, VectorImage> | undefined)?.["com.linkedin.common.VectorImage"];
-    const photoUrl = linkedinPhoto(p.profilePicture) ?? linkedinPhoto({ displayImageReference: { vectorImage: mini } });
-    people.set(id.toLowerCase(), { id: `linkedin:${id.toLowerCase()}`, network: "linkedin", url: `https://linkedin.com/in/${id}`, handle: id, name, photoUrl, source: "loginSearch", detail: text(p.occupation) ?? text(p.headline) });
+    const id = /^https:\/\/www\.linkedin\.com\/in\/([\w%-]{2,100})\/?(?:[?#]|$)/.exec(text(p.navigationUrl) ?? "")?.[1];
+    if (!id || people.has(id.toLowerCase())) continue;
+    const vectorImage = p.image?.attributes?.map((a) => a?.detailDataUnion?.nonEntityProfilePicture?.vectorImage).find(Boolean);
+    const photoUrl = linkedinPhoto({ displayImageReference: { vectorImage } });
+    people.set(id.toLowerCase(), { id: `linkedin:${id.toLowerCase()}`, network: "linkedin", url: `https://linkedin.com/in/${id}`, handle: id, name: text(p.title?.text), photoUrl, source: "loginSearch", detail: text(p.primarySubtitle?.text) });
   }
   return [...people.values()].slice(0, searchResults);
 }
@@ -170,8 +172,12 @@ export function facebookSearch(items: FacebookItem[], ownHandle?: string): Scann
 /** The search page's address on each site, for a name. */
 export function searchPath(network: ScanNetwork, query: string): string {
   const q = encodeURIComponent(query.trim().slice(0, 100));
-  if (network === "instagram") return `/api/v1/web/search/topsearch/?context=user&query=${q}&include_reel=false`;
-  if (network === "linkedin") return `/voyager/api/typeahead/hitsV2?keywords=${q}&origin=GLOBAL_SEARCH_HEADER&q=blended`;
+  if (network === "instagram") return `/api/v1/fbsearch/account_serp/?query=${q}`;
+  if (network === "linkedin") {
+    // The keywords sit inside a Rest.li tuple: its own punctuation would break it.
+    const keywords = encodeURIComponent(query.replace(/[(),:]/g, " ").replace(/\s+/g, " ").trim().slice(0, 100));
+    return `/voyager/api/search/dash/clusters?decorationId=com.linkedin.voyager.dash.deco.search.SearchClusterCollection-174&origin=GLOBAL_SEARCH_HEADER&q=all&query=(keywords:${keywords},flagshipSearchIntent:SEARCH_SRP,queryParameters:(resultType:List(PEOPLE)))&start=0&count=10`;
+  }
   return `https://www.facebook.com/search/people/?q=${q}`;
 }
 

@@ -23,7 +23,8 @@ async function search(network: SocialNetwork): Promise<void> {
   busy.value = network;
   try {
     const result = await api.loginSearch(props.suggestion.contactId, network);
-    if (result.stopped) notifyError(t(`sync.search.stopped.${result.stopped.startsWith("error") ? "error" : result.stopped}`, { network: name }));
+    // "Copy error" carries the site's reason, such as "error:404".
+    if (result.stopped) notifyError(t(`sync.search.stopped.${result.stopped.startsWith("error") ? "error" : result.stopped}`, { network: name }), undefined, result.stopped);
     else if (result.suggested) notify(t("sync.search.found", { network: name, count: result.suggested }, result.suggested));
     else notify(t("sync.search.none", { network: name, name: props.suggestion.name }));
     emit("changed");
