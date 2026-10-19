@@ -24,10 +24,10 @@ onMounted(() => {
   void loadReviewCount();
 });
 
-// Sync holds Find profiles and Sync photos (issues #81, #82); it opens on To review.
+// Sync holds Find profiles and Sync photos (issues #81, #82) as one wizard (issue #107).
 const items = [
   { to: "/app", key: "dashboard", icon: LayoutDashboard, exact: true },
-  { to: "/app/sync?tab=review", key: "sync", icon: RefreshCw },
+  { to: "/app/sync", key: "sync", icon: RefreshCw },
   { to: "/app/contacts", key: "contacts", icon: ContactRound },
   { to: "/app/cleanup", key: "cleanup", icon: Sparkles },
   { to: "/app/history", key: "history", icon: History },

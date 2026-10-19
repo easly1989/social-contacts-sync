@@ -2,8 +2,23 @@ import { mkdirSync } from "fs";
 import path from "path";
 import { Page, Request, Route, WebSocketRoute, expect } from "@playwright/test";
 
-import { Coverage, LinkedNetworks, PinnedProfiles, ProfileScanState, ProfilesOverview, Contact, ContactLabel, TelegramState, CleanupActionSummary, CleanupScan, DesktopInfo, EventType, MergeRequest, GoogleAccount, GoogleStats, RunRecord, SessionStatus, UpdateCheck } from "../../interfaces/api";
+import { Coverage, LinkedNetworks, PinnedProfiles, ProfileScanState, ProfilesOverview, ProfileSuggestion, ReviewStep, Contact, ContactLabel, TelegramState, CleanupActionSummary, CleanupScan, DesktopInfo, EventType, MergeRequest, GoogleAccount, GoogleStats, RunRecord, SessionStatus, UpdateCheck } from "../../interfaces/api";
 import { avatars } from "./avatars";
+
+/** Sync's address book as tests write it: the steps each card belongs to are worked out when served, as the server does (issue #107). */
+export type FakeSuggestion = Omit<ProfileSuggestion, "steps"> & { steps?: ReviewStep[] };
+export type FakeProfiles = Omit<ProfilesOverview, "steps" | "suggestions"> & { suggestions: FakeSuggestion[] };
+
+function withSteps(data: FakeProfiles): ProfilesOverview {
+  const suggestions = data.suggestions.map((s): ProfileSuggestion => {
+    if (s.steps) return s as ProfileSuggestion;
+    const profiles = s.candidates.length > 0;
+    const photos = Boolean(s.queue) || Boolean(s.linkedNow?.length) || ((!s.hasPhoto || Boolean(s.placeholder)) && Boolean(s.linked?.length));
+    return { ...s, steps: profiles || photos ? [...(profiles ? ["profiles" as const] : []), ...(photos ? ["photos" as const] : [])] : ["search"] };
+  });
+  const count = (step: ReviewStep) => suggestions.filter((s) => s.steps.includes(step)).length;
+  return { ...data, suggestions, steps: { profiles: count("profiles"), photos: count("photos"), search: count("search") } };
+}
 
 /**
  * A fake backend living in the browser: `/api/*` requests are answered from
@@ -69,7 +84,7 @@ export class FakeBackend {
   labels: ContactLabel[] = [];
   contactRequests: { method: string; route: string; body?: any; bytes?: number }[] = [];
   /** Sync's To review and Sources (issues #61, #81): what the page reads, and every request it sends. */
-  profiles?: ProfilesOverview;
+  profiles?: FakeProfiles;
   profileRequests: { route: string; body?: any; query?: string }[] = [];
   /** Sync › Sources (issue #83): profiles linked on contacts, per network. */
   linkedNetworks: LinkedNetworks = {
@@ -311,13 +326,15 @@ export class FakeBackend {
     // Once To review has read the scans, signing in there shows here too.
     if (pathname === "/api/profiles/logins") return route.fulfill({ json: this.profiles?.scans ?? this.socialLogins });
     if (pathname === "/api/profiles/networks") return route.fulfill({ json: this.linkedNetworks });
-    if (pathname === "/api/profiles/count") return route.fulfill({ json: { count: this.profiles?.suggestions.length ?? 0 } });
-    const data = this.profiles!;
+    if (pathname === "/api/profiles/count") return route.fulfill({ json: { count: this.profiles ? withSteps(this.profiles).suggestions.filter((s) => !s.steps.includes("search")).length : 0 } });
     const sub = pathname.replace("/api/profiles", "") || "/";
+    // Sync reads the address book on every step (issue #107): nothing to review unless a test says so.
+    if (!this.profiles && sub === "/") return route.fulfill({ json: withSteps({ sources: [], search: { running: false, networks: [], checked: 0, total: 0, found: {} }, suggestions: [], linked: [] }) });
+    const data = this.profiles!;
     const body = request.headers()["content-type"]?.startsWith("application/json") ? request.postDataJSON() : request.postData() ?? undefined;
     if (sub !== "/") this.profileRequests.push({ route: sub, body, query: new URL(request.url()).search });
     const drop = (contactId: string) => (data.suggestions = data.suggestions.filter((s) => s.contactId !== contactId));
-    if (sub === "/") return route.fulfill({ json: data });
+    if (sub === "/") return route.fulfill({ json: withSteps(data) });
     if (sub === "/import") {
       const network = new URL(request.url()).searchParams.get("network")!;
       const source = data.sources.find((s) => s.network === network)!;
@@ -343,8 +360,12 @@ export class FakeBackend {
         .filter((c) => body.personIds.includes(c.person.id))
         .map((c) => ({ contactId: body.contactId, name: suggestion.name, person: c.person, at: new Date().toISOString(), photoSet: c.person.id === body.photoFrom }));
       data.linked.unshift(...linked);
-      drop(body.contactId);
       const photo = Boolean(body.photoFrom || body.link);
+      // Like the server (issue #107): profiles linked on a contact that wants a photo wait in Photos with theirs, "linked now".
+      const people = linked.map((l) => l.person).filter((p) => p.photoUrl);
+      if (!photo && people.length && (!suggestion.hasPhoto || suggestion.placeholder) && !suggestion.photoKept)
+        Object.assign(suggestion, { candidates: [], linked: [...(suggestion.linked ?? []), ...people], linkedNow: people.map((p) => p.id) });
+      else drop(body.contactId);
       return route.fulfill({ json: { linked, photoWanted: photo, photoSet: photo } });
     }
     if (sub === "/link_many") {

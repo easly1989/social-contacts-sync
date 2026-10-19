@@ -212,7 +212,7 @@ test.describe("desktop guards", () => {
   test("a finished setup opens the app", async ({ page }) => {
     Object.assign(backend.status, { googleConfigured: true, googleConnected: true, whatsappConnected: true });
     await page.goto("/options");
-    await expect(page.getByRole("tab", { name: "Run" })).toHaveAttribute("aria-selected", "true");
+    await expect(page.getByTestId("wizard-step-sources")).toHaveAttribute("aria-current", "step");
   });
 });
 

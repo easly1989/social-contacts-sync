@@ -3,8 +3,8 @@ import { computed, reactive } from "vue";
 import { api } from "./api";
 import { addHandler } from "./services/ws";
 import { linkedinRereads } from "./profileLinks";
-import { networksOn, syncPrefs } from "./syncPrefs";
-import { EventType, SourceId, SyncCounters, SyncProgress } from "../../interfaces/api";
+import { syncPrefs } from "./syncPrefs";
+import { EventType, SourceId, SourceKey, SyncCounters, SyncIssue, SyncProgress } from "../../interfaces/api";
 
 /*
   The sync in progress (issue #82), kept outside the pages: it goes on while
@@ -38,6 +38,8 @@ export const run = reactive({
   stopping: false,
   error: undefined as string | undefined,
   lastEventAt: undefined as number | undefined,
+  /** Sources left out so far (issue #107). */
+  issues: [] as SyncIssue[],
 });
 
 export const running = computed(() => run.started && !run.runId && !run.error);
@@ -51,6 +53,7 @@ function onProgress(update: SyncProgress): void {
   if (update.totalContacts !== undefined) run.total = update.totalContacts;
   if (update.counters) run.counters = { ...emptyCounters(), ...update.counters };
   run.error = update.error;
+  if (update.issues) run.issues = update.issues;
   if (update.image && update.latest) run.latest = [{ image: update.image, ...update.latest, key: run.checked }, ...run.latest].slice(0, 12);
   if (update.runId) {
     run.runId = update.runId;
@@ -59,8 +62,8 @@ function onProgress(update: SyncProgress): void {
 }
 addHandler(EventType.SyncProgress, onProgress);
 
-/** Starts a sync with the sources and options chosen in the Sync page. */
-export function startRun(sources: SourceId[]): void {
+/** Starts a sync with the sources (and networks, issue #107) chosen in the Sync page, in order. */
+export function startRun(sources: SourceKey[]): void {
   Object.assign(run, {
     started: true,
     startedAt: Date.now(),
@@ -76,6 +79,7 @@ export function startRun(sources: SourceId[]): void {
     stopping: false,
     error: undefined,
     lastEventAt: undefined,
+    issues: [],
   });
   const { options, readsCap } = syncPrefs.value;
   const params = new URLSearchParams({
@@ -85,7 +89,6 @@ export function startRun(sources: SourceId[]): void {
     look_different: String(options.lookDifferent),
     decide_all: String(options.decideAll),
     reads_cap: String(readsCap),
-    link_networks: networksOn.value.join(","),
     linkedin_rereads: String(linkedinRereads.value),
   });
   void fetch(`/api/init_sync?${params}`, { credentials: "include" });
@@ -94,6 +97,11 @@ export function startRun(sources: SourceId[]): void {
 export async function stopRun(): Promise<void> {
   run.stopping = true;
   await api.stopSync().catch(() => undefined);
+}
+
+/** Leaves a network's profile reads out of this sync (issue #107). */
+export async function skipNetwork(network: string): Promise<void> {
+  await api.skipNetwork(network).catch(() => undefined);
 }
 
 /** Back to the options, for another sync. */

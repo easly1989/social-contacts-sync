@@ -3,11 +3,11 @@ import { onBeforeUnmount, onMounted, ref } from "vue";
 
 import ProfileCard from "./ProfileCard.vue";
 import { ProfilePick } from "../../profilePick";
-import { ProfileSuggestion } from "../../../../interfaces/api";
+import { ProfileSuggestion, ReviewStep } from "../../../../interfaces/api";
 
 // One contact at a time (issues #61, #81), with the keyboard: Enter confirms,
 // N is "None of these", S skips, 1–9 pick a photo.
-defineProps<{ suggestion: ProfileSuggestion; pick: ProfilePick; total: number }>();
+defineProps<{ suggestion: ProfileSuggestion; pick: ProfilePick; total: number; mode?: ReviewStep }>();
 const emit = defineEmits<{ "update:pick": [pick: ProfilePick]; done: [] }>();
 const card = ref<InstanceType<typeof ProfileCard>>();
 
@@ -30,7 +30,7 @@ onBeforeUnmount(() => document.removeEventListener("keydown", onKey));
 <template>
   <div class="space-y-2" data-testid="profile-review">
     <p class="text-right text-sm text-base-content/60">{{ $t("profiles.toReview", total) }}</p>
-    <ProfileCard ref="card" :suggestion="suggestion" :pick="pick" large @update:pick="emit('update:pick', $event)" @done="emit('done')" />
+    <ProfileCard ref="card" :suggestion="suggestion" :pick="pick" :mode="mode" large @update:pick="emit('update:pick', $event)" @done="emit('done')" />
     <p class="text-xs text-base-content/50">{{ $t("sync.keys") }}</p>
   </div>
 </template>

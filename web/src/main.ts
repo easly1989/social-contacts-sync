@@ -30,17 +30,17 @@ const routes: RouteRecordRaw[] = [
   { path: "/app", component: () => import("./pages/app/Dashboard.vue") },
   { path: "/app/sync", component: () => import("./pages/app/Sync.vue") },
   // Sync photos is the Run tab of Sync (issue #82).
-  { path: "/app/sync/run", redirect: { path: "/app/sync", query: { tab: "run" } } },
+  { path: "/app/sync/run", redirect: { path: "/app/sync", query: { step: "run" } } },
   { path: "/app/history", component: () => import("./pages/app/History.vue") },
   { path: "/app/history/:id", component: () => import("./pages/app/RunReport.vue") },
   { path: "/app/cleanup", component: () => import("./pages/app/Cleanup.vue") },
   { path: "/app/contacts", component: () => import("./pages/app/Contacts.vue") },
   // Find profiles is part of Sync (issue #81).
-  { path: "/app/profiles", redirect: (to) => ({ path: "/app/sync", query: { tab: to.query.tab === "sources" ? "sources" : "review" } }) },
+  { path: "/app/profiles", redirect: (to) => ({ path: "/app/sync", query: { step: to.query.tab === "sources" ? "profiles" : "photos" } }) },
   { path: "/app/settings", redirect: "/app/settings/general" },
   { path: "/app/settings/:section", component: () => import("./pages/app/Settings.vue") },
   { path: "/options", redirect: "/app/sync" },
-  { path: "/sync", redirect: { path: "/app/sync", query: { tab: "run" } } },
+  { path: "/sync", redirect: { path: "/app/sync", query: { step: "run" } } },
   // Desktop first-run wizard.
   { path: "/setup/google", component: () => import("./pages/SetupGoogle.vue") },
   { path: "/setup/signin", component: () => import("./pages/SetupSignIn.vue") },

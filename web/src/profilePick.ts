@@ -1,4 +1,4 @@
-import { LinkLookup, ProfileCandidate, ProfileLinkRequest, ProfileSuggestion, QueuePhoto, SocialPerson } from "../../interfaces/api";
+import { LinkLookup, ProfileCandidate, ProfileLinkRequest, ProfileSuggestion, QueuePhoto, ReviewStep, SocialPerson } from "../../interfaces/api";
 
 /*
   What a contact's card has ticked (issue #65): several profiles can be
@@ -113,4 +113,16 @@ export function linkRequest(suggestion: ProfileSuggestion, pick: ProfilePick): P
 /** The profile's photo, through the app's server (some sites refuse to be shown elsewhere). */
 export function profilePhotoSrc(person: SocialPerson): string | undefined {
   return person.photoUrl ? `/api/profiles/photo?id=${encodeURIComponent(person.id)}` : undefined;
+}
+
+/** What a Sync step shows of a card (issue #107): Profiles leaves the photos to Photos, and Photos the profiles to Profiles. */
+export function forStep(step: ReviewStep | undefined, suggestion: ProfileSuggestion, pick: ProfilePick): { suggestion: ProfileSuggestion; pick: ProfilePick } {
+  if (step === "profiles") return { suggestion: { ...suggestion, queue: undefined, linked: [] }, pick: { ...pick, photoFrom: undefined, link: undefined } };
+  if (step === "photos") {
+    const photos = { ...suggestion, candidates: [] };
+    // A suggested profile's photo belongs to Profiles: here the pick falls back to the first one shown. None (the current photo) stays none.
+    const shown = pick.photoFrom === undefined || photoCandidates(photos, pick).some((c) => c.id === pick.photoFrom);
+    return { suggestion: photos, pick: { ...pick, ticked: [], photoFrom: shown ? pick.photoFrom : firstPhoto(photos, []) } };
+  }
+  return { suggestion, pick };
 }

@@ -1,19 +1,24 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
-import { ArrowRight, Check, CircleAlert, ImagePlus, Info, ListChecks, Pin, RefreshCw, RotateCcw, Search, ShieldCheck, Square } from "lucide-vue-next";
+import { ArrowRight, Check, CircleAlert, ImagePlus, Info, ListChecks, Pin, RefreshCw, RotateCcw, Search, ShieldCheck, Square, TriangleAlert } from "lucide-vue-next";
 
 import PhotoZoom from "../PhotoZoom.vue";
 import SourceBadge from "../SourceBadge.vue";
+import SourceMark from "../SourceMark.vue";
 import StatTile from "../StatTile.vue";
+import TelegramLink from "../TelegramLink.vue";
+import WhatsAppLink from "../WhatsAppLink.vue";
 import { api } from "../../api";
 import { number } from "../../format";
 import { isDesktop } from "../../settings";
-import { linkedinNoticeSeen, linkedinRereads } from "../../profileLinks";
+import { loginOf, refreshLogins, signInTo } from "../../loginSearch";
+import { linkedinNoticeSeen, linkedinRereads, linkNetworks, loginNetworks } from "../../profileLinks";
 import { networkInfo } from "../../profileNetworks";
-import { resetRun, run, running, startRun, stopRun } from "../../runState";
-import { networksOff, syncPrefs } from "../../syncPrefs";
-import { GoogleStats, PinnedProfiles, RunOptions, SessionStatus, SourceId, SyncProgress } from "../../../../interfaces/api";
+import { resetRun, run, running, skipNetwork, startRun, stopRun } from "../../runState";
+import { sourceInfo } from "../../sources";
+import { isNetwork, syncPrefs } from "../../syncPrefs";
+import { GoogleStats, LinkedNetworks, PinnedProfiles, RunOptions, SessionStatus, SocialNetwork, SourceId, SourceKey, SyncIssue, SyncProgress } from "../../../../interfaces/api";
 
 // Sync › Run (issue #82, mockups in #76): what a sync does, then its progress.
 const emit = defineEmits<{ review: []; sources: [] }>();
@@ -21,30 +26,49 @@ const { locale, t } = useI18n();
 
 const status = ref<SessionStatus>();
 const stats = ref<GoogleStats>();
+const linked = ref<LinkedNetworks>();
 const pinned = ref<PinnedProfiles>({});
 // Start waits for it: the LinkedIn notice depends on it.
 const pinnedLoaded = isDesktop.value ? api.pinnedProfiles().then((p) => void (pinned.value = p), () => undefined) : Promise.resolve();
 onMounted(async () => {
+  void refreshLogins();
   status.value = await api.status();
   stats.value = await api.stats().catch(() => undefined);
+  linked.value = await api.linkedNetworks().catch(() => undefined);
 });
 
 const options = computed(() => syncPrefs.value.options);
-const optionKeys: (keyof RunOptions)[] = ["fillMissing", "updatePinned", "lookDifferent", "decideAll"];
+// The two that matter; the others wait under Advanced (issue #107).
+const optionKeys: (keyof RunOptions)[] = ["fillMissing", "updatePinned"];
+const advancedKeys: (keyof RunOptions)[] = ["lookDifferent", "decideAll"];
 // "I decide every contact" applies nothing: the two options that apply photos don't count then.
 const optionDisabled = (key: keyof RunOptions) => options.value.decideAll && (key === "fillMissing" || key === "updatePinned");
 
-function available(source: SourceId): boolean {
+function available(source: SourceKey): boolean {
   if (source === "whatsapp") return Boolean(status.value?.whatsappConnected);
   if (source === "telegram") return Boolean(status.value?.telegramConnected);
-  return source === "gravatar" || source === "links";
+  // A network with no linked profile has nothing to read, as Sources shows it.
+  return !isNetwork(source) || !linked.value || (linked.value.networks[source]?.profiles ?? 0) > 0;
 }
 const selected = computed(() => syncPrefs.value.order.filter((s) => available(s) && syncPrefs.value.enabled.includes(s)));
+const nameOf = (key: SourceKey) => (isNetwork(key) ? linkNetworks[key].name : sourceInfo[key as SourceId].name);
+// Desktop: a login network without a session isn't read with the login; said before starting, with the sign-in (issue #107).
+const withoutLogin = computed(() => (isDesktop.value ? selected.value.filter((k) => loginNetworks.includes(k) && !loginOf(k)?.loggedIn) : []));
+const signingIn = ref<string>();
+async function signIn(network: string): Promise<void> {
+  signingIn.value = network;
+  await signInTo(network as SocialNetwork);
+  signingIn.value = undefined;
+}
 
 const withoutPhoto = computed(() => (stats.value ? stats.value.totalContacts - stats.value.withPhoto : undefined));
 // Desktop: pinned profiles read again with the login, per network up to the cap.
 const toRead = computed(() =>
-  selected.value.includes("links") ? Object.entries(pinned.value).reduce((n, [network, count]) => n + ((network === "linkedin" && !linkedinRereads.value) || networksOff.value.includes(network) ? 0 : Math.min(count ?? 0, syncPrefs.value.readsCap)), 0) : 0
+  Object.entries(pinned.value).reduce(
+    (n, [network, count]) =>
+      n + ((network === "linkedin" && !linkedinRereads.value) || !selected.value.includes(network as SourceKey) || (isDesktop.value && !loginOf(network)?.loggedIn) ? 0 : Math.min(count ?? 0, syncPrefs.value.readsCap)),
+    0
+  )
 );
 // Google takes about 40 photos a minute; a profile is read every 3–7 seconds.
 const estimate = computed(() => {
@@ -57,7 +81,7 @@ const estimate = computed(() => {
 const linkedinNotice = ref<HTMLDialogElement>();
 async function start(): Promise<void> {
   await pinnedLoaded;
-  if (isDesktop.value && linkedinRereads.value && !linkedinNoticeSeen.value && selected.value.includes("links") && !networksOff.value.includes("linkedin") && pinned.value.linkedin) return linkedinNotice.value?.showModal();
+  if (isDesktop.value && linkedinRereads.value && !linkedinNoticeSeen.value && selected.value.includes("linkedin") && pinned.value.linkedin) return linkedinNotice.value?.showModal();
   startRun(selected.value);
 }
 function answerNotice(keepReading: boolean): void {
@@ -72,7 +96,11 @@ const done = computed(() => Boolean(run.runId));
 const applied = computed(() => run.counters.added + run.counters.replaced);
 const queued = computed(() => run.counters.queued ?? 0);
 const readNetworks = computed(() => Object.entries(run.reads) as [keyof typeof networkInfo, NonNullable<NonNullable<SyncProgress["reads"]>["instagram"]>][]);
-const title = computed(() => (run.cancelled ? t("syncRun.stopped") : done.value ? t("syncRun.done") : t("syncRun.running")));
+const title = computed(() => (run.error ? t("runTab.failed") : run.cancelled ? t("syncRun.stopped") : done.value ? t("syncRun.done") : t("syncRun.running")));
+// A problem shows where it happens, with its fix; the sync goes on with the other sources (issue #107).
+const signInStops = ["signin", "notSignedIn", "signedOut"];
+const issueName = (issue: SyncIssue) => nameOf((issue.network ?? issue.source) as SourceKey);
+const reconnecting = ref<SourceId>();
 const eta = computed(() => {
   if (!run.total || run.checked < 5 || done.value) return undefined;
   const perContact = (Date.now() - run.startedAt) / run.checked;
@@ -127,11 +155,29 @@ const stoppedReason = (network: keyof typeof networkInfo, stopped: string) => t(
           </div>
         </label>
       </div>
-      <div v-if="isDesktop" class="mt-4 flex flex-wrap items-center gap-3 rounded-xl bg-base-200/60 px-4 py-3 text-sm">
-        <label for="reads-cap" class="flex-1">{{ $t("runTab.cap") }}</label>
-        <input id="reads-cap" v-model.number="syncPrefs.readsCap" type="number" min="1" max="1000" class="input input-sm w-24" />
-        <p class="w-full text-xs text-base-content/60">{{ $t("runTab.capHint") }}</p>
-      </div>
+      <details class="mt-4" data-testid="run-advanced">
+        <summary class="cursor-pointer text-sm font-medium">{{ $t("runTab.advanced") }}</summary>
+        <div class="mt-3 space-y-2">
+          <label
+            v-for="key in advancedKeys"
+            :key="key"
+            class="flex cursor-pointer gap-3 rounded-xl border px-4 py-3"
+            :class="[options[key] && !optionDisabled(key) ? 'border-primary bg-primary/5' : 'border-base-300', { 'opacity-60': optionDisabled(key) }]"
+          >
+            <input v-model="syncPrefs.options[key]" type="checkbox" class="checkbox checkbox-primary checkbox-sm mt-0.5" :disabled="optionDisabled(key)" />
+            <div class="flex-1">
+              <div class="text-sm font-semibold">{{ $t(`runTab.options.${key}.title`) }}</div>
+              <div class="mt-0.5 text-sm text-base-content/60">{{ $t(`runTab.options.${key}.text`) }}</div>
+            </div>
+          </label>
+          <div v-if="isDesktop" class="flex flex-wrap items-center gap-3 rounded-xl bg-base-200/60 px-4 py-3 text-sm">
+            <label for="reads-cap" class="flex-1">{{ $t("runTab.cap") }}</label>
+            <input id="reads-cap" v-model.number="syncPrefs.readsCap" type="number" min="1" max="1000" class="input input-sm w-24" />
+            <p class="w-full text-xs text-base-content/60">{{ $t("runTab.capHint") }}</p>
+          </div>
+        </div>
+      </details>
+      <p class="mt-3 text-sm text-base-content/60">{{ $t("runTab.restWaits") }}</p>
     </section>
 
     <div class="space-y-5">
@@ -143,11 +189,15 @@ const stoppedReason = (network: keyof typeof networkInfo, stopped: string) => t(
           <div v-if="isDesktop" class="flex justify-between"><dt class="text-base-content/60">{{ $t("runTab.toRead") }}</dt><dd class="font-semibold tabular-nums">{{ number(toRead, locale) }}</dd></div>
           <div class="flex items-center justify-between gap-2">
             <dt class="text-base-content/60">{{ $t("syncSetup.sources") }}</dt>
-            <dd class="flex flex-wrap justify-end gap-1"><SourceBadge v-for="s in selected" :key="s" :source="s" /></dd>
+            <dd class="flex flex-wrap justify-end gap-1"><span v-for="s in selected" :key="s" :title="nameOf(s)"><SourceMark :source="s" size="size-6" icon-size="size-3.5" /></span></dd>
           </div>
           <div class="flex justify-between"><dt class="text-base-content/60">{{ $t("syncSetup.estimate") }}</dt><dd class="font-semibold">{{ estimate ? $t("syncSetup.upTo", { minutes: estimate }) : "—" }}</dd></div>
         </dl>
         <button type="button" class="btn btn-ghost btn-xs mt-2 px-0 text-primary" @click="emit('sources')">{{ $t("runTab.changeSources") }}<ArrowRight class="size-3.5" /></button>
+        <p v-for="network in withoutLogin" :key="network" class="mt-3 flex flex-wrap items-center gap-2 rounded-lg bg-warning/10 px-3 py-2 text-xs" data-testid="run-no-login">
+          <TriangleAlert class="size-4 shrink-0 text-warning" /><span class="flex-1">{{ $t("runTab.noLogin", { network: nameOf(network) }) }}</span>
+          <button type="button" class="btn btn-xs" :disabled="signingIn === network" @click="signIn(network)">{{ $t("sources.signIn") }}</button>
+        </p>
         <div class="mt-3 flex gap-2 rounded-lg bg-base-200 p-3 text-xs text-base-content/60">
           <ShieldCheck class="size-4 shrink-0 text-success" /><span>{{ $t("runTab.safeNote") }}</span>
         </div>
@@ -163,6 +213,7 @@ const stoppedReason = (network: keyof typeof networkInfo, stopped: string) => t(
     <p class="sr-only" role="status">{{ announced }}</p>
     <div v-if="run.error || disconnected" role="alert" class="alert alert-error alert-soft">
       <CircleAlert class="size-5" /><span>{{ run.error ?? $t("sync.disconnected") }}</span>
+      <button v-if="run.error" type="button" class="btn btn-sm" data-testid="run-back" @click="resetRun">{{ $t("runTab.back") }}</button>
       <button v-if="disconnected && isDesktop" type="button" class="btn btn-sm" :disabled="restarting" data-testid="run-restart" @click="restart">
         <span v-if="restarting" class="loading loading-spinner loading-xs"></span><RotateCcw v-else class="size-4" />{{ $t("sync.restartServer") }}
       </button>
@@ -178,7 +229,7 @@ const stoppedReason = (network: keyof typeof networkInfo, stopped: string) => t(
         <button v-if="queued" type="button" class="btn btn-primary btn-sm" @click="emit('review')"><ListChecks class="size-4" />{{ $t("runTab.startReviewing", queued) }}</button>
         <router-link v-if="done" :to="`/app/history/${run.runId}`" class="btn btn-sm">{{ $t("syncRun.openReport") }}<ArrowRight class="size-4" /></router-link>
         <button v-if="done" type="button" class="btn btn-ghost btn-sm" @click="resetRun">{{ $t("runTab.again") }}</button>
-        <button v-else type="button" class="btn btn-ghost btn-sm text-error" :disabled="run.stopping" @click="stopRun"><Square class="size-4" />{{ run.stopping ? $t("syncRun.stopping") : $t("syncRun.stop") }}</button>
+        <button v-else-if="running" type="button" class="btn btn-ghost btn-sm text-error" :disabled="run.stopping" @click="stopRun"><Square class="size-4" />{{ run.stopping ? $t("syncRun.stopping") : $t("syncRun.stop") }}</button>
       </div>
 
       <ol class="mt-5 space-y-4">
@@ -192,6 +243,10 @@ const stoppedReason = (network: keyof typeof networkInfo, stopped: string) => t(
               <progress class="progress progress-primary h-1.5 w-32" :value="read.read" :max="read.total || 1"></progress>
               <span class="text-base-content/60">{{ $t("runTab.readOf", { read: number(read.read, locale), total: number(read.total, locale) }) }}</span>
               <span v-if="read.stopped" class="text-xs text-warning">{{ stoppedReason(network, read.stopped) }}</span>
+              <template v-if="read.stopped && signInStops.includes(read.stopped) && running">
+                <button type="button" class="btn btn-warning btn-xs" :disabled="signingIn === network" data-testid="reads-sign-in" @click="signIn(network)">{{ $t("sources.signInAgain") }}</button>
+                <button type="button" class="btn btn-ghost btn-xs" @click="skipNetwork(network)">{{ $t("runTab.skipNetwork", { network: networkInfo[network].name }) }}</button>
+              </template>
               <span v-if="read.answer" class="w-full text-xs text-base-content/60" data-testid="reads-answer">
                 {{ $t("report.profileReads.answer", { network: networkInfo[network].name }) }} <code class="select-all break-words">{{ read.answer }}</code>
               </span>
@@ -208,6 +263,20 @@ const stoppedReason = (network: keyof typeof networkInfo, stopped: string) => t(
               <span class="tabular-nums text-base-content/60">{{ Math.floor(run.progress) }}%</span>
             </div>
             <progress class="progress progress-primary mt-2 h-2.5 w-full" :value="run.progress" max="100"></progress>
+            <div v-for="issue in run.issues" :key="issue.network ?? issue.source" class="mt-3 rounded-lg border border-error/30 bg-error/5 px-3 py-2 text-sm" data-testid="run-issue">
+              <div class="flex flex-wrap items-center gap-3">
+                <CircleAlert class="size-4 shrink-0 text-error" />
+                <span class="min-w-[12rem] flex-1">{{ $t("runTab.issue", { source: issueName(issue), checked: number(issue.checked, locale) }) }}</span>
+                <button v-if="(issue.source === 'whatsapp' || issue.source === 'telegram') && reconnecting !== issue.source" type="button" class="btn btn-sm" @click="reconnecting = issue.source">
+                  {{ $t("runTab.reconnect", { source: issueName(issue) }) }}
+                </button>
+              </div>
+              <p v-if="issue.message" class="mt-1 pl-7 text-xs text-base-content/60">{{ issue.message }}</p>
+              <div v-if="reconnecting === issue.source" class="mt-3 pl-7">
+                <WhatsAppLink v-if="issue.source === 'whatsapp'" :size="160" />
+                <TelegramLink v-else class="max-w-sm" />
+              </div>
+            </div>
           </div>
         </li>
       </ol>

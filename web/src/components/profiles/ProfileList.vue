@@ -7,14 +7,15 @@ import ProfileCard from "./ProfileCard.vue";
 import { api } from "../../api";
 import { number } from "../../format";
 import { confirmLoginSearch, loginSearchNetworks, signedIn } from "../../loginSearch";
-import { hasChoice, linkRequest, ProfilePick } from "../../profilePick";
+import { forStep, hasChoice, linkRequest, ProfilePick } from "../../profilePick";
 import { networkInfo } from "../../profileNetworks";
 import { notifyError } from "../../toasts";
-import { LoginSearchState, ProfileBulkState, ProfileSuggestion } from "../../../../interfaces/api";
+import { LoginSearchState, ProfileBulkState, ProfileSuggestion, ReviewStep } from "../../../../interfaces/api";
 
 // Every contact to review, one card each (issues #65, #81): select some, then
 // confirm what each has ticked in one go, in the background at Google's pace.
-const props = defineProps<{ queue: ProfileSuggestion[]; picks: Record<string, ProfilePick>; bulk?: ProfileBulkState; loginSearch?: LoginSearchState }>();
+// `mode`: the Sync step showing the list (issue #107); each card shows, and confirms, only what that step is about.
+const props = defineProps<{ queue: ProfileSuggestion[]; picks: Record<string, ProfilePick>; bulk?: ProfileBulkState; loginSearch?: LoginSearchState; mode?: ReviewStep }>();
 const emit = defineEmits<{ "update:pick": [contactId: string, pick: ProfilePick]; changed: [] }>();
 const { t, locale } = useI18n();
 
@@ -45,11 +46,12 @@ function select(id: string, on: boolean): void {
 const searching = computed(() => Boolean(props.loginSearch?.running));
 const running = computed(() => Boolean(props.bulk?.running) || searching.value);
 const chosen = computed(() => props.queue.filter((s) => selected.value.has(s.contactId)));
-const toLink = computed(() => chosen.value.filter((s) => props.picks[s.contactId] && hasChoice(props.picks[s.contactId])));
+const shownFor = (s: ProfileSuggestion) => forStep(props.mode, s, props.picks[s.contactId]);
+const toLink = computed(() => (props.mode === "search" ? [] : chosen.value.filter((s) => props.picks[s.contactId] && hasChoice(shownFor(s).pick))));
 
 async function linkSelected(): Promise<void> {
   try {
-    await api.linkProfilesInBulk(toLink.value.map((s) => linkRequest(s, props.picks[s.contactId])));
+    await api.linkProfilesInBulk(toLink.value.map((s) => linkRequest(shownFor(s).suggestion, shownFor(s).pick)));
     selected.value = new Set();
   } catch (e) {
     notifyError(t("profiles.errors.link"), e);
@@ -79,9 +81,11 @@ async function stop(): Promise<void> {
 async function noneSelected(): Promise<void> {
   try {
     for (const s of chosen.value) {
-      if (s.candidates.length) await api.rejectProfiles(s.contactId, s.candidates.map((c) => c.person.id));
+      // To search: "No photo" for each (issue #104).
+      if (props.mode === "search") await api.leaveWithoutPhoto(s.contactId);
+      if (s.candidates.length && props.mode !== "photos" && props.mode !== "search") await api.rejectProfiles(s.contactId, s.candidates.map((c) => c.person.id));
       // A sync's photos: the contact keeps the one it has.
-      if (s.queue) await api.keepCurrentPhoto(s.contactId);
+      if (s.queue && props.mode !== "profiles" && props.mode !== "search") await api.keepCurrentPhoto(s.contactId);
     }
     selected.value = new Set();
   } catch (e) {
@@ -114,11 +118,11 @@ async function noneSelected(): Promise<void> {
         <button type="button" class="btn btn-sm" @click="stop"><Square class="size-4" />{{ $t("profiles.sources.stop") }}</button>
       </template>
       <template v-else>
-        <button v-if="searchNetworks.length" type="button" class="btn btn-ghost btn-sm" :title="$t('sync.search.selectedHint')" :disabled="!chosen.length" @click="searchSelected">
+        <button v-if="searchNetworks.length && mode !== 'photos'" type="button" class="btn btn-ghost btn-sm" :title="$t('sync.search.selectedHint')" :disabled="!chosen.length" @click="searchSelected">
           <Search class="size-4" />{{ $t("sync.search.selected") }}
         </button>
-        <button type="button" class="btn btn-ghost btn-sm" :disabled="!chosen.length" @click="noneSelected">{{ $t("profiles.none") }}</button>
-        <button type="button" class="btn btn-primary btn-sm" :disabled="!toLink.length" @click="linkSelected">
+        <button type="button" class="btn btn-ghost btn-sm" :disabled="!chosen.length" @click="noneSelected">{{ mode === "search" ? $t("sync.card.noPhoto") : mode === "photos" ? $t("sync.card.keepCurrent") : $t("profiles.none") }}</button>
+        <button v-if="mode !== 'search'" type="button" class="btn btn-primary btn-sm" :disabled="!toLink.length" @click="linkSelected">
           <Check class="size-4" />{{ $t("sync.confirmSelected", { count: number(toLink.length, locale) }, toLink.length) }}
         </button>
       </template>
@@ -130,6 +134,7 @@ async function noneSelected(): Promise<void> {
       :key="s.contactId"
       :suggestion="s"
       :pick="picks[s.contactId]"
+      :mode="mode"
       selectable
       :selected="selected.has(s.contactId)"
       :disabled="running"
