@@ -2,7 +2,7 @@ import crypto from "crypto";
 import express, { Request, Response } from "express";
 import { Client, WAState } from "whatsapp-web.js";
 
-import { Contact, ContactResult, Coverage, LinkedNetworks, PinnedProfiles, ProfileBulkState, ProfileLinkRequest, ProfileScanState, ProfileSearchState, ProfileSuggestion, ProfilesOverview, SocialNetwork, SocialPerson, SourceId } from "../../interfaces/api";
+import { Contact, ContactResult, Coverage, LinkedNetworks, LoginSearchResult, LoginSearchState, PinnedProfiles, ProfileBulkState, ProfileLinkRequest, ProfileScanState, ProfileSearchState, ProfileSuggestion, ProfilesOverview, SocialNetwork, SocialPerson, SourceId } from "../../interfaces/api";
 import { getFromCache, setInCache } from "../src/cache";
 import { OAuth2Client } from "../src/gapi";
 import { ContactsApi, peopleContactsApi } from "../src/cleanup/people";
@@ -43,6 +43,8 @@ export interface SocialDesktop {
   /** Resolves with everyone read when the scan ends (finished, stopped or blocked). */
   scan(network: ScanNetwork): Promise<{ people: SocialPerson[]; stopped?: string }>;
   stop(network: ScanNetwork): Promise<void>;
+  /** People found by searching a name with the login (issue #104). */
+  search(network: ScanNetwork, query: string): Promise<{ people: SocialPerson[]; stopped?: string; answer?: string }>;
 }
 
 const viaDesktopApp: SocialDesktop = {
@@ -51,6 +53,7 @@ const viaDesktopApp: SocialDesktop = {
   logout: (network) => askDesktop("social-logout", { network }),
   scan: (network) => askDesktop("social-scan", { network }, 4 * 60 * 60 * 1000),
   stop: (network) => askDesktop("social-stop", { network }),
+  search: (network, query) => askDesktop("social-search", { network, query }, 60_000),
 };
 
 interface Options {
@@ -72,7 +75,7 @@ async function connectedWhatsApp(sessionId: string): Promise<WhatsAppLookup | un
 }
 
 /** What the desktop app read, checked like any link: known profile addresses only. */
-export function scannedPeople(network: ScanNetwork, people: SocialPerson[]): SocialPerson[] {
+export function scannedPeople(network: ScanNetwork, people: SocialPerson[], source: "scan" | "loginSearch" = "scan"): SocialPerson[] {
   return (Array.isArray(people) ? people : []).flatMap((p): SocialPerson[] => {
     const link = typeof p?.url === "string" ? parseProfileLink(p.url) : undefined;
     if (!link || link.network !== network) return [];
@@ -85,7 +88,7 @@ export function scannedPeople(network: ScanNetwork, people: SocialPerson[]): Soc
       handle: link.handle,
       name: short(p.name),
       photoUrl: typeof p.photoUrl === "string" && p.photoUrl.startsWith("https://") ? p.photoUrl : undefined,
-      source: "scan",
+      source,
       relation,
       detail: short(p.detail),
     }];
@@ -171,8 +174,16 @@ export function profilesRouter(options: Options = {}): express.Router {
    * To review: one card per contact with suggested profiles or photos a sync sent there (issue #82),
    * offering only photos worth it, and one per contact without a photo (issue #104).
    */
-  function suggestions(sessionId: string, data: ProfilesData, list: Contact[], queue: QueueData): ProfileSuggestion[] {
+  /** Profiles never suggested for a contact: turned down for it, linked from the app, or already on any contact. */
+  function exclusions(data: ProfilesData, list: Contact[]) {
     const linked = new Set(data.linked.filter((l) => !l.undone).map((l) => l.person.id));
+    // A profile already on a contact, linked here or written in Google, isn't suggested for another one.
+    const taken = new Set(list.flatMap((c) => c.urls.map((u) => linkKey(u.value))));
+    return { rejected: data.rejected, linked, taken };
+  }
+
+  function suggestions(sessionId: string, data: ProfilesData, list: Contact[], queue: QueueData): ProfileSuggestion[] {
+    const excluded = exclusions(data, list);
     const skipped = new Set(data.skipped);
     const onContact = linkedPeople(data);
     const pins = getPins(sessionId);
@@ -196,11 +207,9 @@ export function profilesRouter(options: Options = {}): express.Router {
       const pin = pins[c.id];
       return pin && !pin.suspended && pin.photoKey && pin.photoKey === photoKey(c.photoUrl) ? { source: pin.source, ...(pin.network ? { network: pin.network } : {}) } : undefined;
     };
-    // A profile already on a contact, linked here or written in Google, isn't suggested for another one.
-    const taken = new Set(list.flatMap((c) => c.urls.map((u) => linkKey(u.value))));
     return list
       // A kept photo is never replaced: its contact only gets profiles.
-      .map((c) => ({ contact: c, candidates: candidatesFor(c, data.people, { rejected: data.rejected, linked, taken }), entry: c.photoKept ? undefined : worth(c, queue.entries[c.id]) }))
+      .map((c) => ({ contact: c, candidates: candidatesFor(c, data.people, excluded), entry: c.photoKept ? undefined : worth(c, queue.entries[c.id]) }))
       // Skipped until the next sync; "No photo" until the contact changes.
       .filter((s) => !skipped.has(s.contact.id) && data.noPhoto[s.contact.id] !== contactFingerprint(s.contact))
       .filter((s) => s.candidates.length || s.entry || (!real(s.contact) && !s.contact.photoKept))
@@ -252,6 +261,7 @@ export function profilesRouter(options: Options = {}): express.Router {
       suggestions: suggestions(req.sessionID, data, list, await reviewQueue(req.sessionID, list)),
       linked: data.linked.map(({ previousPhoto: _p, addedLink: _a, ...rest }) => rest).reverse(),
       bulk: getFromCache(req.sessionID, "profiles_bulk"),
+      loginSearch: getFromCache(req.sessionID, "profiles_login_search"),
     };
   }
 
@@ -730,6 +740,102 @@ export function profilesRouter(options: Options = {}): express.Router {
     const bytes = Buffer.from(image, "base64");
     res.set("Cache-Control", "private, max-age=86400");
     res.type(imageType(bytes)).send(bytes);
+  });
+
+  /*
+    Searching a contact's name with the login (issue #104), desktop only:
+    one card at a time, or the selected cards in the background, one search
+    every 3–7 seconds per site. What is found joins the profiles, and the
+    card's suggestions come from it like from a scan.
+  */
+  const lastLoginSearch = new Map<string, number>();
+  async function searchWithLogin(sessionId: string, contact: Contact, list: Contact[], network: ScanNetwork): Promise<LoginSearchResult> {
+    const key = `${sessionId}:${network}`;
+    const wait = (lastLoginSearch.get(key) ?? 0) + 3000 + 4000 * Math.random() - Date.now();
+    if (lastLoginSearch.has(key) && wait > 0) await (options.sleep ?? ((ms: number) => new Promise((resolve) => setTimeout(resolve, ms))))(wait);
+    lastLoginSearch.set(key, Date.now());
+    const answer: { people: SocialPerson[]; stopped?: string; answer?: string } = await desktop!
+      .search(network, contact.name ?? "")
+      .catch((e: unknown) => ({ people: [], stopped: `error:${e instanceof Error ? e.message : String(e)}` }));
+    if (answer.stopped && answer.stopped !== "notSignedIn") console.warn(`Searching ${network} stopped (${answer.stopped}): ${answer.answer ?? "no answer from the site"}`);
+    const people = scannedPeople(network, answer.people, "loginSearch");
+    const data = loadProfiles(sessionId);
+    if (people.length) {
+      mergePeople(data, people);
+      saveProfiles(sessionId, data);
+    }
+    const ids = new Set(people.map((p) => p.id));
+    const suggested = candidatesFor(contact, data.people, exclusions(data, list)).filter((c) => ids.has(c.person.id)).length;
+    return { found: people.length, suggested, ...(answer.stopped ? { stopped: answer.stopped } : {}) };
+  }
+  const loginSearchState = (req: Request): LoginSearchState | undefined => getFromCache(req.sessionID, "profiles_login_search");
+
+  router.post("/profiles/login-search", async (req: Request, res: Response) => {
+    if (!jsonOnly(req, res)) return;
+    if (!desktop) return res.status(404).send({ error: "desktop_only" });
+    const network = scanNetwork(req);
+    if (!network) return res.status(400).send({ error: "unsupported_network" });
+    if (loginSearchState(req)?.running) return res.status(409).send({ error: "busy" });
+    const api = google(req, res);
+    if (!api) return;
+    try {
+      const list = await contacts(req, api);
+      const contact = list.find((c) => c.id === req.body?.contactId);
+      if (!contact?.name) return res.status(404).send({ error: "not_found" });
+      res.send(await searchWithLogin(req.sessionID, contact, list, network));
+    } catch (e) {
+      failed(req, res, "Searching with the login", e);
+    }
+  });
+
+  // The selected cards, at most 25 per run, in the background.
+  router.post("/profiles/login-search/bulk", async (req: Request, res: Response) => {
+    if (!jsonOnly(req, res)) return;
+    if (!desktop) return res.status(404).send({ error: "desktop_only" });
+    if (loginSearchState(req)?.running) return res.status(409).send({ error: "busy" });
+    const asked: unknown[] = Array.isArray(req.body?.networks) ? req.body.networks : [];
+    const networks = scanNetworks.filter((n) => asked.includes(n));
+    const ids = new Set((Array.isArray(req.body?.contactIds) ? req.body.contactIds : []).filter((id: unknown): id is string => typeof id === "string").slice(0, 25));
+    if (!networks.length || !ids.size) return res.status(400).send({ error: "invalid_request" });
+    const api = google(req, res);
+    if (!api) return;
+    let list: Contact[];
+    try {
+      list = await contacts(req, api);
+    } catch (e) {
+      return failed(req, res, "Reading contacts", e);
+    }
+    const chosen = list.filter((c) => ids.has(c.id) && c.name);
+    const sessionId = req.sessionID;
+    const state: LoginSearchState = { running: true, networks, done: 0, total: chosen.length * networks.length, found: 0, suggested: 0 };
+    setInCache(sessionId, "profiles_login_search", state);
+    setInCache(sessionId, "profiles_login_search_stop", false);
+    void (async () => {
+      const left = new Set(networks);
+      for (const contact of chosen) {
+        for (const network of networks) {
+          if (getFromCache(sessionId, "profiles_login_search_stop") === true) break;
+          if (left.has(network)) {
+            const result = await searchWithLogin(sessionId, contact, list, network);
+            state.found += result.found;
+            state.suggested += result.suggested;
+            // A limit or a sign-in page: that site rests for the rest of the run.
+            if (result.stopped && !result.stopped.startsWith("error:")) {
+              left.delete(network);
+              state.stopped = [...(state.stopped ?? []), `${result.stopped}:${network}`];
+            }
+          }
+          state.done++;
+        }
+      }
+      state.running = false;
+    })().catch((e) => Object.assign(state, { running: false, stopped: [...(state.stopped ?? []), `error:${String((e as Error)?.message ?? e)}`] }));
+    res.send(state);
+  });
+
+  router.post("/profiles/login-search/stop", (req: Request, res: Response) => {
+    setInCache(req.sessionID, "profiles_login_search_stop", true);
+    res.send(loginSearchState(req) ?? { running: false, networks: [], done: 0, total: 0, found: 0, suggested: 0 });
   });
 
   // The login scan: desktop app only.

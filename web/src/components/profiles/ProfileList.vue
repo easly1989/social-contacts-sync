@@ -1,18 +1,20 @@
 <script setup lang="ts">
 import { computed, ref, watch } from "vue";
 import { useI18n } from "vue-i18n";
-import { Check, Square } from "lucide-vue-next";
+import { Check, Search, Square } from "lucide-vue-next";
 
 import ProfileCard from "./ProfileCard.vue";
 import { api } from "../../api";
 import { number } from "../../format";
+import { confirmLoginSearch, loginSearchNetworks, signedIn } from "../../loginSearch";
 import { hasChoice, linkRequest, ProfilePick } from "../../profilePick";
+import { networkInfo } from "../../profileNetworks";
 import { notifyError } from "../../toasts";
-import { ProfileBulkState, ProfileSuggestion } from "../../../../interfaces/api";
+import { LoginSearchState, ProfileBulkState, ProfileSuggestion } from "../../../../interfaces/api";
 
 // Every contact to review, one card each (issues #65, #81): select some, then
 // confirm what each has ticked in one go, in the background at Google's pace.
-const props = defineProps<{ queue: ProfileSuggestion[]; picks: Record<string, ProfilePick>; bulk?: ProfileBulkState }>();
+const props = defineProps<{ queue: ProfileSuggestion[]; picks: Record<string, ProfilePick>; bulk?: ProfileBulkState; loginSearch?: LoginSearchState }>();
 const emit = defineEmits<{ "update:pick": [contactId: string, pick: ProfilePick]; changed: [] }>();
 const { t, locale } = useI18n();
 
@@ -40,7 +42,8 @@ function select(id: string, on: boolean): void {
   selected.value = next;
 }
 
-const running = computed(() => Boolean(props.bulk?.running));
+const searching = computed(() => Boolean(props.loginSearch?.running));
+const running = computed(() => Boolean(props.bulk?.running) || searching.value);
 const chosen = computed(() => props.queue.filter((s) => selected.value.has(s.contactId)));
 const toLink = computed(() => chosen.value.filter((s) => props.picks[s.contactId] && hasChoice(props.picks[s.contactId])));
 
@@ -53,6 +56,22 @@ async function linkSelected(): Promise<void> {
   }
   emit("changed");
 }
+// The selected cards' names searched with the login (issue #104): at most 25 per run, on the sites the app is signed in to.
+const searchNetworks = computed(() => loginSearchNetworks.filter(signedIn));
+async function searchSelected(): Promise<void> {
+  if (!(await confirmLoginSearch(searchNetworks.value))) return;
+  try {
+    await api.loginSearchSelected(chosen.value.slice(0, 25).map((s) => s.contactId), searchNetworks.value);
+  } catch (e) {
+    notifyError(t("sync.search.stopped.error", { network: searchNetworks.value.map((n) => networkInfo[n].name).join(", ") }), e);
+  }
+  emit("changed");
+}
+async function stopSearch(): Promise<void> {
+  await api.stopLoginSearch().catch(() => undefined);
+  emit("changed");
+}
+
 async function stop(): Promise<void> {
   await api.stopBulkLink().catch(() => undefined);
   emit("changed");
@@ -80,7 +99,14 @@ async function noneSelected(): Promise<void> {
       </label>
       <span class="text-sm text-base-content/60">{{ $t("profiles.list.selected", { selected: number(selected.size, locale), total: number(queue.length, locale) }) }}</span>
       <span class="flex-1"></span>
-      <template v-if="running && bulk">
+      <template v-if="searching && loginSearch">
+        <div class="w-72 max-w-full" data-testid="login-search-progress">
+          <div class="text-xs text-base-content/60">{{ $t("sync.search.progress", { done: loginSearch.done, total: loginSearch.total }) }}</div>
+          <progress class="progress progress-primary h-1.5 w-full" :value="loginSearch.done" :max="loginSearch.total || 1"></progress>
+        </div>
+        <button type="button" class="btn btn-sm" @click="stopSearch"><Square class="size-4" />{{ $t("profiles.sources.stop") }}</button>
+      </template>
+      <template v-else-if="running && bulk">
         <div class="w-72 max-w-full" data-testid="bulk-progress">
           <div class="text-xs text-base-content/60">{{ $t("profiles.list.linking", { done: bulk.done, total: bulk.total }) }}</div>
           <progress class="progress progress-primary h-1.5 w-full" :value="bulk.done" :max="bulk.total || 1"></progress>
@@ -88,6 +114,9 @@ async function noneSelected(): Promise<void> {
         <button type="button" class="btn btn-sm" @click="stop"><Square class="size-4" />{{ $t("profiles.sources.stop") }}</button>
       </template>
       <template v-else>
+        <button v-if="searchNetworks.length" type="button" class="btn btn-ghost btn-sm" :title="$t('sync.search.selectedHint')" :disabled="!chosen.length" @click="searchSelected">
+          <Search class="size-4" />{{ $t("sync.search.selected") }}
+        </button>
         <button type="button" class="btn btn-ghost btn-sm" :disabled="!chosen.length" @click="noneSelected">{{ $t("profiles.none") }}</button>
         <button type="button" class="btn btn-primary btn-sm" :disabled="!toLink.length" @click="linkSelected">
           <Check class="size-4" />{{ $t("sync.confirmSelected", { count: number(toLink.length, locale) }, toLink.length) }}

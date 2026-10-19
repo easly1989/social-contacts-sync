@@ -4,6 +4,7 @@ import { useI18n } from "vue-i18n";
 import { ArrowLeftRight, ArrowRight, Check, ExternalLink, Link, Lock, Pin } from "lucide-vue-next";
 
 import ContactAvatar from "../ContactAvatar.vue";
+import LoginSearchButtons from "./LoginSearchButtons.vue";
 import NetworkMark from "./NetworkMark.vue";
 import PhotoZoom from "../PhotoZoom.vue";
 import ProfilePhoto from "./ProfilePhoto.vue";
@@ -211,12 +212,14 @@ defineExpose({ act, pickAt: (i: number) => photos.value[i] && choose(photos.valu
     </div>
     <div v-if="nothingFound" class="mt-4" :class="{ 'sm:pl-8': selectable }" data-testid="find-profile">
       <h4 class="text-sm font-semibold">{{ $t("sync.card.findProfile") }}</h4>
-      <ProfileLinkLookup class="mt-2 max-w-md" :label="$t('sync.card.linkFor', { name: suggestion.name })" @found="emit('update:pick', addLink(pick, $event))" />
+      <LoginSearchButtons class="mt-2" :suggestion="suggestion" :disabled="disabled" @changed="emit('done')" />
+      <ProfileLinkLookup class="mt-3 max-w-md" :label="$t('sync.card.linkFor', { name: suggestion.name })" @found="emit('update:pick', addLink(pick, $event))" />
     </div>
     <p v-if="suggestion.photoKept" class="mt-3 flex items-center gap-1.5 text-xs text-base-content/60" :class="{ 'sm:pl-8': selectable }"><Lock class="size-3.5" />{{ $t("profiles.photoKept") }}</p>
     <details v-else-if="!changed && !nothingFound" class="mt-3 text-xs" :class="{ 'sm:pl-8': selectable }" data-testid="card-link">
       <summary class="flex cursor-pointer items-center gap-1.5 text-base-content/60"><Link class="size-3.5" />{{ $t("links.reviewPrompt") }}</summary>
-      <ProfileLinkLookup class="mt-2 max-w-md" :label="$t('sync.card.linkFor', { name: suggestion.name })" @found="emit('update:pick', addLink(pick, $event))" />
+      <LoginSearchButtons class="mt-2" :suggestion="suggestion" :disabled="disabled" @changed="emit('done')" />
+      <ProfileLinkLookup class="mt-3 max-w-md" :label="$t('sync.card.linkFor', { name: suggestion.name })" @found="emit('update:pick', addLink(pick, $event))" />
     </details>
   </section>
 </template>

@@ -461,3 +461,44 @@ test("To review: filters with counts, search by name, contacts without a photo, 
   await chip(/^No photo/).click();
   await screenshot(page, "73d-review-filters-phone", { fullPage: false });
 });
+
+test("To review: search a contact's name with the login, one card or the selected ones (issue #104)", async ({ page }) => {
+  backend.profiles!.suggestions.push({ contactId: "people/gc", name: "Giulia Colombo", hasPhoto: false, detail: "+39 347 000 1122", candidates: [] });
+  await page.goto("/app/sync?tab=review");
+  const giulia = page.getByTestId("profile-card").filter({ hasText: "Giulia Colombo" });
+  const search = giulia.getByTestId("login-search");
+  // Signed in to Instagram only: the others offer the sign-in.
+  await expect(search.getByRole("button", { name: "Search Instagram" })).toBeVisible();
+  await expect(search.getByRole("button", { name: "Sign in to Facebook" })).toBeVisible();
+  await expect(search.getByRole("button", { name: "Sign in to LinkedIn" })).toBeVisible();
+  await giulia.evaluate((e) => e.scrollIntoView({ block: "center" }));
+  await screenshot(page, "74-review-search-buttons", { fullPage: false });
+
+  // The first time, the same notice as the login scans.
+  await search.getByRole("button", { name: "Search Instagram" }).click();
+  const notice = page.getByTestId("login-search-notice");
+  await expect(notice).toContainText("doesn't allow automated access");
+  await expect(notice.getByRole("button", { name: "Search" })).toBeDisabled();
+  await screenshot(page, "74b-review-search-notice", { fullPage: false });
+  await notice.getByRole("checkbox").check();
+  await notice.getByRole("button", { name: "Search" }).click();
+  await expect.poll(() => backend.profileRequests.find((r) => r.route === "/login-search")?.body).toEqual({ contactId: "people/gc", network: "instagram" });
+  await expect(page.getByText("1 profile to link on Instagram.")).toBeVisible();
+  await expect(giulia).toContainText("Found by search");
+  await expect(giulia.getByRole("checkbox", { name: /giulia\.colombo/ })).toBeChecked();
+
+  // On a card with suggestions, the search waits with the link box.
+  const davide = page.getByTestId("profile-card").filter({ hasText: "Davide Gallo" });
+  await davide.getByTestId("card-link").locator("summary").click();
+  await davide.getByTestId("login-search").getByRole("button", { name: "Sign in to Facebook" }).click();
+  await expect.poll(() => backend.profileRequests.find((r) => r.route === "/scan/login")?.body).toEqual({ network: "facebook" });
+
+  // The selected cards, on both sites now: no notice the second time, progress and Stop.
+  await page.getByTestId("profile-list").getByRole("checkbox", { name: "Select all" }).check();
+  await page.getByRole("button", { name: "Search the selected" }).click();
+  await expect.poll(() => backend.profileRequests.find((r) => r.route === "/login-search/bulk")?.body).toEqual({ contactIds: ["people/dg", "people/ec", "people/gc"], networks: ["instagram", "facebook"] });
+  await expect(page.getByTestId("login-search-progress")).toContainText("Searching: 1 of 6");
+  await screenshot(page, "74c-review-search-progress", { fullPage: false });
+  await page.getByTestId("profile-list").getByRole("button", { name: "Stop" }).click();
+  await expect.poll(() => backend.profileRequests.some((r) => r.route === "/login-search/stop")).toBe(true);
+});

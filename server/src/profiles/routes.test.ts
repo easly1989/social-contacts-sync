@@ -36,6 +36,8 @@ async function start(t: { after(fn: () => void): void }, sessionId: string, logi
   const google = new FakeContacts(people, { "people/ec": "T0xE" });
   const scanned: SocialPerson[] = [{ id: "instagram:elena_conti", network: "instagram", url: "https://instagram.com/elena_conti", handle: "elena_conti", name: "Elena Conti", photoUrl: "https://scontent.cdninstagram.com/e.jpg", source: "scan", relation: "follower" }];
   const desktopCalls: string[] = [];
+  // What a search with the login finds (issue #104), by network.
+  const searchResults: Partial<Record<ScanNetwork, { people: SocialPerson[]; stopped?: string }>> = {};
   // `down`: the sites' image addresses have expired.
   const web = { down: false };
   // The connected WhatsApp, if any (issue #85).
@@ -46,6 +48,7 @@ async function start(t: { after(fn: () => void): void }, sessionId: string, logi
     logout: async (network: ScanNetwork) => void desktopCalls.push(`logout ${network}`),
     scan: async (network: ScanNetwork) => (desktopCalls.push(`scan ${network}`), { people: scanned }),
     stop: async (network: ScanNetwork) => void desktopCalls.push(`stop ${network}`),
+    search: async (network: ScanNetwork, query: string) => (desktopCalls.push(`search ${network} ${query}`), searchResults[network] ?? { people: [] }),
   };
   const fetchImpl = (async (url: string) => {
     if (web.down) return new Response("{}", { status: 404 });
@@ -80,7 +83,7 @@ async function start(t: { after(fn: () => void): void }, sessionId: string, logi
     }
     assert.fail("undo didn't finish");
   };
-  return { google, call, desktopCalls, base, web, undo, whatsapp };
+  return { google, call, desktopCalls, base, web, undo, whatsapp, searchResults };
 }
 
 test("import, search and scan feed one review queue; link with photo, then undo", async (t) => {
@@ -535,4 +538,29 @@ test("cards already waiting follow To review's rules when read, and say where th
   // Her photo's look was read once, and kept.
   assert.equal(looks.length, 1);
   assert.equal(loadQueue("profiles-104").entries["people/ec"].current?.visual, current);
+});
+
+test("To review: searching a contact's name with the login, one card or the selected ones (issue #104)", async (t) => {
+  const { google, call, desktopCalls, searchResults } = await start(t, "profiles-104s");
+  const person = (network: "instagram" | "facebook", handle: string, name: string): SocialPerson => ({ id: `${network}:${handle}`, network, url: `https://${network}.com/${handle}`, handle, name, source: "scan" });
+  // Davide's Instagram, someone else, and a profile already on Elena.
+  google.people.get("people/ec")!.urls = [{ value: "https://instagram.com/davide.g" }];
+  searchResults.instagram = { people: [person("instagram", "davide.gallo", "Davide Gallo"), person("instagram", "davidegx", "Davide Gx"), person("instagram", "davide.g", "Davide Gallo")] };
+
+  const found = await call("POST", "/profiles/login-search", { contactId: "people/dg", network: "instagram" });
+  assert.deepEqual(found, { status: 200, json: { found: 3, suggested: 1 } });
+  assert.deepEqual(desktopCalls, ["search instagram Davide Gallo"]);
+  const davide = (await call("GET", "/profiles")).json.suggestions.find((s: any) => s.contactId === "people/dg");
+  assert.deepEqual(davide.candidates.map((c: any) => [c.person.id, c.person.source]), [["instagram:davide.gallo", "loginSearch"]]);
+  assert.deepEqual((await call("POST", "/profiles/login-search", { contactId: "people/dg", network: "x" })).status, 400);
+
+  // The selected cards in the background; a site that says no rests for the rest of the run.
+  searchResults.facebook = { people: [], stopped: "limited" };
+  const bulk = await call("POST", "/profiles/login-search/bulk", { contactIds: ["people/dg", "people/m", "people/ec"], networks: ["instagram", "facebook"] });
+  assert.deepEqual([bulk.status, bulk.json.total], [200, 6]);
+  for (let i = 0; i < 100 && (await call("GET", "/profiles")).json.loginSearch.running; i++) await new Promise((resolve) => setTimeout(resolve, 10));
+  const state = (await call("GET", "/profiles")).json.loginSearch;
+  assert.deepEqual([state.done, state.stopped], [6, ["limited:facebook"]]);
+  assert.equal(desktopCalls.filter((c) => c.startsWith("search facebook")).length, 1);
+  assert.equal(desktopCalls.filter((c) => c.startsWith("search instagram")).length, 4);
 });

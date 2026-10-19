@@ -24,7 +24,7 @@ export function lookupError(e: unknown, t: (key: string, values?: Record<string,
 }
 
 /** A yes/no choice kept in this browser. */
-function storedFlag(key: string, fallback: boolean) {
+export function storedFlag(key: string, fallback: boolean) {
   let initial = fallback;
   try {
     const value = localStorage.getItem(key);

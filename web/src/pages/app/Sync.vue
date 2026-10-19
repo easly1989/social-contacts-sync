@@ -5,6 +5,7 @@ import { useI18n } from "vue-i18n";
 import { List, RefreshCw, Search, SquareStack } from "lucide-vue-next";
 
 import AppShell from "../../components/AppShell.vue";
+import LoginSearchNotice from "../../components/profiles/LoginSearchNotice.vue";
 import ProfileList from "../../components/profiles/ProfileList.vue";
 import ProfileReview from "../../components/profiles/ProfileReview.vue";
 import ProfileSources from "../../components/profiles/ProfileSources.vue";
@@ -12,12 +13,14 @@ import RunTab from "../../components/sync/RunTab.vue";
 import SourceOrder from "../../components/sync/SourceOrder.vue";
 import { api } from "../../api";
 import { number } from "../../format";
+import { socialLogins } from "../../loginSearch";
 import { initialPick, ProfilePick, wantsPhotoFor } from "../../profilePick";
 import { loadReviewCount, reviewCount } from "../../reviewState";
 import { run, running } from "../../runState";
 import { signInAgainIfNeeded } from "../../signInAgain";
 import { notify, notifyError } from "../../toasts";
-import { ProfilesOverview, ProfileSuggestion } from "../../../../interfaces/api";
+import { networkInfo } from "../../profileNetworks";
+import { ProfilesOverview, ProfileSuggestion, SocialNetwork } from "../../../../interfaces/api";
 
 // Sync (issue #81): To review, Sources and Run in one page, each tab with its
 // own address. /app/sync on its own opens Run, Sync photos' old page.
@@ -55,6 +58,7 @@ async function load(): Promise<void> {
   try {
     overview.value = await api.profiles();
     reviewCount.value = overview.value.suggestions.length;
+    socialLogins.value = overview.value.scans ?? [];
     loadError.value = false;
   } catch {
     loadError.value = !overview.value;
@@ -67,7 +71,9 @@ watch(tab, (key) => key !== "run" && !overview.value && void load(), { immediate
 
 // While a search, a scan, a bulk confirm or a sync runs, its progress (and what a sync queues) comes in.
 let poll: number | undefined;
-const busy = computed(() => running.value || overview.value?.search.running || overview.value?.bulk?.running || overview.value?.scans?.some((s) => s.running));
+const busy = computed(
+  () => running.value || overview.value?.search.running || overview.value?.bulk?.running || overview.value?.loginSearch?.running || overview.value?.scans?.some((s) => s.running)
+);
 onMounted(() => (poll = window.setInterval(() => busy.value && tab.value !== "run" && void load(), 2500)));
 onBeforeUnmount(() => window.clearInterval(poll));
 // A finished sync leaves new contacts to review.
@@ -115,21 +121,40 @@ const chosenFilter = ref<Filter>();
 const filter = computed<Filter>(() => chosenFilter.value ?? (counts.value.noPhoto ? "noPhoto" : "all"));
 const search = ref("");
 const fold = (text: string) => text.normalize("NFD").replace(/\p{Diacritic}/gu, "").toLowerCase();
+// When a search with the login ends: what it found, and which site said no.
+watch(
+  () => overview.value?.loginSearch?.running,
+  (running, was) => {
+    const search = overview.value?.loginSearch;
+    if (was !== true || running || !search) return;
+    notify(t("sync.search.done", search.suggested));
+    for (const stop of search.stopped ?? []) {
+      const [reason, network] = [stop.slice(0, stop.lastIndexOf(":")), stop.slice(stop.lastIndexOf(":") + 1)];
+      const name = networkInfo[network as SocialNetwork]?.name ?? network;
+      notifyError(t(`sync.search.stopped.${reason.startsWith("error") ? "error" : reason}`, { network: name }));
+    }
+  }
+);
+
 const queue = computed(() => suggestions.value.filter(matches[filter.value]).filter((s) => !search.value.trim() || fold(s.name).includes(fold(search.value.trim()))));
 const hasSources = computed(() => overview.value?.sources.some((s) => s.people > 0));
 
 // What each card has ticked, kept while moving between views and pages.
 const picks = reactive<Record<string, ProfilePick>>({});
-/** When each card's sync photos came, to start the card afresh when a later sync changes them. */
+/** When each card's sync photos came, and which profiles it suggested: a card starts afresh when a later sync or a search (issue #104) changes them. */
 const queuedAt: Record<string, string | undefined> = {};
+const suggested: Record<string, string> = {};
 watch(
   suggestions,
   (list) => {
     for (const s of list) {
       const ids = new Set(s.candidates.map((c) => c.person.id));
       const pick = picks[s.contactId];
-      if (!pick || pick.ticked.some((id) => !ids.has(id)) || queuedAt[s.contactId] !== s.queue?.addedAt) picks[s.contactId] = initialPick(s);
+      const key = [...ids].join();
+      const grew = suggested[s.contactId] !== undefined && suggested[s.contactId] !== key && !pick?.ticked.length;
+      if (!pick || grew || pick.ticked.some((id) => !ids.has(id)) || queuedAt[s.contactId] !== s.queue?.addedAt) picks[s.contactId] = initialPick(s);
       queuedAt[s.contactId] = s.queue?.addedAt;
+      suggested[s.contactId] = key;
     }
   },
   { immediate: true }
@@ -178,7 +203,7 @@ const toReview = computed(() => overview.value?.suggestions.length ?? reviewCoun
       <template v-if="tab !== 'run' && overview">
         <template v-if="tab === 'review'">
           <template v-if="queue.length">
-            <ProfileList v-if="view === 'list'" :queue="queue" :picks="picks" :bulk="overview.bulk" @update:pick="setPick" @changed="load">
+            <ProfileList v-if="view === 'list'" :queue="queue" :picks="picks" :bulk="overview.bulk" :login-search="overview.loginSearch" @update:pick="setPick" @changed="load">
               <template #view>
                 <div class="join" role="group" :aria-label="$t('profiles.view.label')">
                   <button type="button" class="btn join-item btn-sm btn-active" :aria-label="$t('profiles.view.list')" :title="$t('profiles.view.list')" aria-pressed="true"><List class="size-4" /></button>
@@ -218,5 +243,6 @@ const toReview = computed(() => overview.value?.suggestions.length ?? reviewCoun
       </div>
       <div v-else-if="tab !== 'run'" class="grid place-items-center py-12"><span class="loading loading-spinner"></span></div>
     </div>
+    <LoginSearchNotice />
   </AppShell>
 </template>

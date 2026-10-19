@@ -1,4 +1,6 @@
-import { Coverage, LinkedNetworks, PinnedProfiles, ProfileBulkState, ProfileLinked, ProfileLinkRequest, ProfileScanState, ProfileSearchState, ProfilesOverview, SocialNetwork, Contact, ContactInput, ContactLabel, ContactsList, ContactResult, LinkLookup, SyncCounters, TelegramState, CleanupActionSummary, CleanupScan, CleanupSummary, DesktopInfo, DuplicateGroup, GoogleAccount, MergeRequest, GoogleStats, RunRecord, RunSummary, SessionStatus, UpdateCheck } from "../../interfaces/api";
+import { Coverage, LinkedNetworks, PinnedProfiles, ProfileBulkState, ProfileLinked, ProfileLinkRequest, ProfileScanState, ProfileSearchState, ProfilesOverview, SocialNetwork, Contact, ContactInput, ContactLabel, ContactsList, ContactResult, LinkLookup,
+  LoginSearchResult,
+  LoginSearchState, SyncCounters, TelegramState, CleanupActionSummary, CleanupScan, CleanupSummary, DesktopInfo, DuplicateGroup, GoogleAccount, MergeRequest, GoogleStats, RunRecord, RunSummary, SessionStatus, UpdateCheck } from "../../interfaces/api";
 
 // Small typed wrappers around the server API.
 
@@ -123,6 +125,10 @@ export const api = {
   /** "No photo" (issue #104): out of To review until the contact's numbers, emails or links change. */
   leaveWithoutPhoto: (contactId: string) => post("/api/profiles/no-photo", { contactId }),
   queuePhotoUrl: (id: string) => `/api/profiles/queue-photo?id=${encodeURIComponent(id)}`,
+  /** Desktop: a contact's name searched with the login (issue #104), one card or the selected ones. */
+  loginSearch: (contactId: string, network: SocialNetwork) => post<LoginSearchResult>("/api/profiles/login-search", { contactId, network }),
+  loginSearchSelected: (contactIds: string[], networks: SocialNetwork[]) => post<LoginSearchState>("/api/profiles/login-search/bulk", { contactIds, networks }),
+  stopLoginSearch: () => post<LoginSearchState>("/api/profiles/login-search/stop"),
   profileScan: (action: "login" | "logout" | "start" | "stop", network: SocialNetwork, acceptRisk = false) =>
     post<ProfileScanState | { ok: true }>(`/api/profiles/scan/${action}`, { network, ...(acceptRisk ? { acceptRisk } : {}) }),
   // Telegram sign-in (issue #36).

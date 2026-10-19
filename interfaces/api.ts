@@ -471,8 +471,8 @@ export interface SocialPerson {
   handle?: string;
   name?: string;
   photoUrl?: string;
-  /** Where it came from: the user's data export, a public search, or a scan with their login. */
-  source: "export" | "search" | "scan";
+  /** Where it came from: the user's data export, a public search, a scan with their login, or a search of a contact's name with it (issue #104). */
+  source: "export" | "search" | "scan" | "loginSearch";
   relation?: "follower" | "following" | "friend" | "connection";
   /** E.g. the company of a LinkedIn connection. */
   detail?: string;
@@ -500,6 +500,28 @@ export interface ProfileSuggestion {
   queue?: QueueEntry;
   /** The source the contact's photo comes from, while it is the one the app applied (issue #104). */
   currentFrom?: { source: SourceId; network?: string };
+}
+
+/** Searching contacts' names with the login, for the selected cards in To review (issue #104). */
+export interface LoginSearchState {
+  running: boolean;
+  networks: SocialNetwork[];
+  /** Searches done and to do: one per contact and network. */
+  done: number;
+  total: number;
+  /** People found, and how many of them became suggestions. */
+  found: number;
+  suggested: number;
+  /** "<reason>:<network>" when a site said no; that network was left out for the rest. */
+  stopped?: string[];
+}
+
+/** POST /api/profiles/login-search: one card, one network. */
+export interface LoginSearchResult {
+  found: number;
+  suggested: number;
+  /** Why the site said no: "notSignedIn", "signin", "limited", "busy" or "error:…". */
+  stopped?: string;
 }
 
 export interface ProfileLinked {
@@ -574,4 +596,6 @@ export interface ProfilesOverview {
   suggestions: ProfileSuggestion[];
   linked: ProfileLinked[];
   bulk?: ProfileBulkState;
+  /** Desktop only: searching the selected cards' names with the login (issue #104). */
+  loginSearch?: LoginSearchState;
 }
