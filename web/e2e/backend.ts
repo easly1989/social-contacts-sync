@@ -14,6 +14,9 @@ function withSteps(data: FakeProfiles): ProfilesOverview {
     if (s.steps) return s as ProfileSuggestion;
     const profiles = s.candidates.length > 0;
     const photos = Boolean(s.queue) || Boolean(s.linkedNow?.length) || ((!s.hasPhoto || Boolean(s.placeholder)) && Boolean(s.linked?.length));
+    // Profiles found by the card's own search keep it in To search.
+    const fromSearch = !photos && profiles && Boolean(s.searched?.length) && s.candidates.every((c) => c.person.source === "loginSearch");
+    if (fromSearch) return { ...s, steps: ["search"] };
     return { ...s, steps: profiles || photos ? [...(profiles ? ["profiles" as const] : []), ...(photos ? ["photos" as const] : [])] : ["search"] };
   });
   const count = (step: ReviewStep) => suggestions.filter((s) => s.steps.includes(step)).length;
@@ -385,6 +388,7 @@ export class FakeBackend {
         score: 1,
         reason: "sameName",
       });
+      suggestion.searched = [...(suggestion.searched ?? []).filter((s) => s.network !== body.network), { network: body.network, found: 2, toLink: 1 }];
       return route.fulfill({ json: { found: 2, suggested: 1 } });
     }
     if (sub === "/login-search/bulk") {

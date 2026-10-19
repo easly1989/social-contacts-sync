@@ -224,7 +224,7 @@ test("Sync opens on Sources; every step can be skipped; old addresses lead to th
     ["profiles", "Link the profiles found"],
     ["run", "Sync photos"],
     ["photos", "Choose photos"],
-    ["search", "Contacts with nothing found"],
+    ["search", "Contacts still to find"],
   ]) {
     await (name === "profiles" ? page.getByTestId("wizard-next") : page.getByTestId("wizard-skip")).click();
     await expect(page).toHaveURL(new RegExp(`step=${name}$`));
@@ -520,7 +520,7 @@ test("Photos' filters with counts, search by name, and where the current photo c
   await screenshot(page, "73d-review-filters-phone", { fullPage: false });
 });
 
-test("To search: search a contact's name with the login; what it finds waits in Profiles (issues #104, #107)", async ({ page }) => {
+test("To search: search a contact's name with the login; what it finds waits on the card, with its photo (issues #104, #107)", async ({ page }) => {
   backend.profiles!.suggestions.push({ contactId: "people/gc", name: "Giulia Colombo", hasPhoto: false, detail: "+39 347 000 1122", candidates: [] });
   await page.goto("/app/sync?step=search");
   const giulia = page.getByTestId("profile-card").filter({ hasText: "Giulia Colombo" });
@@ -541,14 +541,32 @@ test("To search: search a contact's name with the login; what it finds waits in 
   await notice.getByRole("checkbox").check();
   await notice.getByRole("button", { name: "Search" }).click();
   await expect.poll(() => backend.profileRequests.find((r) => r.route === "/login-search")?.body).toEqual({ contactId: "people/gc", network: "instagram" });
-  await expect(page.getByText("1 profile to link on Instagram.")).toBeVisible();
-  await expect(page.getByTestId("step-empty")).toHaveText("Every contact has something found.");
-  await page.getByTestId("wizard-steps").getByTestId("wizard-step-profiles").click();
-  const found = page.getByTestId("profile-card").filter({ hasText: "Giulia Colombo" });
-  await expect(found).toContainText("Found by search");
-  await expect(found.getByRole("checkbox", { name: /giulia\.colombo/ })).toBeChecked();
+  // What it found stays on the card in To search, no toast: the profile with its photo, ticked, and the photo chosen.
+  await expect(giulia.getByTestId("search-results")).toHaveText("1 profile to link on Instagram.");
+  await expect(page.getByTestId("toast")).toHaveCount(0);
+  await expect(giulia).toContainText("Found by search");
+  await expect(giulia.getByRole("checkbox", { name: /giulia\.colombo/ })).toBeChecked();
+  await expect(giulia.getByText("The contact's photo")).toBeVisible();
+  await expect(giulia.getByTestId("find-profile").locator("summary")).toHaveText(/None of these\? Search elsewhere/);
+  await giulia.evaluate((e) => e.scrollIntoView({ block: "center" }));
+  await screenshot(page, "74a-search-found", { fullPage: false });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await giulia.evaluate((e) => e.scrollIntoView({ block: "start" }));
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
+  await screenshot(page, "74a-search-found-phone", { fullPage: false });
+  await page.setViewportSize({ width: 1280, height: 800 });
+  // The photo can be left out, and taken again.
+  await giulia.getByRole("button", { name: "Don't use it" }).click();
+  await expect(giulia.getByRole("button", { name: "Confirm: 1 profile" })).toBeVisible();
+  await giulia.getByRole("button", { name: "Use this photo" }).click();
+  await giulia.getByRole("button", { name: "Confirm: 1 profile and the photo" }).click();
+  await expect
+    .poll(() => backend.profileRequests.find((r) => r.route === "/link")?.body)
+    .toEqual({ contactId: "people/gc", name: "Giulia Colombo", personIds: ["instagram:giulia.colombo"], photoFrom: "instagram:giulia.colombo", rejectIds: [] });
+  await expect(page.getByTestId("profile-card").filter({ hasText: "Giulia Colombo" })).toHaveCount(0);
 
-  // On a card with suggestions, the search waits with the link box.
+  // On a card in Profiles, the search waits with the link box.
+  await page.getByTestId("wizard-steps").getByTestId("wizard-step-profiles").click();
   const davide = page.getByTestId("profile-card").filter({ hasText: "Davide Gallo" });
   await davide.getByTestId("card-link").locator("summary").click();
   await davide.getByTestId("login-search").getByRole("button", { name: "Sign in to Facebook" }).click();
@@ -557,8 +575,8 @@ test("To search: search a contact's name with the login; what it finds waits in 
   // The selected cards, on both sites now: no notice the second time, progress and Stop.
   await page.getByTestId("profile-list").getByRole("checkbox", { name: "Select all" }).check();
   await page.getByRole("button", { name: "Search the selected" }).click();
-  await expect.poll(() => backend.profileRequests.find((r) => r.route === "/login-search/bulk")?.body).toEqual({ contactIds: ["people/dg", "people/ec", "people/gc"], networks: ["instagram", "facebook"] });
-  await expect(page.getByTestId("login-search-progress")).toContainText("Searching: 1 of 6");
+  await expect.poll(() => backend.profileRequests.find((r) => r.route === "/login-search/bulk")?.body).toEqual({ contactIds: ["people/dg", "people/ec"], networks: ["instagram", "facebook"] });
+  await expect(page.getByTestId("login-search-progress")).toContainText("Searching: 1 of 4");
   await screenshot(page, "74c-review-search-progress", { fullPage: false });
   await page.getByTestId("profile-list").getByRole("button", { name: "Stop" }).click();
   await expect.poll(() => backend.profileRequests.some((r) => r.route === "/login-search/stop")).toBe(true);

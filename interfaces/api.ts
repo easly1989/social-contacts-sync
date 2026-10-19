@@ -527,6 +527,8 @@ export interface ProfileSuggestion {
   steps: ReviewStep[];
   /** Profiles linked from To review after the contact's last sync: their photos are marked "linked now". */
   linkedNow?: string[];
+  /** Each site searched for the name with the login: people found, and how many of them wait on the card. */
+  searched?: { network: SocialNetwork; found: number; toLink: number }[];
 }
 
 export type ReviewStep = "profiles" | "photos" | "search";

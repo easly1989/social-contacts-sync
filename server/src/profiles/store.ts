@@ -35,9 +35,11 @@ export interface ProfilesData {
   /** network → when the public search last ran on it. */
   searches: Partial<Record<SocialNetwork, string>>;
   scans: Partial<Record<SocialNetwork, { finishedAt: string; read: number; stopped?: string }>>;
+  /** contactId → network → person ids its name's search with the login found. */
+  loginSearched: Record<string, Partial<Record<SocialNetwork, string[]>>>;
 }
 
-const empty = (): ProfilesData => ({ people: [], rejected: {}, skipped: [], noPhoto: {}, linked: [], searched: {}, imports: {}, searches: {}, scans: {} });
+const empty = (): ProfilesData => ({ people: [], rejected: {}, skipped: [], noPhoto: {}, linked: [], searched: {}, imports: {}, searches: {}, scans: {}, loginSearched: {} });
 
 function file(): string | undefined {
   return process.env.SCS_DESKTOP === "1" && process.env.SCS_DATA_DIR ? path.join(process.env.SCS_DATA_DIR, "profiles.json") : undefined;

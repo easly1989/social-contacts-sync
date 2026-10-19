@@ -166,7 +166,7 @@ const it: typeof en = {
       profiles: "Collega i profili trovati",
       run: "Sincronizza le foto",
       photos: "Scegli le foto",
-      search: "Contatti senza risultati",
+      search: "Contatti ancora da trovare",
       summary: "Riepilogo",
     },
     leads: {
@@ -174,7 +174,7 @@ const it: typeof en = {
       profiles: "I profili collegati diventano sorgenti di foto per la sincronizzazione. Puoi saltare questo passaggio.",
       run: "Quello che è sicuro viene applicato; il resto aspetta nei passaggi successivi.",
       photos: "Le foto che la sincronizzazione non ha applicato da sola. Scegline una, tieni quella attuale o salta.",
-      search: "Nessuna sorgente ha trovato qualcosa per questi contatti. Cerca un profilo o carica una foto.",
+      search: "Cercali con il tuo accesso, incolla un link o carica una foto. Quello che trovi lo colleghi qui, senza cambiare passo.",
       summary: "Cosa ha fatto questa sincronizzazione, e cosa non è terminato con la sua soluzione.",
     },
     empty: {
@@ -840,6 +840,10 @@ const it: typeof en = {
       linkedNow: "collegato ora",
       linkedNowHint: "Profilo collegato in questa sessione: la sua foto è tra le scelte.",
       searchMore: "Nessuno di questi? Cerca con il tuo accesso",
+      notThese: "Non è nessuno di questi? Cerca altrove, incolla un link o carica una foto",
+      contactPhoto: "Foto del contatto",
+      dropPhoto: "Non usarla",
+      usePhoto: "Usa questa foto",
     },
     search: {
       on: "Cerca su {network}",
