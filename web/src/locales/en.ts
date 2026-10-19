@@ -164,7 +164,7 @@ export default {
       profiles: "Link the profiles found",
       run: "Sync photos",
       photos: "Choose photos",
-      search: "Contacts with nothing found",
+      search: "Contacts still to find",
       summary: "Summary",
     },
     leads: {
@@ -172,7 +172,7 @@ export default {
       profiles: "Linked profiles become photo sources for the sync. You can skip this step.",
       run: "What is safe is applied; the rest waits in the next steps.",
       photos: "Photos the sync didn't apply on its own. Pick one, keep the current one, or skip.",
-      search: "No source found anything for these contacts. Search a profile or upload a photo.",
+      search: "Search them with your login, paste a link or upload a photo. Link what you find right here, without changing step.",
       summary: "What this sync did, and what didn't finish with its fix.",
     },
     empty: {
@@ -838,6 +838,10 @@ export default {
       linkedNow: "linked now",
       linkedNowHint: "Profile linked in this session: its photo is among the choices.",
       searchMore: "None of these? Search with your login",
+      notThese: "None of these? Search elsewhere, paste a link or upload a photo",
+      contactPhoto: "The contact's photo",
+      dropPhoto: "Don't use it",
+      usePhoto: "Use this photo",
     },
     search: {
       on: "Search {network}",

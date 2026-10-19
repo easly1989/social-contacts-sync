@@ -558,6 +558,8 @@ test("To review: searching a contact's name with the login, one card or the sele
   assert.deepEqual(desktopCalls, ["search instagram Davide Gallo"]);
   const davide = (await call("GET", "/profiles")).json.suggestions.find((s: any) => s.contactId === "people/dg");
   assert.deepEqual(davide.candidates.map((c: any) => [c.person.id, c.person.source]), [["instagram:davide.gallo", "loginSearch"]]);
+  // Found by its own search, the card stays in To search and says what each site found.
+  assert.deepEqual([davide.steps, davide.searched], [["search"], [{ network: "instagram", found: 3, toLink: 1 }]]);
   assert.deepEqual((await call("POST", "/profiles/login-search", { contactId: "people/dg", network: "x" })).status, 400);
 
   // The selected cards in the background; a site that says no rests for the rest of the run.
@@ -569,4 +571,7 @@ test("To review: searching a contact's name with the login, one card or the sele
   assert.deepEqual([state.done, state.stopped], [6, ["limited:facebook"]]);
   assert.equal(desktopCalls.filter((c) => c.startsWith("search facebook")).length, 1);
   assert.equal(desktopCalls.filter((c) => c.startsWith("search instagram")).length, 4);
+  // A site that stopped has nothing to tell on the card.
+  const after = (await call("GET", "/profiles")).json.suggestions.find((s: any) => s.contactId === "people/dg");
+  assert.deepEqual(after.searched.map((s: any) => s.network), ["instagram"]);
 });

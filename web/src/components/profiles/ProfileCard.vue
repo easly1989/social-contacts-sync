@@ -30,8 +30,20 @@ const { t } = useI18n();
 const card = computed<ProfileSuggestion>(() => forStep(props.mode, props.suggestion, props.pick).suggestion);
 const shownPick = computed<ProfilePick>(() => forStep(props.mode, props.suggestion, props.pick).pick);
 const busy = ref(false);
-const photos = computed(() => (props.mode === "profiles" ? [] : photoCandidates(card.value, shownPick.value)));
-const chosen = computed(() => photos.value.find((p) => p.id === shownPick.value.photoFrom));
+const options = computed(() => (props.mode === "profiles" ? [] : photoCandidates(card.value, shownPick.value)));
+// In To search a found profile's photo is picked on its own tile, next to the profile.
+const photos = computed(() => (props.mode === "search" ? options.value.filter((o) => !o.suggested) : options.value));
+const chosen = computed(() => options.value.find((p) => p.id === shownPick.value.photoFrom));
+const tilePhoto = (c: ProfileCandidate) => props.mode === "search" && shownPick.value.photoFrom === c.person.id;
+// What each site's search found stays on the card, where it was asked.
+const searched = computed(() =>
+  props.mode === "photos"
+    ? []
+    : (card.value.searched ?? []).map((s) => {
+        const network = networkInfo[s.network].name;
+        return { ...s, text: s.found ? t("sync.search.found", { network, count: s.toLink }, s.toLink) : t("sync.search.none", { network, name: card.value.name }) };
+      })
+);
 const queued = computed(() => card.value.queue);
 const changed = computed(() => queued.value?.kind === "changed");
 // A sync found a photo unlike the one the contact has.
@@ -216,15 +228,29 @@ defineExpose({ act, pickAt: (i: number) => photos.value[i] && choose(photos.valu
         <p v-else-if="card.hasPhoto && !card.placeholder" class="mt-3 text-xs text-base-content/50">{{ $t("profiles.keepsPhoto") }}</p>
       </div>
 
-      <div v-if="card.candidates.length">
+      <div v-if="card.candidates.length" class="min-w-0">
         <h4 class="text-sm font-semibold">{{ $t("sync.card.profiles") }}</h4>
+        <ul v-if="searched.length" class="mt-2 space-y-1 text-xs" data-testid="search-results">
+          <li v-for="s in searched" :key="s.network" class="flex items-center gap-2" :class="{ 'text-base-content/60': !s.toLink }"><NetworkMark :network="s.network" size="size-4 rounded-full" />{{ s.text }}</li>
+        </ul>
         <div class="mt-3 grid gap-2" :class="{ 'sm:grid-cols-2 xl:grid-cols-3': !photos.length }">
-          <div v-for="c in card.candidates" :key="c.person.id" class="rounded-xl border-2 p-2.5" :class="ticked(c) ? 'border-primary bg-primary/5' : 'border-base-300'">
+          <div v-for="c in card.candidates" :key="c.person.id" class="min-w-0 rounded-xl border-2 p-2.5" :class="ticked(c) ? 'border-primary bg-primary/5' : 'border-base-300'">
             <label class="flex cursor-pointer items-center gap-3">
               <input type="checkbox" class="checkbox checkbox-primary checkbox-sm" :checked="ticked(c)" :disabled="disabled" :aria-label="`${c.person.name ?? c.person.handle} · ${handle(c.person)}`" @change="tick(c)" />
+              <!-- size-fit: stretched by the row, the ring would turn oval. -->
+              <span class="relative inline-flex size-fit shrink-0 self-center rounded-full p-0.5 ring-2" :class="tilePhoto(c) ? 'ring-primary' : 'ring-transparent'">
+                <ProfilePhoto :person="c.person" size="size-16" />
+                <Check v-if="tilePhoto(c)" class="absolute -right-1 -top-1 size-5 rounded-full bg-primary p-0.5 text-primary-content" aria-hidden="true" />
+              </span>
               <div class="min-w-0 flex-1">
-                <div class="flex flex-wrap items-center gap-1.5"><NetworkMark :network="c.person.network" badge /><span class="truncate text-sm font-semibold">{{ handle(c.person) }}</span></div>
+                <div class="flex flex-wrap items-center gap-1.5"><NetworkMark :network="c.person.network" badge /><span class="max-w-full min-w-0 truncate text-sm font-semibold">{{ handle(c.person) }}</span></div>
                 <div class="mt-0.5 text-[11px] text-base-content/60">{{ [c.person.name, why(c)].filter(Boolean).join(" · ") }}</div>
+                <p v-if="tilePhoto(c)" class="mt-1 flex flex-wrap items-center gap-x-2 text-[11px] font-medium text-primary">
+                  <span class="whitespace-nowrap">{{ $t("sync.card.contactPhoto") }}</span><button type="button" class="btn btn-ghost btn-xs h-auto min-h-0 px-1 py-0.5" :disabled="disabled" @click.prevent="choose(undefined)">{{ $t("sync.card.dropPhoto") }}</button>
+                </p>
+                <button v-else-if="mode === 'search' && ticked(c) && c.person.photoUrl && noPhoto" type="button" class="btn btn-ghost btn-xs -ml-2 mt-0.5 text-primary" :disabled="disabled" @click.prevent="choose(c.person.id)">
+                  {{ $t("sync.card.usePhoto") }}
+                </button>
               </div>
               <a :href="c.person.url" target="_blank" rel="noopener" class="btn btn-ghost btn-xs btn-square" :aria-label="$t('profiles.open')" @click.stop><ExternalLink class="size-3.5" /></a>
             </label>
@@ -232,14 +258,20 @@ defineExpose({ act, pickAt: (i: number) => photos.value[i] && choose(photos.valu
         </div>
       </div>
     </div>
-    <div v-if="nothingFound" class="mt-4" :class="{ 'sm:pl-8': selectable }" data-testid="find-profile">
-      <h4 class="text-sm font-semibold">{{ $t("sync.card.findProfile") }}</h4>
+    <!-- Once a search found profiles, the other ways to find one fold away under them. -->
+    <component :is="card.candidates.length ? 'details' : 'div'" v-if="nothingFound" class="mt-4" :class="{ 'sm:pl-8': selectable }" data-testid="find-profile">
+      <component :is="card.candidates.length ? 'summary' : 'h4'" :class="card.candidates.length ? 'cursor-pointer text-xs text-base-content/60' : 'text-sm font-semibold'">
+        {{ card.candidates.length ? $t("sync.card.notThese") : $t("sync.card.findProfile") }}
+      </component>
       <LoginSearchButtons class="mt-2" :suggestion="card" :disabled="disabled" @changed="emit('done')" />
+      <ul v-if="searched.length && !card.candidates.length" class="mt-2 space-y-1 text-xs text-base-content/60" data-testid="search-results">
+        <li v-for="s in searched" :key="s.network" class="flex items-center gap-2"><NetworkMark :network="s.network" size="size-4 rounded-full" />{{ s.text }}</li>
+      </ul>
       <ProfileLinkLookup class="mt-3 max-w-md" :label="$t('sync.card.linkFor', { name: card.name })" @found="emit('update:pick', addLink(props.pick, $event))" />
       <label v-if="mode === 'search'" class="btn btn-sm mt-3" :class="{ 'btn-disabled': busy || disabled }">
         <Upload class="size-4" />{{ $t("sync.card.upload") }}<input type="file" accept="image/*" class="sr-only" :disabled="busy || disabled" @change="upload" />
       </label>
-    </div>
+    </component>
     <p v-if="card.photoKept" class="mt-3 flex items-center gap-1.5 text-xs text-base-content/60" :class="{ 'sm:pl-8': selectable }"><Lock class="size-3.5" />{{ $t("profiles.photoKept") }}</p>
     <details v-else-if="!changed && !nothingFound && (mode !== 'profiles' || socialLogins.length)" class="mt-3 text-xs" :class="{ 'sm:pl-8': selectable }" data-testid="card-link">
       <summary class="flex cursor-pointer items-center gap-1.5 text-base-content/60"><Link class="size-3.5" />{{ mode === "profiles" ? $t("sync.card.searchMore") : $t("links.reviewPrompt") }}</summary>

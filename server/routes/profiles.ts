@@ -227,6 +227,12 @@ export function profilesRouter(options: Options = {}): express.Router {
       .map(({ contact: c, candidates, entry }) => {
         const linked = onContact(c).filter((p) => !candidates.some((s) => s.person.id === p.id) && worthPerson(c)(p));
         const now = linkedSince(c).filter((id) => linked.some((p) => p.id === id));
+        const photos = Boolean(entry) || (!real(c) && linked.length > 0) || now.length > 0;
+        const searches = Object.entries(data.loginSearched[c.id] ?? {}) as [SocialNetwork, string[]][];
+        const searched = searches.map(([network, ids]) => ({ network, found: ids.length, toLink: candidates.filter((s) => ids.includes(s.person.id)).length }));
+        // Profiles its own search found keep a card in To search, where they were looked for, until it is answered.
+        const found = new Set(searches.flatMap(([, ids]) => ids));
+        const fromSearch = !photos && candidates.length > 0 && candidates.every((s) => found.has(s.person.id));
         return {
           contactId: c.id,
           name: c.name ?? "",
@@ -239,8 +245,9 @@ export function profilesRouter(options: Options = {}): express.Router {
           linked,
           ...(entry ? { queue: publicEntry(entry) } : {}),
           ...(real(c) && fromPin(c) ? { currentFrom: fromPin(c) } : {}),
-          steps: reviewSteps(candidates.length > 0, Boolean(entry) || (!real(c) && linked.length > 0) || now.length > 0),
+          steps: fromSearch ? ["search"] : reviewSteps(candidates.length > 0, photos),
           ...(now.length ? { linkedNow: now } : {}),
+          ...(searched.length ? { searched } : {}),
         };
       });
   }
@@ -778,10 +785,10 @@ export function profilesRouter(options: Options = {}): express.Router {
     if (answer.stopped && answer.stopped !== "notSignedIn") console.warn(`Searching ${network} stopped (${answer.stopped}): ${answer.answer ?? "no answer from the site"}`);
     const people = scannedPeople(network, answer.people, "loginSearch");
     const data = loadProfiles(sessionId);
-    if (people.length) {
-      mergePeople(data, people);
-      saveProfiles(sessionId, data);
-    }
+    if (people.length) mergePeople(data, people);
+    // What the card says it found on each site; a search that stopped found nothing to tell.
+    if (!answer.stopped) data.loginSearched[contact.id] = { ...data.loginSearched[contact.id], [network]: people.map((p) => p.id) };
+    if (people.length || !answer.stopped) saveProfiles(sessionId, data);
     const ids = new Set(people.map((p) => p.id));
     const suggested = candidatesFor(contact, data.people, exclusions(data, list)).filter((c) => ids.has(c.person.id)).length;
     return { found: people.length, suggested, ...(answer.stopped ? { stopped: answer.stopped } : {}) };
