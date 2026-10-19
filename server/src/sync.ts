@@ -155,8 +155,8 @@ export async function initSync(id: string, syncOptions: SyncOptions) {
         currentPhoto: downloadContactPhoto,
         setPhoto: (contactId, photo) => updateContactPhoto(gAuth, contactId, photo),
         savePin: (contactId, pin) => setPin(id, contactId, pin),
-        queue: (contact, kind, found) =>
-          queuePhotos(id, contact, kind, found, kind === "changed" && contact.pin ? { source: contact.pin.source, network: contact.pin.network, matchedBy: contact.pin.matchedBy } : undefined),
+        queue: (contact, kind, found, current) =>
+          queuePhotos(id, contact, kind, found, kind === "changed" && contact.pin ? { source: contact.pin.source, network: contact.pin.network, matchedBy: contact.pin.matchedBy } : undefined, current),
       },
       sources,
       run,

@@ -6,6 +6,7 @@ import { photoHash } from "./contacts/photoPins";
 import { SimpleContact } from "./interfaces";
 import { PhotoSource } from "./sources/types";
 import { defaultRunOptions, runSync, SyncCallbacks, SyncTarget } from "./syncEngine";
+import { testJpeg } from "./fakeImages";
 
 const contacts: SimpleContact[] = [
   { id: "c/ada", name: "Ada", numbers: ["+391"], emails: ["ada@example.com"], hasPhoto: false },
@@ -333,4 +334,35 @@ test("pins: a profile pin reads only that profile", async () => {
   await runSync(target, [pinWa, profiles], options(), callbacks().callbacks);
   assert.deepEqual(asked, [["https://x.com/pia"]]);
   assert.deepEqual(writes, [["c/pia", "photo of https://x.com/pia"]]);
+});
+
+test("only photos worth it go to To review (issue #104)", async () => {
+  const jpg = (w: number, seed: number, quality?: number) => testJpeg(w, w, seed, quality).toString("base64");
+  // Bob has a 100 px copy of his WhatsApp photo in Google; Ada has none.
+  const list = [contacts[0], contacts[1]];
+  const queued: [string, string[], (boolean | undefined)[]][] = [];
+  let reads = 0;
+  const target: SyncTarget = {
+    listContacts: async () => list,
+    currentPhoto: async (c) => (reads++, c.hasPhoto ? jpg(100, 1, 50) : null),
+    setPhoto: async () => {},
+    queue: (c, _kind, found) => void queued.push([c.id, found.map((f) => f.matchedBy), found.map((f) => f.small)]),
+  };
+  const found: PhotoSource = {
+    id: "links",
+    find: async () => null,
+    findAll: async () => [
+      { photo: jpg(640, 1), source: "links", matchedBy: "same picture", network: "Bluesky" },
+      { photo: jpg(150, 2), source: "links", matchedBy: "150 px", network: "LinkedIn" },
+      { photo: jpg(640, 3), source: "links", matchedBy: "facebook preview", network: "Facebook", anonymous: true },
+      { photo: jpg(640, 4), source: "links", matchedBy: "sharp", network: "Instagram" },
+    ],
+  };
+  await runSync(target, [found], options({ fillMissing: false }), callbacks().callbacks, { shuffle: false });
+  assert.deepEqual(queued, [
+    ["c/ada", ["same picture", "150 px", "sharp"], [undefined, true, undefined]],
+    ["c/bob", ["sharp"], [undefined]],
+  ]);
+  // The contact's photo is read once, only for the one that has a photo.
+  assert.equal(reads, 1);
 });

@@ -11,13 +11,16 @@ import { setKeptPhoto } from "../contacts/keptPhotos";
 import { getPins, photoHash, setPin } from "../contacts/photoPins";
 import { ReadProfile, saveReads } from "./rereads";
 import { loadProfiles, mergePeople, saveProfiles } from "./store";
-import { loadQueue, queuePhotos, saveQueue } from "./queue";
+import { loadQueue, queuePhotos, ReadLook, saveQueue } from "./queue";
+import { photoFacts } from "../photoRules";
+import { photoKey } from "../contacts/model";
 import { cachePhoto } from "./photoCache";
 import { saveLookup } from "../linkLookups";
 import { parseProfileLink } from "../sources/links";
 import { WhatsAppLookup } from "../sources/whatsapp";
 import { FakeContacts } from "../cleanup/fakeContacts";
 import { Person } from "../cleanup/people";
+import { testJpeg } from "../fakeImages";
 
 // Find profiles (issue #61) against the fake address book, a fake web and a fake desktop app.
 const people: Person[] = [
@@ -25,9 +28,10 @@ const people: Person[] = [
   { resourceName: "people/ec", names: [{ displayName: "Elena Conti", givenName: "Elena", familyName: "Conti" }] },
   { resourceName: "people/m", names: [{ displayName: "Mamma", givenName: "Mamma" }] },
 ];
-const jpeg = Buffer.alloc(2048, 9);
+// A real 400 px picture, so To review's rules (issue #104) can read its size.
+const jpeg = testJpeg(400, 400, 1);
 
-async function start(t: { after(fn: () => void): void }, sessionId: string, loginReader?: ReadProfile) {
+async function start(t: { after(fn: () => void): void }, sessionId: string, loginReader?: ReadProfile, readLook: ReadLook = async () => undefined) {
   delete process.env.SCS_DESKTOP; // in memory
   const google = new FakeContacts(people, { "people/ec": "T0xE" });
   const scanned: SocialPerson[] = [{ id: "instagram:elena_conti", network: "instagram", url: "https://instagram.com/elena_conti", handle: "elena_conti", name: "Elena Conti", photoUrl: "https://scontent.cdninstagram.com/e.jpg", source: "scan", relation: "follower" }];
@@ -55,7 +59,7 @@ async function start(t: { after(fn: () => void): void }, sessionId: string, logi
     (req as unknown as { sessionID: string }).sessionID = sessionId;
     next();
   });
-  app.use("/api", profilesRouter({ contactsApi: () => google, desktop, fetchImpl, sleep: async () => {}, loginReader: () => loginReader, whatsapp: async () => whatsapp.lookup }));
+  app.use("/api", profilesRouter({ contactsApi: () => google, desktop, fetchImpl, sleep: async () => {}, loginReader: () => loginReader, whatsapp: async () => whatsapp.lookup, readLook }));
   app.use("/api", runsRouter({ contactsApi: () => google }));
   setInCache(sessionId, "gauth", {});
   const server = app.listen(0, "127.0.0.1");
@@ -225,13 +229,15 @@ test("desktop: linking reads an Instagram photo with the login; a preview never 
 });
 
 test("To review: a linked profile's photo is a candidate, applied and pinned without linking again (issue #81)", async (t) => {
-  const { google, call, undo } = await start(t, "profiles-81");
+  const { google, call, undo, base } = await start(t, "profiles-81");
   // No profiles read yet: nothing to review, and Google isn't asked.
   assert.deepEqual(await call("GET", "/profiles/count"), { status: 200, json: { count: 0 } });
   await call("POST", "/profiles/scan/start", { network: "instagram", acceptRisk: true });
   await call("POST", "/profiles/link", { contactId: "people/ec", personIds: ["instagram:elena_conti"] });
   await call("POST", "/profiles/import?network=linkedin", "First Name,Last Name,URL\nElena,Conti,https://www.linkedin.com/in/elenaconti", "text/plain");
 
+  // Elena has a photo: a linked profile's is offered once its size is known (issue #104), e.g. after it was shown.
+  assert.equal((await fetch(`${base}/profiles/photo?id=instagram:elena_conti`)).status, 200);
   const elena = (await call("GET", "/profiles")).json.suggestions.find((s: any) => s.contactId === "people/ec");
   assert.deepEqual(elena.candidates.map((c: any) => c.person.id), ["linkedin:elenaconti"]);
   assert.deepEqual(elena.linked.map((p: any) => p.id), ["instagram:elena_conti"]);
@@ -486,4 +492,35 @@ test("Dashboard: the address book in three parts and what to do next, from store
   // WhatsApp connected: the contacts whose number it knows, in any spelling.
   whatsapp.lookup = { contacts: async () => new Map([["393385550412", "393385550412@c.us"]]), numberId: async () => null, photo: async () => null, ownNumber: () => "393400000000" };
   assert.equal((await call("GET", "/profiles/coverage")).json.whatsapp, 1);
+});
+
+test("cards already waiting follow To review's rules when read, and say where the photo comes from (issue #104)", async (t) => {
+  const looks: string[] = [];
+  const current = photoFacts(testJpeg(100, 100, 7)).visual;
+  const { call } = await start(t, "profiles-104", undefined, async (url) => (looks.push(url), current));
+  const photo = (id: string, bytes: Buffer, extra: object = {}) => {
+    cachePhoto({ id }, bytes);
+    return { id, hash: id, source: "links" as const, matchedBy: id, readAt: "2026-10-01T00:00:00.000Z", ...extra };
+  };
+  // As an older sync left them: no sizes, no looks.
+  const queue = loadQueue("profiles-104");
+  queue.entries["people/ec"] = { kind: "photo", addedAt: new Date().toISOString(), photos: [photo("photo:small", testJpeg(150, 150, 2)), photo("photo:same", testJpeg(640, 640, 7, 50)), photo("photo:sharp", testJpeg(640, 640, 4))] };
+  queue.entries["people/dg"] = { kind: "photo", addedAt: new Date().toISOString(), photos: [photo("photo:small-dg", testJpeg(150, 150, 2))] };
+  queue.entries["people/m"] = { kind: "photo", addedAt: new Date().toISOString(), photos: [photo("photo:fb", testJpeg(640, 640, 5), { network: "Facebook", anonymous: true, version: 2 })] };
+  saveQueue("profiles-104", queue);
+  const elenaUrl = (await call("GET", "/profiles")).json.suggestions.find((s: any) => s.contactId === "people/ec").photoUrl;
+  setPin("profiles-104", "people/ec", { source: "whatsapp", photoKey: photoKey(elenaUrl), hash: "wa", readAt: "2026-10-01T00:00:00.000Z" });
+
+  const cards = (await call("GET", "/profiles")).json.suggestions;
+  const card = (id: string) => cards.find((s: any) => s.contactId === id);
+  // Elena has a photo: neither the small one nor her own photo saved again.
+  assert.deepEqual(card("people/ec").queue.photos.map((p: any) => [p.id, p.width, p.small]), [["photo:sharp", 640, undefined]]);
+  assert.deepEqual(card("people/ec").currentFrom, { source: "whatsapp" });
+  // Davide has none: the small photo is better than nothing.
+  assert.deepEqual(card("people/dg").queue.photos.map((p: any) => [p.id, p.small]), [["photo:small-dg", true]]);
+  // Mamma's only photo was a Facebook preview: no card.
+  assert.equal(card("people/m"), undefined);
+  // Her photo's look was read once, and kept.
+  assert.equal(looks.length, 1);
+  assert.equal(loadQueue("profiles-104").entries["people/ec"].current?.visual, current);
 });

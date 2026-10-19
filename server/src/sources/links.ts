@@ -272,7 +272,7 @@ export function linksSource(options: LinksSourceOptions = {}): PhotoSource {
 
   async function photoOf(link: ProfileLink): Promise<FoundPhoto | null> {
     if (options.networks && !options.networks.has(link.network)) return null;
-    const found = (photo: Base64): FoundPhoto => ({ photo, source: "links", matchedBy: shortLink(link), network: networkNames[link.network] });
+    const found = (photo: Base64, anonymous = false): FoundPhoto => ({ photo, source: "links", matchedBy: shortLink(link), network: networkNames[link.network], ...(anonymous ? { anonymous } : {}) });
     const stored = options.storedPhoto?.(link);
     if (stored && !isPlaceholder(stored)) {
       // Image servers' addresses expire: that's not the site turning us away.
@@ -282,7 +282,8 @@ export function linksSource(options: LinksSourceOptions = {}): PhotoSource {
     if (blocked.has(link.network) || (bestEffortNetworks.has(link.network) && !options.bestEffort)) return null;
     try {
       const lookup = await lookupProfileLink(link.url, { fetchImpl, pacer });
-      return lookup ? found(lookup.photo) : null;
+      // Only these networks show a blurred preview to visitors: To review leaves those out (issue #104).
+      return lookup ? found(lookup.photo, bestEffortNetworks.has(link.network)) : null;
     } catch (e) {
       if (e instanceof LinkBlockedError) {
         blocked.add(link.network);

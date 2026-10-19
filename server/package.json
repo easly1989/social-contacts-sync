@@ -23,6 +23,7 @@
     "express-winston": "^4.2.0",
     "express-ws": "^5.0.2",
     "ioredis": "^6.0.0",
+    "jpeg-js": "^0.4.4",
     "libphonenumber-js": "^1.13.12",
     "limiter": "^3.0.0",
     "lru-cache": "^11.5.2",

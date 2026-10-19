@@ -22,7 +22,8 @@ import { photoKey } from "../src/contacts/model";
 import { getPins, photoHash, setPin } from "../src/contacts/photoPins";
 import { desktopReader, getReads, lookupWithLogin, pinnedProfiles, ReadProfile, readsWithLogin, RereadNetwork } from "../src/profiles/rereads";
 import { cachedPhoto, cachePhoto } from "../src/profiles/photoCache";
-import { loadQueue, publicEntry, QueueData, queuedImage, resolveEntry, saveQueue } from "../src/profiles/queue";
+import { checkedQueue, loadQueue, publicEntry, QueueData, queuedImage, ReadLook, resolveEntry, saveQueue, StoredEntry } from "../src/profiles/queue";
+import { photoFacts, PhotoFacts, worthOffering } from "../src/photoRules";
 import { migrateReviewHistory } from "../src/profiles/history";
 import { recordDecision } from "../src/runs";
 import { getLookup } from "../src/linkLookups";
@@ -60,6 +61,8 @@ interface Options {
   loginReader?: () => ReadProfile | undefined;
   /** WhatsApp, while it's connected. */
   whatsapp?: (sessionId: string) => Promise<WhatsAppLookup | undefined>;
+  /** Reads the look of a contact's Google photo (tests use a fake). */
+  readLook?: ReadLook;
 }
 
 async function connectedWhatsApp(sessionId: string): Promise<WhatsAppLookup | undefined> {
@@ -143,16 +146,54 @@ export function profilesRouter(options: Options = {}): express.Router {
     return (contact) => [...new Set(contact.urls.flatMap((u) => byUrl.get(parseProfileLink(u.value)?.url ?? "") ?? []))];
   }
 
-  /** To review: one card per contact with suggested profiles or photos a sync sent there (issue #82). */
-  function suggestions(data: ProfilesData, list: Contact[], queue: QueueData): ProfileSuggestion[] {
+  // Size and look of the profiles' cached photos, by profile and photo address.
+  const profileFacts = new Map<string, PhotoFacts | null>();
+  function factsOf(person: SocialPerson): PhotoFacts | null {
+    const key = `${person.id} ${person.photoUrl ?? ""}`;
+    if (!profileFacts.has(key)) {
+      const bytes = cachedPhoto(person);
+      profileFacts.set(key, bytes ? photoFacts(bytes) : null);
+    }
+    return profileFacts.get(key)!;
+  }
+
+  /** The queue, with what To review's rules need filled in for cards an older sync sent. */
+  const reviewQueue = (sessionId: string, list: Contact[]) => checkedQueue(sessionId, list, options.readLook);
+
+  /**
+   * To review: one card per contact with suggested profiles or photos a sync sent there (issue #82),
+   * offering only photos worth it (issue #104).
+   */
+  function suggestions(sessionId: string, data: ProfilesData, list: Contact[], queue: QueueData): ProfileSuggestion[] {
     const linked = new Set(data.linked.filter((l) => !l.undone).map((l) => l.person.id));
     const skipped = new Set(data.skipped);
     const onContact = linkedPeople(data);
+    const pins = getPins(sessionId);
+    const real = (c: Contact) => c.hasPhoto && !c.placeholder;
+    const worth = (c: Contact, entry: StoredEntry | undefined): StoredEntry | undefined => {
+      if (entry?.kind !== "photo") return entry;
+      const current = entry.current?.key && entry.current.key === photoKey(c.photoUrl) ? entry.current.visual : undefined;
+      const photos = entry.photos.flatMap((p) => {
+        const verdict = worthOffering(p, { hasPhoto: real(c), current });
+        return verdict.offer ? [{ ...p, small: verdict.small }] : [];
+      });
+      return photos.length ? { ...entry, photos } : undefined;
+    };
+    // A profile's photo on a contact with a photo: only when known to be large enough (the rules can't check the others).
+    const worthPerson = (c: Contact) => (p: SocialPerson) => {
+      if (!real(c)) return true;
+      const facts = factsOf(p);
+      return Boolean(facts?.width) && worthOffering({ source: "links", network: networkNames[p.network], ...facts }, { hasPhoto: true }).offer;
+    };
+    const fromPin = (c: Contact): ProfileSuggestion["currentFrom"] => {
+      const pin = pins[c.id];
+      return pin && !pin.suspended && pin.photoKey && pin.photoKey === photoKey(c.photoUrl) ? { source: pin.source, ...(pin.network ? { network: pin.network } : {}) } : undefined;
+    };
     // A profile already on a contact, linked here or written in Google, isn't suggested for another one.
     const taken = new Set(list.flatMap((c) => c.urls.map((u) => linkKey(u.value))));
     return list
       // A kept photo is never replaced: its contact only gets profiles.
-      .map((c) => ({ contact: c, candidates: candidatesFor(c, data.people, { rejected: data.rejected, linked, taken }), entry: c.photoKept ? undefined : queue.entries[c.id] }))
+      .map((c) => ({ contact: c, candidates: candidatesFor(c, data.people, { rejected: data.rejected, linked, taken }), entry: c.photoKept ? undefined : worth(c, queue.entries[c.id]) }))
       .filter((s) => s.candidates.length || s.entry)
       .sort(
         (a, b) =>
@@ -170,8 +211,9 @@ export function profilesRouter(options: Options = {}): express.Router {
         photoKept: c.photoKept,
         detail: [c.phones[0]?.value, c.emails[0]?.value, c.company].filter(Boolean).join(" · ") || undefined,
         candidates,
-        linked: onContact(c).filter((p) => !candidates.some((s) => s.person.id === p.id)),
+        linked: onContact(c).filter((p) => !candidates.some((s) => s.person.id === p.id) && worthPerson(c)(p)),
         ...(entry ? { queue: publicEntry(entry) } : {}),
+        ...(real(c) && fromPin(c) ? { currentFrom: fromPin(c) } : {}),
       }));
   }
 
@@ -198,7 +240,7 @@ export function profilesRouter(options: Options = {}): express.Router {
       })),
       search: searchState(req),
       scans: await scanStates(req, data),
-      suggestions: suggestions(data, list, loadQueue(req.sessionID)),
+      suggestions: suggestions(req.sessionID, data, list, await reviewQueue(req.sessionID, list)),
       linked: data.linked.map(({ previousPhoto: _p, addedLink: _a, ...rest }) => rest).reverse(),
       bulk: getFromCache(req.sessionID, "profiles_bulk"),
     };
@@ -254,7 +296,7 @@ export function profilesRouter(options: Options = {}): express.Router {
       const sessionId = req.sessionID;
       const list = await contacts(req, api, req.query.refresh !== undefined);
       const data = loadProfiles(sessionId);
-      const queue = loadQueue(sessionId);
+      const queue = await reviewQueue(sessionId, list);
       const pins = getPins(sessionId);
       const reads = getReads(sessionId);
       const scanned = storedProfilePhotos(data.people);
@@ -282,7 +324,7 @@ export function profilesRouter(options: Options = {}): express.Router {
         ready++;
         for (const source of sources) readySources.add(source);
       }
-      const cards = suggestions(data, list, queue);
+      const cards = suggestions(sessionId, data, list, queue);
       const waiting = cards.filter((s) => s.queue?.kind !== "changed" || s.candidates.length);
       const lastSearch = Object.values(data.searches).sort().pop();
       const whatsapp = await whatsappCount(sessionId, list);
@@ -319,7 +361,8 @@ export function profilesRouter(options: Options = {}): express.Router {
     const api = google(req, res);
     if (!api) return;
     try {
-      res.send({ count: suggestions(data, await contacts(req, api), queue).length });
+      const list = await contacts(req, api);
+      res.send({ count: suggestions(req.sessionID, data, list, await reviewQueue(req.sessionID, list)).length });
     } catch (e) {
       failed(req, res, "Counting profiles to review", e);
     }

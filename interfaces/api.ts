@@ -73,6 +73,11 @@ export interface QueuePhoto {
   /** For a profile link, its network: "Instagram", "X"… */
   network?: string;
   readAt: string;
+  /** Its size, when known (issue #104). */
+  width?: number;
+  height?: number;
+  /** Smaller than 200 px, offered because the contact has no photo. */
+  small?: boolean;
 }
 
 /** A contact's photos waiting in To review: "photo" to pick one, "changed" when a pinned photo was changed outside the app. */
@@ -493,6 +498,8 @@ export interface ProfileSuggestion {
   linked?: SocialPerson[];
   /** Photos a sync sent to To review (issue #82). */
   queue?: QueueEntry;
+  /** The source the contact's photo comes from, while it is the one the app applied (issue #104). */
+  currentFrom?: { source: SourceId; network?: string };
 }
 
 export interface ProfileLinked {

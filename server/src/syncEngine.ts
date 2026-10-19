@@ -6,6 +6,7 @@ import { photoKey } from "./contacts/model";
 import { photoHash } from "./contacts/photoPins";
 import { parseProfileLink, shortLink } from "./sources/links";
 import { FoundPhoto, PhotoSource } from "./sources/types";
+import { photoFacts, worthOffering } from "./photoRules";
 import { Base64 } from "./types";
 import { googleErrorMessage } from "./googleRetry";
 
@@ -30,8 +31,11 @@ export interface SyncTarget {
   setPhoto(contactId: string, photo: Base64): Promise<string | undefined | void>;
   /** Saves where the contact's photo comes from (issue #78), or forgets it with `undefined`. */
   savePin?(contactId: string, pin: PhotoPin | undefined): void | Promise<void>;
-  /** Sends the contact's photos to To review: "photo" to pick one, "changed" when a pinned photo was changed outside the app. */
-  queue?(contact: SimpleContact, kind: "photo" | "changed", photos: FoundPhoto[]): void | Promise<void>;
+  /**
+   * Sends the contact's photos to To review: "photo" to pick one, "changed" when a pinned photo was changed outside the app.
+   * `current` is the look of the contact's photo, when it was read.
+   */
+  queue?(contact: SimpleContact, kind: "photo" | "changed", photos: FoundPhoto[], current?: string): void | Promise<void>;
 }
 
 export interface SyncCallbacks {
@@ -179,13 +183,25 @@ export async function runSync(
       latest = { name: contact.name, source: found.source, ...(found.network ? { network: found.network } : {}), ...(pinned ? { pinned } : {}) };
       return googleUrl;
     };
+    // The look of the contact's photo, read once and only when a found photo needs it.
+    let current: Promise<string | undefined> | undefined;
+    const currentLook = () => (current ??= target.currentPhoto(contact).then((photo) => (photo ? photoFacts(photo).visual : undefined)));
     const queue = async (kind: "photo" | "changed", found: FoundPhoto[]) => {
-      await target.queue?.(contact, kind, found);
+      await target.queue?.(contact, kind, found, realPhoto && current ? await current : undefined);
       result.outcome = "queued";
     };
-    // Photos the user already turned down for this contact ("Keep current") aren't offered again.
+    // Photos the user already turned down for this contact ("Keep current") aren't offered again, nor
+    // ones not worth it (issue #104): blurred previews, smaller than the photo it has, or the same picture.
     const dismissed = new Set(contact.dismissed ?? []);
-    const offered = (found: FoundPhoto[]) => found.filter((f) => !dismissed.has(photoHash(f.photo)) && photoHash(f.photo) !== contact.pin?.hash);
+    const offered = async (found: FoundPhoto[]): Promise<FoundPhoto[]> => {
+      const fresh = found.filter((f) => !dismissed.has(photoHash(f.photo)) && photoHash(f.photo) !== contact.pin?.hash);
+      const look = realPhoto && fresh.length ? await currentLook() : undefined;
+      return fresh.flatMap((f) => {
+        const checked = { ...f, ...photoFacts(f.photo) };
+        const verdict = worthOffering(checked, { hasPhoto: realPhoto, current: look });
+        return verdict.offer ? [verdict.small ? { ...checked, small: true } : checked] : [];
+      });
+    };
 
     /** Follows the contact's pin (issue #78); false when it leaves the contact to the rules below. */
     const followPin = async (pin: PhotoPin): Promise<boolean> => {
@@ -238,11 +254,11 @@ export async function runSync(
             if (contact.pin) await target.savePin?.(contact.id, undefined);
           }
         } else {
-          const found = offered(await allMatches(sources, contact));
+          const found = await offered(await allMatches(sources, contact));
           if (found.length) await queue("photo", found);
         }
       } else if (options.lookDifferent || options.decideAll) {
-        const found = offered(await allMatches(sources, contact));
+        const found = await offered(await allMatches(sources, contact));
         if (found.length) await queue("photo", found);
       }
       // Nothing new, but the contact keeps the photo it has in Google: it
