@@ -153,7 +153,7 @@ defineExpose({ act, pickAt: (i: number) => photos.value[i] && choose(photos.valu
             <span v-if="busy" class="loading loading-spinner loading-xs"></span><Check v-else class="size-3.5" />{{ $t("sync.card.keepThis") }}<kbd v-if="large" class="kbd kbd-xs">Enter</kbd>
           </button>
         </template>
-        <button v-if="(!changed || shownPick.ticked.length) && !nothingFound" type="button" class="btn btn-primary btn-xs" :disabled="busy || disabled || !hasChoice(shownPick)" @click="act('link')">
+        <button v-if="(!changed || shownPick.ticked.length) && (!nothingFound || hasChoice(shownPick))" type="button" class="btn btn-primary btn-xs" :disabled="busy || disabled || !hasChoice(shownPick)" @click="act('link')">
           <span v-if="busy" class="loading loading-spinner loading-xs"></span><Check v-else class="size-3.5" />{{ confirmLabel }}<kbd v-if="large" class="kbd kbd-xs">Enter</kbd>
         </button>
       </div>

@@ -114,10 +114,10 @@ onUnmounted(() => window.clearInterval(poll));
       <CircleAlert class="size-5" /><span>{{ $t("sources.closedBanner", { network: nameOf(key) }) }}</span>
     </div>
     <ol class="space-y-2" :aria-label="$t('syncSetup.sources')">
-      <li v-for="{ key, index } in shown" :key="key" class="rounded-xl border border-base-300 bg-base-100" :data-testid="`source-${key}`">
+      <li v-for="({ key, index }, position) in shown" :key="key" class="rounded-xl border border-base-300 bg-base-100" :data-testid="`source-${key}`">
         <div class="flex flex-wrap items-center gap-3 px-4 py-3" :class="{ 'opacity-60': noProfiles(key) || (!usable(key) && connecting !== key) }">
           <GripVertical class="size-4 text-base-content/30" aria-hidden="true" />
-          <span class="w-4 text-xs font-semibold text-base-content/50">{{ index + 1 }}</span>
+          <span class="w-4 text-xs font-semibold text-base-content/50">{{ position + 1 }}</span>
           <SourceMark :source="key" size="size-9" icon-size="size-5" />
           <div class="min-w-[9rem] flex-1">
             <div class="text-sm font-semibold">{{ nameOf(key) }}</div>

@@ -507,6 +507,11 @@ test("Photos' filters with counts, search by name, and where the current photo c
   await expect(giulia.getByText("Upload a photo")).toBeVisible();
   await expect(giulia.getByRole("button", { name: /^Confirm/ })).toHaveCount(0);
   await screenshot(page, "73b-review-no-photo", { fullPage: false });
+  // A photo found from a typed profile link can be used right there.
+  await giulia.getByLabel("Profile link for Giulia Colombo").fill("instagram.com/elena.conti.ph");
+  await giulia.getByRole("button", { name: "Find photo" }).click();
+  await expect(giulia.getByRole("radio", { name: "Instagram · instagram.com/elena.conti.ph" })).toBeChecked();
+  await expect(giulia.getByRole("button", { name: "Use Instagram" })).toBeEnabled();
   await giulia.getByRole("button", { name: "No photo" }).click();
   await expect.poll(() => backend.profileRequests.find((r) => r.route === "/no-photo")?.body).toEqual({ contactId: "people/gc" });
 
