@@ -304,3 +304,14 @@ export function isAbortedLoad(error: unknown): boolean {
 export function pause(minMs: number, maxMs: number, random = Math.random): number {
   return Math.round(minMs + (maxMs - minMs) * random());
 }
+
+/**
+ * What a change of a site's cookie says about the app's sign-in (issue #107):
+ * true signed in, false signed out, undefined for any other cookie or a
+ * session cookie that is only being refreshed.
+ */
+export function sessionChange(name: string, sessionCookie: string, cause: string, removed: boolean): boolean | undefined {
+  if (name !== sessionCookie) return undefined;
+  if (!removed) return true;
+  return cause === "overwrite" ? undefined : false;
+}

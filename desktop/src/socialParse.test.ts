@@ -20,6 +20,7 @@ import {
   profilePageUrl,
   searchPath,
   siteAnswer,
+  sessionChange,
 } from "./socialParse";
 
 // Shaped like the sites' answers (issue #61); the scan itself needs the real sites.
@@ -237,4 +238,12 @@ test("searching a name with the login: at most five people per site (issue #104)
 
   assert.equal(searchPath("instagram", " Anna Rossi "), "/api/v1/web/search/topsearch/?context=user&query=Anna%20Rossi&include_reel=false");
   assert.equal(searchPath("facebook", "Anna & co"), "https://www.facebook.com/search/people/?q=Anna%20%26%20co");
+});
+
+test("a site's session cookie tells when it signs the app in or out; a refresh doesn't count (issue #107)", () => {
+  assert.equal(sessionChange("li_at", "li_at", "explicit", false), true);
+  assert.equal(sessionChange("li_at", "li_at", "overwrite", true), undefined);
+  assert.equal(sessionChange("li_at", "li_at", "expired-overwrite", true), false);
+  assert.equal(sessionChange("li_at", "li_at", "explicit", true), false);
+  assert.equal(sessionChange("JSESSIONID", "li_at", "explicit", true), undefined);
 });

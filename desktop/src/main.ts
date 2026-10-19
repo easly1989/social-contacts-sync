@@ -11,7 +11,7 @@ import { autoUpdatesOn, findUpdate, releasesRepo, updateFeed, updateStrategy } f
 import { afterUpdate, closeChoices, takePendingUpdate, UpdateLanguage, updateLanguage, updateText, writePendingUpdate } from "./updateFlow";
 import { deleteLocalData, packageKind, writableValues } from "./localData";
 import { telegramEnv } from "./telegramApp";
-import { forgetSocialSessions, socialLogin, socialLogout, socialProfile, socialScan, socialSearch, socialStatus, socialStop } from "./socialScan";
+import { forgetSocialSessions, socialLogin, socialLogout, socialProfile, socialScan, socialSearch, socialStatus, socialStop, watchSessions } from "./socialScan";
 import { ScanNetwork } from "./socialParse";
 
 const productName = "Social Contacts Sync";
@@ -496,6 +496,8 @@ app.on("window-all-closed", () => app.quit());
 
 app.whenReady().then(async () => {
   if (process.platform !== "darwin") Menu.setApplicationMenu(null);
+  // The server, and through it the page, hears at once when a site signs the app in or out (issue #107).
+  watchSessions((value) => server?.postMessage({ type: "event", event: "login-changed", value }));
   if (!(await openAfterUpdate())) return app.quit();
   void start();
 });

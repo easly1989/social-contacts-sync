@@ -24,6 +24,7 @@ import {
   ScannedPerson,
   ScanNetwork,
   searchPath,
+  sessionChange,
   siteAnswer,
 } from "./socialParse";
 
@@ -123,10 +124,28 @@ export function socialLogin(network: ScanNetwork, parent?: BrowserWindow): Promi
   });
 }
 
+// Networks the app is signing out of: their session going away isn't the site's doing.
+const signingOut = new Set<ScanNetwork>();
+
 export async function socialLogout(network: ScanNetwork): Promise<void> {
   running.get(network) && (running.get(network)!.stop = true);
   closeReader(network);
-  await partition(network).clearStorageData();
+  signingOut.add(network);
+  try {
+    await partition(network).clearStorageData();
+  } finally {
+    setTimeout(() => signingOut.delete(network), 2000);
+  }
+}
+
+/** Tells `changed` whenever a site's session starts or ends (issue #107); `byApp` when the app signed out itself. */
+export function watchSessions(changed: (change: { network: ScanNetwork; loggedIn: boolean; byApp?: boolean }) => void): void {
+  for (const network of Object.keys(sites) as ScanNetwork[]) {
+    partition(network).cookies.on("changed", (_event, cookie, cause, removed) => {
+      const loggedIn = sessionChange(cookie.name, sites[network].cookie, cause, removed);
+      if (loggedIn !== undefined) changed({ network, loggedIn, ...(!loggedIn && signingOut.has(network) ? { byApp: true } : {}) });
+    });
+  }
 }
 
 export function socialStop(network: ScanNetwork): void {
