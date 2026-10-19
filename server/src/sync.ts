@@ -13,7 +13,7 @@ import { whatsappSource } from "./sources/whatsapp";
 import { gravatarSource } from "./sources/gravatar";
 import { telegramSource } from "./sources/telegram";
 import { linksSource, LinksSourceOptions, Network, networkNames, publicNetworks } from "./sources/links";
-import { loadProfiles, storedProfilePhotos } from "./profiles/store";
+import { loadProfiles, saveProfiles, storedProfilePhotos } from "./profiles/store";
 import { TelegramConnection } from "./telegram";
 import { telegramConnection } from "./telegramSession";
 import { getPrefs } from "./cleanup/store";
@@ -107,6 +107,9 @@ export async function initSync(id: string, syncOptions: SyncOptions) {
   const limiter = googleRateLimiter();
   const run = runOptions(syncOptions);
   setInCache(id, "sync_stop", false);
+  // Cards skipped in To review come back with this sync's.
+  const profiles = loadProfiles(id);
+  if (profiles.skipped.length) saveProfiles(id, { ...profiles, skipped: [] });
 
   // A profile read with the login (issues #79, #80) comes before the address a scan read.
   const reads = getReads(id);

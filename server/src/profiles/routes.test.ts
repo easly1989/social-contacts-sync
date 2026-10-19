@@ -106,11 +106,12 @@ test("import, search and scan feed one review queue; link with photo, then undo"
   overview = (await call("GET", "/profiles")).json;
   assert.deepEqual(overview.scans[0].account, "easly1989");
   assert.equal(overview.scans[0].read, 1);
-  // Elena has a real photo, so Davide (none) comes first; Mamma has one word and no suggestions.
+  // Elena has a real photo, so Davide (none) comes first; Mamma has one word and no suggestions, and no photo (issue #104).
   assert.deepEqual(
     overview.suggestions.map((s: any) => [s.name, s.candidates.map((c: any) => `${c.person.id}:${c.reason}`)]),
     [
       ["Davide Gallo", ["bluesky:dgallo.bsky.social:sameName", "linkedin:davidegallo:sameName"]],
+      ["Mamma", []],
       ["Elena Conti", ["instagram:elena_conti:sameName"]],
     ]
   );
@@ -124,7 +125,7 @@ test("import, search and scan feed one review queue; link with photo, then undo"
   assert.deepEqual(google.people.get("people/ec")!.urls, [{ value: "https://instagram.com/elena_conti", type: "profile" }]);
   assert.equal(google.photos.get("people/ec"), jpeg.toString("base64"));
   overview = (await call("GET", "/profiles")).json;
-  assert.deepEqual(overview.suggestions.map((s: any) => s.name), ["Davide Gallo"]);
+  assert.deepEqual(overview.suggestions.map((s: any) => s.name), ["Davide Gallo", "Mamma"]);
   assert.equal(overview.linked[0].person.id, "instagram:elena_conti");
   // The photo now follows that profile (issue #78).
   const pin = getPins("profiles-1")["people/ec"];
@@ -139,14 +140,20 @@ test("import, search and scan feed one review queue; link with photo, then undo"
   assert.equal(google.photos.get("people/ec"), "T0xE");
   assert.equal(getPins("profiles-1")["people/ec"], undefined);
 
-  // "None of these" and "Skip".
+  // "None of these", and "Skip" until the next sync (issue #104).
   await call("POST", "/profiles/reject", { contactId: "people/dg", personIds: ["bluesky:dgallo.bsky.social"] });
   await call("POST", "/profiles/skip", { contactId: "people/dg" });
   overview = (await call("GET", "/profiles")).json;
   assert.deepEqual(
     overview.suggestions.map((s: any) => [s.name, s.candidates.length]),
-    [["Elena Conti", 1], ["Davide Gallo", 1]]
+    [["Mamma", 0], ["Elena Conti", 1]]
   );
+  // "No photo": Mamma leaves To review until her phones, emails or links change.
+  assert.deepEqual(await call("POST", "/profiles/no-photo", { contactId: "people/m" }), { status: 200, json: { ok: true } });
+  assert.deepEqual((await call("GET", "/profiles")).json.suggestions.map((s: any) => s.name), ["Elena Conti"]);
+  google.people.get("people/m")!.phoneNumbers = [{ value: "+39 333 999 0000" }];
+  deleteFromCache("profiles-1", "profiles_contacts"); // the address book is read again
+  assert.deepEqual((await call("GET", "/profiles")).json.suggestions.map((s: any) => s.name), ["Mamma", "Elena Conti"]);
 });
 
 test("several profiles per contact, in bulk, and photos through the server (issue #65)", async (t) => {
@@ -175,7 +182,8 @@ test("several profiles per contact, in bulk, and photos through the server (issu
   assert.equal(overview.bulk.profiles, 1);
   assert.equal(overview.bulk.failed.length, 1);
   assert.equal(google.photos.get("people/ec"), jpeg.toString("base64"));
-  assert.deepEqual(overview.suggestions, []);
+  // Only the contacts still without a photo (issue #104).
+  assert.deepEqual(overview.suggestions.map((s: any) => [s.contactId, s.candidates.length, Boolean(s.queue)]), [["people/dg", 0, false], ["people/m", 0, false]]);
 
   // The Instagram photo, through the server; a profile without one is a 404.
   const photo = await fetch(`${base}/profiles/photo?id=${encodeURIComponent("instagram:elena_conti")}`);
@@ -230,8 +238,8 @@ test("desktop: linking reads an Instagram photo with the login; a preview never 
 
 test("To review: a linked profile's photo is a candidate, applied and pinned without linking again (issue #81)", async (t) => {
   const { google, call, undo, base } = await start(t, "profiles-81");
-  // No profiles read yet: nothing to review, and Google isn't asked.
-  assert.deepEqual(await call("GET", "/profiles/count"), { status: 200, json: { count: 0 } });
+  // Before any profile is read, the contacts without a photo are cards already (issue #104).
+  assert.deepEqual(await call("GET", "/profiles/count"), { status: 200, json: { count: 2 } });
   await call("POST", "/profiles/scan/start", { network: "instagram", acceptRisk: true });
   await call("POST", "/profiles/link", { contactId: "people/ec", personIds: ["instagram:elena_conti"] });
   await call("POST", "/profiles/import?network=linkedin", "First Name,Last Name,URL\nElena,Conti,https://www.linkedin.com/in/elenaconti", "text/plain");
@@ -241,7 +249,7 @@ test("To review: a linked profile's photo is a candidate, applied and pinned wit
   const elena = (await call("GET", "/profiles")).json.suggestions.find((s: any) => s.contactId === "people/ec");
   assert.deepEqual(elena.candidates.map((c: any) => c.person.id), ["linkedin:elenaconti"]);
   assert.deepEqual(elena.linked.map((p: any) => p.id), ["instagram:elena_conti"]);
-  assert.deepEqual(await call("GET", "/profiles/count"), { status: 200, json: { count: 1 } });
+  assert.deepEqual(await call("GET", "/profiles/count"), { status: 200, json: { count: 3 } });
 
   // Only the photo: LinkedIn isn't her, Instagram is linked already.
   const confirmed = await call("POST", "/profiles/link", { contactId: "people/ec", personIds: [], photoFrom: "instagram:elena_conti", rejectIds: ["linkedin:elenaconti"] });
@@ -250,7 +258,7 @@ test("To review: a linked profile's photo is a candidate, applied and pinned wit
   assert.equal(google.photos.get("people/ec"), jpeg.toString("base64"));
   assert.equal(google.people.get("people/ec")!.urls!.length, 1);
   assert.equal(getPins("profiles-81")["people/ec"].matchedBy, "instagram.com/elena_conti");
-  assert.deepEqual(await call("GET", "/profiles/count"), { status: 200, json: { count: 0 } });
+  assert.deepEqual(await call("GET", "/profiles/count"), { status: 200, json: { count: 2 } });
 
   // Undo puts the photo back and leaves the link that was there.
   const [review] = (await call("GET", "/runs")).json;
@@ -288,7 +296,8 @@ test("To review: photos a sync sent there are cards; Use applies and pins, Keep 
     { photo: gr, source: "gravatar", matchedBy: "elena@example.com" },
   ]);
   queuePhotos("profiles-82", { id: "people/m", name: "Mamma" }, "photo", [{ photo: wa, source: "whatsapp", matchedBy: "+39 333 2" }]);
-  assert.deepEqual(await call("GET", "/profiles/count"), { status: 200, json: { count: 2 } });
+  // Davide, without a photo, is a card too.
+  assert.deepEqual(await call("GET", "/profiles/count"), { status: 200, json: { count: 3 } });
 
   const cards = (await call("GET", "/profiles")).json.suggestions;
   const elena = cards.find((s: any) => s.contactId === "people/ec");
@@ -316,7 +325,8 @@ test("To review: photos a sync sent there are cards; Use applies and pins, Keep 
   assert.deepEqual(await call("POST", "/profiles/keep", { contactId: "people/m" }), { status: 200, json: { ok: true } });
   assert.deepEqual(loadQueue("profiles-82").dismissed["people/m"], [photoHash(wa)]);
   assert.equal(google.photos.has("people/m"), false);
-  assert.deepEqual(await call("GET", "/profiles/count"), { status: 200, json: { count: 0 } });
+  // Mamma is still without a photo: her card stays, without the sync's photo.
+  assert.deepEqual(await call("GET", "/profiles/count"), { status: 200, json: { count: 2 } });
   assert.equal((await call("POST", "/profiles/keep", { contactId: "people/m" })).status, 404);
 });
 
@@ -327,7 +337,8 @@ test("To review: a photo changed outside the app; Keep this unpins, Back to the 
   const changed = () => queuePhotos("profiles-82b", { id: "people/ec" }, "changed", [{ photo: ig, source: "links", matchedBy: "instagram.com/elena_conti", network: "Instagram" }], { source: "links", network: "Instagram", matchedBy: "instagram.com/elena_conti" });
   setPin("profiles-82b", "people/ec", pin);
   changed();
-  const card = (await call("GET", "/profiles")).json.suggestions[0];
+  const elena = async () => (await call("GET", "/profiles")).json.suggestions.find((s: any) => s.contactId === "people/ec");
+  const card = await elena();
   assert.deepEqual([card.queue.kind, card.queue.pinned.network], ["changed", "Instagram"]);
 
   await call("POST", "/profiles/keep", { contactId: "people/ec" });
@@ -336,7 +347,7 @@ test("To review: a photo changed outside the app; Keep this unpins, Back to the 
 
   setPin("profiles-82b", "people/ec", pin);
   changed();
-  const back = (await call("GET", "/profiles")).json.suggestions[0].queue.photos[0].id;
+  const back = (await elena()).queue.photos[0].id;
   await call("POST", "/profiles/link", { contactId: "people/ec", personIds: [], photoFrom: back });
   assert.equal(google.photos.get("people/ec"), ig);
   assert.deepEqual([getPins("profiles-82b")["people/ec"].suspended, getPins("profiles-82b")["people/ec"].hash], [undefined, photoHash(ig)]);
@@ -374,7 +385,7 @@ test("To review: a contact whose photo is kept shows no waiting photos (issue #8
   const { call } = await start(t, "profiles-82d");
   queuePhotos("profiles-82d", { id: "people/ec" }, "photo", [{ photo: Buffer.alloc(1500, 4).toString("base64"), source: "whatsapp", matchedBy: "+39 333 1" }]);
   setKeptPhoto("profiles-82d", "people/ec", true);
-  assert.deepEqual((await call("GET", "/profiles")).json.suggestions, []);
+  assert.equal((await call("GET", "/profiles")).json.suggestions.find((s: any) => s.contactId === "people/ec"), undefined);
 });
 
 test("Sources: the profiles linked on contacts per network, and the oldest read (issue #83)", async (t) => {
@@ -425,7 +436,7 @@ test("History: decisions in To review are one Review entry; undo puts photo, lin
   assert.deepEqual([google.people.get("people/ec")!.urls, google.people.get("people/dg")!.urls], [[], []]);
   assert.deepEqual(getPins("profiles-84")["people/ec"], whatsapp);
   const suggested = (await call("GET", "/profiles")).json.suggestions.map((s: any) => [s.contactId, s.candidates.map((c: any) => c.person.id)]);
-  assert.deepEqual(suggested.sort(), [["people/dg", ["linkedin:davidegallo"]], ["people/ec", ["instagram:elena_conti"]]]);
+  assert.deepEqual(suggested.sort(), [["people/dg", ["linkedin:davidegallo"]], ["people/ec", ["instagram:elena_conti"]], ["people/m", []]]);
 });
 
 test("History: links and photos from To review before issue #84 become Review entries once", async (t) => {
@@ -484,7 +495,8 @@ test("Dashboard: the address book in three parts and what to do next, from store
     status: 200,
     json: {
       total: 4, withPhoto: 1, ready: 2, readySources: ["links", "whatsapp"], noSource: 1,
-      toReview: 1, toReviewWithoutPhoto: 1, changed: 1,
+      // Davide's photo, and Mamma and Nora without one (issue #104).
+      toReview: 3, toReviewWithoutPhoto: 3, changed: 1,
       lastSearch: "2026-10-10T09:00:00.000Z", linkedProfiles: 1, linkedContacts: 1,
     },
   });
@@ -518,8 +530,8 @@ test("cards already waiting follow To review's rules when read, and say where th
   assert.deepEqual(card("people/ec").currentFrom, { source: "whatsapp" });
   // Davide has none: the small photo is better than nothing.
   assert.deepEqual(card("people/dg").queue.photos.map((p: any) => [p.id, p.small]), [["photo:small-dg", true]]);
-  // Mamma's only photo was a Facebook preview: no card.
-  assert.equal(card("people/m"), undefined);
+  // Mamma's only photo was a Facebook preview: her card has no photo to offer.
+  assert.equal(card("people/m").queue, undefined);
   // Her photo's look was read once, and kept.
   assert.equal(looks.length, 1);
   assert.equal(loadQueue("profiles-104").entries["people/ec"].current?.visual, current);

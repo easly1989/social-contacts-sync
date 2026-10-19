@@ -120,6 +120,8 @@ export const api = {
   rejectProfiles: (contactId: string, personIds: string[]) => post("/api/profiles/reject", { contactId, personIds }),
   skipProfiles: (contactId: string) => post("/api/profiles/skip", { contactId }),
   keepCurrentPhoto: (contactId: string) => post("/api/profiles/keep", { contactId }),
+  /** "No photo" (issue #104): out of To review until the contact's numbers, emails or links change. */
+  leaveWithoutPhoto: (contactId: string) => post("/api/profiles/no-photo", { contactId }),
   queuePhotoUrl: (id: string) => `/api/profiles/queue-photo?id=${encodeURIComponent(id)}`,
   profileScan: (action: "login" | "logout" | "start" | "stop", network: SocialNetwork, acceptRisk = false) =>
     post<ProfileScanState | { ok: true }>(`/api/profiles/scan/${action}`, { network, ...(acceptRisk ? { acceptRisk } : {}) }),

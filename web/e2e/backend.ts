@@ -354,7 +354,7 @@ export class FakeBackend {
       Object.assign(data.bulk!, { running: false, stopped: true });
       return route.fulfill({ json: data.bulk });
     }
-    if (sub === "/reject" || sub === "/skip" || sub === "/keep") {
+    if (sub === "/reject" || sub === "/skip" || sub === "/keep" || sub === "/no-photo") {
       drop(body.contactId);
       return route.fulfill({ json: { ok: true } });
     }

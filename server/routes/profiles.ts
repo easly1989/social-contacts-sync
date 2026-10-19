@@ -1,3 +1,4 @@
+import crypto from "crypto";
 import express, { Request, Response } from "express";
 import { Client, WAState } from "whatsapp-web.js";
 
@@ -97,6 +98,12 @@ function profilePin(url: string): { source: "links"; matchedBy: string; network?
   return { source: "links", matchedBy: link ? shortLink(link) : url.replace(/^https:\/\//, ""), ...(link ? { network: networkNames[link.network] } : {}) };
 }
 
+/** What "No photo" remembers of a contact: a change in its phones, emails or links brings its card back. */
+export function contactFingerprint(c: Contact): string {
+  const values = [...c.phones, ...c.emails, ...c.urls].map((v) => v.value.trim().toLowerCase()).sort();
+  return crypto.createHash("sha1").update(values.join("\n")).digest("hex").slice(0, 16);
+}
+
 /** The image's type from its first bytes. */
 export function imageType(bytes: Buffer): string {
   if (bytes[0] === 0x89 && bytes[1] === 0x50) return "image/png";
@@ -162,7 +169,7 @@ export function profilesRouter(options: Options = {}): express.Router {
 
   /**
    * To review: one card per contact with suggested profiles or photos a sync sent there (issue #82),
-   * offering only photos worth it (issue #104).
+   * offering only photos worth it, and one per contact without a photo (issue #104).
    */
   function suggestions(sessionId: string, data: ProfilesData, list: Contact[], queue: QueueData): ProfileSuggestion[] {
     const linked = new Set(data.linked.filter((l) => !l.undone).map((l) => l.person.id));
@@ -194,11 +201,13 @@ export function profilesRouter(options: Options = {}): express.Router {
     return list
       // A kept photo is never replaced: its contact only gets profiles.
       .map((c) => ({ contact: c, candidates: candidatesFor(c, data.people, { rejected: data.rejected, linked, taken }), entry: c.photoKept ? undefined : worth(c, queue.entries[c.id]) }))
-      .filter((s) => s.candidates.length || s.entry)
+      // Skipped until the next sync; "No photo" until the contact changes.
+      .filter((s) => !skipped.has(s.contact.id) && data.noPhoto[s.contact.id] !== contactFingerprint(s.contact))
+      .filter((s) => s.candidates.length || s.entry || (!real(s.contact) && !s.contact.photoKept))
       .sort(
         (a, b) =>
-          Number(skipped.has(a.contact.id)) - Number(skipped.has(b.contact.id)) ||
-          Number(a.contact.hasPhoto && !a.contact.placeholder) - Number(b.contact.hasPhoto && !b.contact.placeholder) ||
+          Number(real(a.contact)) - Number(real(b.contact)) ||
+          Number(!a.entry && !a.candidates.length) - Number(!b.entry && !b.candidates.length) ||
           (b.candidates[0]?.score ?? 0) - (a.candidates[0]?.score ?? 0) ||
           (a.contact.name ?? "").localeCompare(b.contact.name ?? "")
       )
@@ -356,8 +365,6 @@ export function profilesRouter(options: Options = {}): express.Router {
   // How many contacts wait in To review, for the sidebar (issue #81). Nothing read or queued yet: none, without asking Google.
   router.get("/profiles/count", async (req: Request, res: Response) => {
     const data = loadProfiles(req.sessionID);
-    const queue = loadQueue(req.sessionID);
-    if (!data.people.length && !Object.keys(queue.entries).length) return res.send({ count: 0 });
     const api = google(req, res);
     if (!api) return;
     try {
@@ -670,6 +677,25 @@ export function profilesRouter(options: Options = {}): express.Router {
     data.rejected[contactId] = [...new Set([...(data.rejected[contactId] ?? []), ...ids])];
     saveProfiles(req.sessionID, data);
     res.send({ ok: true });
+  });
+
+  // "No photo" (issue #104): the contact leaves To review until its phones, emails or links change.
+  router.post("/profiles/no-photo", async (req: Request, res: Response) => {
+    if (!jsonOnly(req, res)) return;
+    const api = google(req, res);
+    if (!api) return;
+    try {
+      const contact = (await contacts(req, api)).find((c) => c.id === req.body?.contactId);
+      if (!contact) return res.status(404).send({ error: "not_found" });
+      const data = loadProfiles(req.sessionID);
+      data.noPhoto[contact.id] = contactFingerprint(contact);
+      saveProfiles(req.sessionID, data);
+      const queue = loadQueue(req.sessionID);
+      if (resolveEntry(queue, contact.id, false)) saveQueue(req.sessionID, queue);
+      res.send({ ok: true });
+    } catch (e) {
+      failed(req, res, "Leaving a contact without a photo", e);
+    }
   });
 
   router.post("/profiles/skip", (req: Request, res: Response) => {
