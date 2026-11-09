@@ -40,26 +40,28 @@ TypeScript quirk: server and web alias `typescript` to `@typescript/typescript6`
 vue-tsc need the JS compiler API) and `@typescript/native` to TypeScript 7 for `tsc`. Desktop uses
 plain TypeScript 5. Set `PUPPETEER_SKIP_DOWNLOAD=true` for installs that don't drive WhatsApp.
 
-CI (`.github/workflows/ci.yml`) job list: `docs/agents/architecture.md` (read it when changing CI). E2e screenshots are kept as workflow artifacts;
-images for issues and PRs go on the `pr-assets` branch.
+CI job list: `docs/agents/architecture.md` (read it when changing CI). E2e screenshots are kept as
+workflow artifacts; images for issues and PRs go on the `pr-assets` branch.
 
 ## Architecture
 
-Read `docs/agents/architecture.md` before changing the sync pipeline, the desktop/server split, the server areas
-(`cleanup/`, `profiles/`, `secretStore.ts`) or the web page layout. Server: web/server mode is multi-user, desktop mode
-(`SCS_DESKTOP=1`) is single user in an Electron utility process.
+Read `docs/agents/architecture.md` before changing the sync pipeline, the desktop/server split, the
+server areas (`cleanup/`, `profiles/`, `secretStore.ts`) or the web page layout. Server: API,
+WebSocket and SPA share one origin (session cookie, Google OAuth); web/server mode is multi-user,
+desktop mode (`SCS_DESKTOP=1`) is single user in an Electron utility process with `crossSiteGuard`
+on `/api`.
 
 **Desktop packaging.** `desktop/scripts/stage.mjs` assembles `desktop/app/` from
 `desktop/build`, `server/build` and `web/dist` plus the server's production `node_modules`, then
 electron-builder packages that folder. Server code changes reach the desktop app only through
 this staging step.
 
-**Photo protection rules** that every writer must respect: `contacts/placeholders.ts` (photos
-uploaded by hand — a sync may replace them) and `contacts/keptPhotos.ts` (kept photos — never
-replaced by a sync or from To review), and `contacts/photoPins.ts` (the source a photo follows).
+**Photo protection rules** that every writer must respect: `server/src/contacts/placeholders.ts` (photos
+uploaded by hand — a sync may replace them) and `server/src/contacts/keptPhotos.ts` (kept photos — never
+replaced by a sync or from To review), and `server/src/contacts/photoPins.ts` (the source a photo
+follows).
 
-**Web.** All user-facing strings go through
-vue-i18n — add every new key to both `en.ts` and `it.ts`.
+**Web.** All user-facing strings go through vue-i18n — add every new key to both `en.ts` and `it.ts`.
 
 **Web e2e tests need no backend:** `web/e2e/backend.ts` (`FakeBackend`) answers `/api/*` and mocks
 the WebSocket inside the browser. New endpoints or events need matching support there.

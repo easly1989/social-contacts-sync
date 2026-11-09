@@ -39,7 +39,7 @@ storage keyed by an OS-keychain-protected key).
 
 ## Web pages and API
 
-**Web.** Pages in `web/src/pages/` (setup wizard, public pages) and `web/src/pages/app/`
+Pages in `web/src/pages/` (setup wizard, public pages) and `web/src/pages/app/`
 (Dashboard, Sync with its To review / Sources / Run tabs, RunReport, Contacts, Cleanup, History, Settings). API
 calls in `src/api.ts`, WebSocket in `src/services/ws.ts`.
 
@@ -47,4 +47,4 @@ calls in `src/api.ts`, WebSocket in `src/services/ws.ts`.
 
 CI (`.github/workflows/ci.yml`) runs: server build + tests, web build + e2e, a smoke test of the
 built server (`.github/scripts/smoke-test.sh`), a Docker build, desktop tests + packaged-app launch,
-and shellcheck on `.github/scripts/`. E2e screenshots are kept as workflow artifacts.
+and shellcheck on `.github/scripts/`.
